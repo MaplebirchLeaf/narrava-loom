@@ -1,0 +1,5 @@
+[game]
+id = "example.forest"
+name = "Forest"
+version = "0.1.0"
+default_locale = "zh-CN"

@@ -1,0 +1,12 @@
+/* 作者主题只覆盖公开 token；背景图验证 resource() 在开发目录与 game.nar 中一致。 */
+nv-story {
+  --grand-tour-mark: resource("images/loom.svg");
+}
+
+.presentation-text[data-tone="accent"] {
+  background-image: var(--grand-tour-mark);
+  background-position: right center;
+  background-repeat: no-repeat;
+  background-size: 1.5em;
+  padding-right: 2em;
+}

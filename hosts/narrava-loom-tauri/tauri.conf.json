@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Narrava Loom",
+  "version": "0.1.0",
+  "identifier": "dev.narrava.loom",
+  "build": {
+    "frontendDist": "frontend"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' narrava-resource: http://narrava-resource.localhost blob: data:; media-src 'self' narrava-resource: http://narrava-resource.localhost blob:; font-src 'self' narrava-resource: http://narrava-resource.localhost blob:; style-src 'self' blob:; script-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": []
+  }
+}

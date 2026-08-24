@@ -1,0 +1,7 @@
+/%
+  这个 Widget 故意与 main.twee 分开，用于验证多 Twee Source 共享定义。
+%/
+:: SharedHighlightWidgets [widget]
+<<widget "crossFileCard">>
+  <strong><<print @args[0]>></strong>
+<</widget>>

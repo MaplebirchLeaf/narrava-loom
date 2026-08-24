@@ -1,0 +1,231 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Narrava Twee",
+  "scopeName": "source.narrava-twee",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#passage" },
+    { "include": "#macro" },
+    { "include": "#html" },
+    { "include": "#entity" },
+    { "include": "#variable" }
+  ],
+  "repository": {
+    "comment": {
+      "begin": "(?<!/)/%",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.begin.narrava-twee" }
+      },
+      "end": "%/",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.comment.end.narrava-twee" }
+      },
+      "name": "comment.block.narrava-twee"
+    },
+    "passage": {
+      "match": "^(::)(?:[ \\t]+)([^\\[\\r\\n]+?)(?:[ \\t]+)(\\[)([^\\]\\r\\n]*)(\\])[ \\t]*$|^(::)(?:[ \\t]+)([^\\[\\r\\n]+?)[ \\t]*$",
+      "captures": {
+        "1": { "name": "punctuation.definition.heading.narrava-twee" },
+        "2": { "name": "entity.name.function.narrava-twee" },
+        "3": { "name": "punctuation.definition.metadata.begin.narrava-twee" },
+        "4": { "name": "support.type.passage-tag.narrava-twee" },
+        "5": { "name": "punctuation.definition.metadata.end.narrava-twee" },
+        "6": { "name": "punctuation.definition.heading.narrava-twee" },
+        "7": { "name": "entity.name.function.narrava-twee" }
+      },
+      "name": "meta.passage.header.narrava-twee"
+    },
+    "macro": {
+      "begin": "(<<)(/)?([A-Za-z_][A-Za-z0-9_-]*)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.narrava-twee" },
+        "2": { "name": "punctuation.definition.tag.begin.narrava-twee" },
+        "3": { "name": "meta.identifier.macro.narrava-twee" }
+      },
+      "end": "(>>)" ,
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.end.narrava-twee" }
+      },
+      "patterns": [
+        { "include": "#comment" },
+        { "include": "#builtin-macro" },
+        { "include": "#link" },
+        { "include": "#expression" }
+      ]
+    },
+    "builtin-macro": {
+      "match": "\\b(if|elseif|else|switch|case|default|for|while|break|continue|set|unset|run|include|goto|print|text|silently|return|capture|exit|widget|link)\\b",
+      "name": "support.function.builtin.macro.narrava-twee"
+    },
+    "expression": {
+      "patterns": [
+        { "include": "#interpolation" },
+        { "include": "#string" },
+        { "include": "#number" },
+        { "include": "#variable" },
+        { "include": "#native-function" },
+        { "include": "#function-call" },
+        { "include": "#native-namespace" },
+        { "include": "#constant" },
+        { "include": "#word-operator" },
+        { "include": "#symbol-operator" },
+        { "include": "#object-key" },
+        { "include": "#property" },
+        { "include": "#punctuation" }
+      ]
+    },
+    "native-function": {
+      "match": "\\b(abs|boolean|ceil|clamp|defined|either|empty|entries|floor|keys|max|min|number|random|round|string|values)\\b(?=\\s*\\()",
+      "name": "support.function.builtin.expression.narrava-twee"
+    },
+    "function-call": {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()",
+      "name": "support.function.narrava-twee"
+    },
+    "native-namespace": {
+      "match": "\\b(Object)(\\.)(assign|hasOwn)\\b",
+      "captures": {
+        "1": { "name": "support.class.narrava-twee" },
+        "2": { "name": "punctuation.accessor.narrava-twee" },
+        "3": { "name": "support.function.builtin.expression.narrava-twee" }
+      }
+    },
+    "variable": {
+      "patterns": [
+        {
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "name": "variable.language.narrava-twee"
+        },
+        {
+          "match": "_[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "name": "variable.language.narrava-twee"
+        },
+        {
+          "match": "@[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "name": "variable.language.narrava-twee"
+        },
+        {
+          "match": "\\bsetup(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "name": "variable.language.narrava-twee"
+        }
+      ]
+    },
+    "object-key": {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*:)",
+      "name": "variable.other.readwrite.narrava-twee"
+    },
+    "property": {
+      "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*",
+      "name": "variable.other.property.narrava-twee"
+    },
+    "string": {
+      "patterns": [
+        {
+          "begin": "`",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.narrava-twee" } },
+          "end": "`",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.narrava-twee" } },
+          "name": "string.quoted.other.template.narrava-twee",
+          "patterns": [
+            { "match": "\\\\.", "name": "constant.character.escape.narrava-twee" },
+            { "include": "#interpolation" }
+          ]
+        },
+        {
+          "begin": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.narrava-twee" } },
+          "end": "\"",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.narrava-twee" } },
+          "name": "string.quoted.double.narrava-twee",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.narrava-twee" }]
+        },
+        {
+          "begin": "'",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.narrava-twee" } },
+          "end": "'",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.narrava-twee" } },
+          "name": "string.quoted.single.narrava-twee",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.narrava-twee" }]
+        }
+      ]
+    },
+    "interpolation": {
+      "begin": "(\\$\\{)",
+      "beginCaptures": { "1": { "name": "punctuation.definition.template-expression.begin.narrava-twee" } },
+      "end": "(\\})",
+      "endCaptures": { "1": { "name": "punctuation.definition.template-expression.end.narrava-twee" } },
+      "name": "meta.interpolation.narrava-twee",
+      "patterns": [{ "include": "#expression" }]
+    },
+    "number": {
+      "match": "(?<![A-Za-z0-9_])(?:0[xX][0-9A-Fa-f]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|\\.\\d+)(?![A-Za-z0-9_])",
+      "name": "constant.numeric.narrava-twee"
+    },
+    "constant": {
+      "match": "\\b(?:true|false|null|undefined|NaN|Infinity)\\b",
+      "name": "constant.language.narrava-twee"
+    },
+    "word-operator": {
+      "match": "\\b(?:and|or|not|is|isnot|equ|gt|gte|lt|lte|in|notin|instanceof|between|to|typeof)\\b",
+      "name": "keyword.operator.word.narrava-twee"
+    },
+    "symbol-operator": {
+      "match": "(?:===|!==|==|!=|<=>|<=|>=|\\?\\?|&&|\\|\\||\\*\\*|<<|>>|>>>|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|\\?\\?=|&&=|\\|\\|=|\\+\\+|--|[+*/%<>=!&|^~?:-])",
+      "name": "keyword.operator.narrava-twee"
+    },
+    "punctuation": {
+      "match": "[()\\[\\]{},;.]",
+      "name": "punctuation.separator.expression.narrava-twee"
+    },
+    "link": {
+      "match": "(\\[\\[)([^|\\]\\r\\n]+)(\\|)([^\\]\\r\\n]+)(\\]\\])",
+      "captures": {
+        "1": { "name": "punctuation.definition.link.begin.narrava-twee" },
+        "2": { "name": "string.other.link.label.narrava-twee" },
+        "3": { "name": "keyword.operator.link.narrava-twee" },
+        "4": { "name": "entity.name.function.passage.narrava-twee" },
+        "5": { "name": "punctuation.definition.link.end.narrava-twee" }
+      },
+      "name": "meta.link.narrava-twee"
+    },
+    "html": {
+      "begin": "(</?)([A-Za-z][A-Za-z0-9:-]*)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.html" },
+        "2": { "name": "entity.name.tag.html" }
+      },
+      "end": "(/?>)",
+      "endCaptures": { "1": { "name": "punctuation.definition.tag.end.html" } },
+      "name": "meta.tag.html",
+      "patterns": [
+        {
+          "match": "\\b([A-Za-z_:][A-Za-z0-9_.:-]*)(\\s*)(=)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.html" },
+            "3": { "name": "punctuation.separator.key-value.html" }
+          }
+        },
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.html",
+          "patterns": [{ "include": "#macro" }, { "include": "#entity" }]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.html",
+          "patterns": [{ "include": "#macro" }, { "include": "#entity" }]
+        }
+      ]
+    },
+    "entity": {
+      "match": "(&)([A-Za-z0-9]+|#[0-9]+|#x[0-9A-Fa-f]+)(;)",
+      "captures": {
+        "1": { "name": "punctuation.definition.entity.html" },
+        "2": { "name": "constant.character.entity.html" },
+        "3": { "name": "punctuation.definition.entity.html" }
+      }
+    }
+  }
+}

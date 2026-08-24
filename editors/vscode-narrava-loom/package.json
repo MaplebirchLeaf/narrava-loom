@@ -1,0 +1,43 @@
+{
+  "name": "narrava-loom-twee",
+  "displayName": "Narrava Loom Twee",
+  "description": "Narrava Loom .twee language highlighting and editing support",
+  "version": "0.2.1",
+  "publisher": "narrava-loom",
+  "main": "./extension.js",
+  "files": [
+    "extension.js",
+    "src/**",
+    "language-configuration.json",
+    "syntaxes/**",
+    "README.md"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "narrava-twee",
+        "aliases": ["Narrava Twee", "Twee"],
+        "extensions": [".twee"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "narrava-twee",
+        "scopeName": "source.narrava-twee",
+        "path": "./syntaxes/narrava-twee.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node tests/catalog.mjs && node tests/verify.mjs"
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}

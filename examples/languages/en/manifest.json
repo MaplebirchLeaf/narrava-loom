@@ -1,0 +1,8 @@
+{
+  "locale": "en",
+  "version": "1.0.0",
+  "game": {
+    "id": "example.grand-tour",
+    "versions": ">=0.1.0, <0.2.0"
+  }
+}

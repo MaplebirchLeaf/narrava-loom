@@ -1,0 +1,1 @@
+欢迎来到 Narrava Loom 综合示例。这个文件由 Core Resource 目录读取并写入 .nar。

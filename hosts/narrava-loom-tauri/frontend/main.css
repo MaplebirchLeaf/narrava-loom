@@ -1,0 +1,490 @@
+:root { color-scheme: dark; }
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #111;
+}
+
+nv-story {
+  /* Host token 是作者主题的稳定覆盖面；布局代码只消费这些语义变量。 */
+  --narrava-control-size: 2.25rem;
+  --narrava-background: #111;
+  --narrava-surface: #222;
+  --narrava-surface-hover: #444;
+  --narrava-text: #eee;
+  --narrava-muted: #aaa;
+  --narrava-border: #444;
+  --narrava-disabled: #444;
+  --narrava-accent: #68d;
+  --narrava-accent-hover: #8af;
+  --narrava-info: #8ac7ff;
+  --narrava-positive: #79c989;
+  --narrava-warning: #e0b85c;
+  --narrava-negative: #e58c8c;
+  --narrava-critical: #ff6868;
+  --narrava-focus: rgb(221 221 221 / 60%);
+  --narrava-control: #222;
+  --narrava-control-hover: #333;
+  --narrava-control-border: #666;
+  --narrava-control-border-hover: #ddd;
+  --narrava-sidebar-offset: 17.5em;
+  --narrava-ui-100: #ddd;
+  --narrava-ui-200: #bbb;
+  --narrava-ui-300: #aaa;
+  --narrava-ui-400: #999;
+  --narrava-ui-600: #777;
+  --narrava-ui-700: #666;
+  --narrava-ui-750: #444;
+  --narrava-ui-800: #333;
+  --narrava-ui-850: #222;
+  --narrava-ui-900: #111;
+  display: block;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  color: var(--narrava-text);
+  background: var(--narrava-background);
+  font: 16px/1 Helmet, Freesans, sans-serif;
+}
+
+nv-story *,
+nv-story *::before,
+nv-story *::after { box-sizing: inherit; }
+
+nv-ui-bar {
+  /* 侧栏属于 Host 外壳，不随 Passage reconcile 重建。 */
+  position: fixed;
+  z-index: 20;
+  inset: 0 auto 0 0;
+  display: block;
+  width: 17.5em;
+  overflow: hidden;
+  border-right: 1px solid var(--narrava-ui-750);
+  background: var(--narrava-ui-850);
+  text-align: center;
+  transition: transform 200ms ease-in;
+}
+
+nv-ui-bar.stowed { transform: translateX(calc(-100% + var(--narrava-control-size))); }
+
+#ui-bar-tray {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  height: var(--narrava-control-size);
+}
+
+nv-story #ui-bar-tray button {
+  display: grid;
+  width: var(--narrava-control-size);
+  height: var(--narrava-control-size);
+  padding: 0.5em;
+  border-width: 0 0 1px 1px;
+  place-items: center;
+}
+
+#ui-bar-tray svg { width: 100%; height: 100%; fill: currentcolor; }
+.ui-icon { display: block; fill: currentcolor; pointer-events: none; }
+#ui-bar-toggle .icon-expand,
+.stowed #ui-bar-toggle .icon-collapse { display: none; }
+.stowed #ui-bar-toggle .icon-expand { display: block; }
+
+nv-ui-bar.stowed #history-backward,
+nv-ui-bar.stowed #history-forward {
+  visibility: hidden;
+  transition: visibility 200ms step-end;
+}
+
+#ui-bar-body {
+  height: 100%;
+  padding: 4em 1.5em 2em;
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+}
+
+#bar-presentation { display: grid; gap: 0.75em; }
+.component-host-tools { display: flex; justify-content: center; gap: 0.4em; }
+.component-host-tools button { font-size: 0.875em; }
+#status { display: block; margin-top: 1.5em; color: var(--narrava-muted); font-size: 0.875em; }
+#status:empty { display: none; }
+
+/* 收起状态仍保留一列作者内容；每项与展开按钮使用同一方形尺寸。 */
+nv-ui-bar.stowed #ui-bar-body {
+  position: absolute;
+  top: var(--narrava-control-size);
+  right: 0;
+  bottom: 0;
+  width: var(--narrava-control-size);
+  height: auto;
+  padding: 0;
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+
+nv-ui-bar.stowed #bar-presentation { gap: 0; }
+nv-ui-bar.stowed #bar-presentation > * {
+  display: grid;
+  width: var(--narrava-control-size);
+  min-width: var(--narrava-control-size);
+  height: var(--narrava-control-size);
+  margin: 0;
+  padding: 0.25em;
+  border: 0;
+  border-bottom: 1px solid var(--narrava-ui-750);
+  place-items: center;
+  overflow: hidden;
+  font-size: 0.875em;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+nv-passage {
+  /* 正文宽度与侧栏解耦，TUI Host 不需要复刻这些像素约束。 */
+  display: block;
+  width: auto;
+  max-width: 54em;
+  min-width: 0;
+  margin: 0 auto 0 20em;
+  padding: 4em 2em;
+  overflow-wrap: anywhere;
+  line-height: 1.75;
+  text-align: left;
+  white-space: normal;
+  transition: opacity 400ms ease-in;
+}
+
+nv-passage:focus { outline: 0; }
+
+nv-passage ul,
+nv-passage ol { margin-left: 0.5em; padding-left: 1.5em; }
+nv-passage table { margin: 1em 0; border-collapse: collapse; font-size: 100%; }
+nv-passage :is(tr, th, td, caption) { padding: 0.25em; }
+
+.passage-header:empty,
+.passage-footer:not(:has(#passage-footer-presentation:not(:empty), #status:not(:empty))) { display: none; }
+
+.passage-main { white-space: pre-wrap; }
+.presentation-slot { display: contents; }
+.passage-header,
+.passage-footer { color: var(--narrava-muted); }
+.passage-header { padding-bottom: 1.5em; border-bottom: 1px solid var(--narrava-border); }
+.passage-footer { margin-top: 2.5em; padding-top: 1.25em; border-top: 1px solid var(--narrava-border); }
+
+nv-ui-bar.stowed + nv-passage { margin-left: 4.5em; }
+
+.presentation-text[data-tone="muted"] { color: var(--narrava-muted); }
+.presentation-text[data-tone="accent"] { color: var(--narrava-accent); }
+.presentation-text[data-tone="informational"] { color: var(--narrava-info); }
+.presentation-text[data-tone="positive"] { color: var(--narrava-positive); }
+.presentation-text[data-tone="warning"] { color: var(--narrava-warning); }
+.presentation-text[data-tone="negative"] { color: var(--narrava-negative); }
+.presentation-text[data-tone="critical"] { color: var(--narrava-critical); }
+.presentation-text.text-strong { font-weight: 700; }
+.presentation-text.text-emphasis { font-style: italic; }
+.presentation-text.text-marked { padding-inline: 0.15em; color: #111; background: var(--narrava-warning); }
+.presentation-text.text-heading1,
+.presentation-text.text-heading2,
+.presentation-text.text-heading3,
+.presentation-text.text-heading4,
+.presentation-text.text-heading5,
+.presentation-text.text-heading6 { margin-block: 0.75em 0.35em; line-height: 1.25; }
+
+nv-story figure[data-presentation-type="image"] {
+  margin: 1.25em 0;
+}
+
+nv-story figure[data-presentation-type="image"] img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+nv-story figure[data-presentation-type="image"] figcaption {
+  margin-top: 0.4em;
+  color: var(--narrava-muted);
+  font-size: 0.875em;
+}
+
+#bar-presentation:empty,
+#dialog-presentation:empty { display: none; }
+
+.component-meter {
+  display: grid;
+  grid-template-columns: minmax(5em, auto) minmax(8em, 1fr);
+  align-items: center;
+  gap: 0.75em;
+  max-width: 28em;
+}
+
+.component-meter meter {
+  width: 100%;
+  accent-color: var(--narrava-accent);
+}
+
+nv-story .choice {
+  appearance: none;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--narrava-accent);
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+nv-story .choice:hover {
+  color: var(--narrava-accent-hover);
+  text-decoration: underline;
+}
+
+nv-story button:not(.choice) {
+  display: inline-block;
+  min-height: var(--narrava-control-size);
+  padding: 0.45em 0.7em;
+  border: 1px solid var(--narrava-control-border);
+  color: var(--narrava-text);
+  background: var(--narrava-control);
+  font: inherit;
+  line-height: normal;
+  cursor: pointer;
+  transition-duration: 200ms;
+  user-select: none;
+}
+
+nv-story button:not(.choice):hover {
+  border-color: var(--narrava-control-border-hover);
+  background: var(--narrava-control-hover);
+}
+
+nv-story button[data-action-role="primary"] {
+  border-color: var(--narrava-ui-300);
+  background: var(--narrava-ui-600);
+  color: var(--narrava-ui-100);
+}
+
+nv-story button[data-action-role="secondary"] {
+  background: var(--narrava-surface-hover);
+}
+
+nv-story button[data-action-role="danger"] {
+  border-color: var(--narrava-critical);
+  color: var(--narrava-critical);
+}
+
+nv-story button:not(.choice):focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 1px var(--narrava-focus);
+}
+
+nv-story .choice:focus-visible {
+  outline: 1px dotted var(--narrava-focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+nv-story .choice:disabled,
+nv-story button:disabled {
+  border-color: var(--narrava-border);
+  color: #888;
+  background: var(--narrava-disabled);
+  cursor: not-allowed;
+}
+
+nv-story input[type="text"] {
+  min-height: var(--narrava-control-size);
+  padding: 0.45em 0.6em;
+  border: 1px solid var(--narrava-control-border);
+  color: var(--narrava-text);
+  background: var(--narrava-ui-900);
+  font: inherit;
+}
+
+nv-story input:is([type="checkbox"], [type="radio"]) {
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0 0.3em;
+  accent-color: var(--narrava-ui-300);
+  vertical-align: -0.15em;
+}
+
+nv-story input:focus-visible {
+  outline: 1px solid var(--narrava-ui-100);
+  outline-offset: 2px;
+}
+
+#nv-dialog {
+  /* Dialog 采用原生 top-layer；页签与内容仍由 Presentation 语义生成。 */
+  display: none;
+  width: min(calc(100% - var(--narrava-sidebar-offset) - 4em), 66em);
+  height: calc(100dvh - 6em);
+  max-height: calc(100dvh - 6em);
+  margin: 3em auto auto;
+  padding: 0;
+  border: 0;
+  color: var(--narrava-ui-100);
+  background: var(--narrava-ui-850);
+  transform: translateX(calc(var(--narrava-sidebar-offset) / 2));
+}
+
+nv-story.bar-stowed { --narrava-sidebar-offset: var(--narrava-control-size); }
+
+#nv-dialog[open] { display: flex; flex-direction: column; }
+#nv-dialog::backdrop { background: rgb(0 0 0 / 80%); }
+#dialog-titlebar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: var(--narrava-control-size);
+  border: 1px solid var(--narrava-ui-400);
+  border-bottom: 0;
+  background: var(--narrava-ui-800);
+  z-index: 1;
+}
+#dialog-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+nv-story #dialog-tabs .dialog-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--narrava-control-size);
+  padding: 0.4em 0.75em;
+  border-width: 0 1px 1px 0;
+  border-color: var(--narrava-ui-750);
+  color: var(--narrava-ui-300);
+  background: var(--narrava-ui-850);
+  font-size: 0.9375em;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+nv-story #dialog-tabs .dialog-tab.active,
+nv-story #dialog-tabs .dialog-tab:hover {
+  color: var(--narrava-ui-100);
+  background: var(--narrava-ui-800);
+}
+nv-story #dialog-tabs .dialog-tab.active {
+  /* 活动页签向下覆盖内容边框，形成连续的页签/页面表面。 */
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+  height: calc(var(--narrava-control-size) + 1px);
+  border-bottom-color: var(--narrava-ui-800);
+}
+nv-story #dialog-tabs .dialog-tab:focus-visible {
+  position: relative;
+  z-index: 1;
+  border-color: var(--narrava-ui-400);
+  outline: 0;
+  box-shadow: none;
+}
+nv-story #dialog-tabs .dialog-tab.active:focus-visible {
+  border-bottom-color: var(--narrava-ui-800);
+  /* 活动页签底部必须和内容区连通；焦点提示只保留上、左、右三边。 */
+  box-shadow:
+    inset 1px 0 var(--narrava-ui-400),
+    inset -1px 0 var(--narrava-ui-400),
+    inset 0 1px var(--narrava-ui-400);
+}
+#dialog-titlebar form {
+  flex: 0 0 var(--narrava-control-size);
+  width: var(--narrava-control-size);
+  height: var(--narrava-control-size);
+  margin: 0;
+}
+nv-story #dialog-close {
+  display: grid;
+  place-items: center;
+  position: static;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-width: 0 0 0 1px;
+  font-size: 1em;
+  color: var(--narrava-ui-400);
+  background: transparent;
+  opacity: 0.5;
+}
+nv-story #dialog-close:hover { background: transparent; opacity: 1; }
+nv-story #dialog-close:focus-visible {
+  border-color: var(--narrava-ui-400);
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  opacity: 1;
+}
+nv-story #dialog-close .ui-icon { width: 1.125em; height: 1.125em; }
+#dialog-content {
+  flex: 1 1 auto;
+  min-width: 280px;
+  min-height: 0;
+  padding: 1.5em;
+  margin-top: -1px;
+  border: 1px solid var(--narrava-ui-400);
+  line-height: 1.5;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--narrava-ui-750) var(--narrava-ui-850);
+}
+#dialog-presentation,
+#host-dialog-presentation { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75em; }
+#dialog-presentation[hidden],
+#host-dialog-presentation[hidden] { display: none; }
+#dialog-presentation .presentation-text { flex-basis: 100%; }
+#dialog-presentation .dialog-heading-source { display: none; }
+#dialog-presentation .dialog-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75em; width: 100%; }
+#dialog-presentation .dialog-panel[hidden] { display: none; }
+.host-panel { align-content: flex-start; }
+.host-form-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 0.75em; width: 100%; }
+.host-panel label { display: grid; flex: 1 1 18em; gap: 0.4em; }
+.host-panel select { min-height: var(--narrava-control-size); min-width: 14em; padding: 0.4em; color: inherit; background: var(--narrava-ui-900); border: 1px solid var(--narrava-control-border); }
+.host-panel .host-note { flex-basis: 100%; color: var(--narrava-muted); }
+.host-log { flex-basis: 100%; margin: 0.75em 0; padding-left: 1.75em; }
+.host-log li[data-level="error"] { color: var(--narrava-critical); }
+
+@media (max-width: 71em) {
+  nv-passage { margin-left: 18.5em; }
+  nv-ui-bar.stowed + nv-passage { margin-left: 3em; }
+}
+
+@media (max-width: 39.5em) {
+  nv-ui-bar { width: min(17.5em, calc(100vw - 2em)); }
+
+  nv-passage {
+    margin-left: 3em;
+    padding: max(2em, env(safe-area-inset-top)) max(1em, env(safe-area-inset-right)) max(2em, env(safe-area-inset-bottom)) max(1em, env(safe-area-inset-left));
+  }
+
+  nv-ui-bar:not(.stowed) + nv-passage { opacity: 0.25; pointer-events: none; }
+
+  #nv-dialog {
+    --narrava-sidebar-offset: 0px;
+    width: calc(100% - max(2em, env(safe-area-inset-left) + env(safe-area-inset-right)));
+    max-height: calc(100dvh - max(2em, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    margin-top: max(1em, env(safe-area-inset-top));
+    transform: none;
+  }
+
+  .host-form-row { grid-template-columns: 1fr; align-items: stretch; }
+}
+
+@media (pointer: coarse) {
+  nv-story { --narrava-control-size: 2.75rem; }
+  nv-story .choice { padding-block: 0.2em; touch-action: manipulation; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  nv-passage { transition: none; }
+  *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+}

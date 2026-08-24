@@ -1,0 +1,7 @@
+[package]
+name = "narrava-loom-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+narrava-loom-core = { path = "../.." }

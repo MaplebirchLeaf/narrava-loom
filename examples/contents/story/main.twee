@@ -1,0 +1,104 @@
+:: StoryInit
+<<set setup.build to "grand-tour">>
+
+:: Bar
+<<barDemo>>
+
+:: BarStowed
+<<barStowedDemo>>
+
+:: Start [opening]
+<<set $hero to "Maple">>
+<<set $visits to 1>>
+欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。
+<<link [[进入大厅|Hall]]>><</link>>
+
+:: Hall [hub]
+<<set $visits to $visits + 1>>
+你已第 <<print $visits>> 次来到大厅。
+<<if $visits > 1>>
+门后的机关已经启动。
+你发现了 <<text "发光的钥匙" "positive" "strong">>。
+<</if>>
+<<link [[查看藏书室|Library]]>><</link>>
+<<link [[查看语义渲染|PresentationGallery]]>><</link>>
+<<link [[查看弹窗与按钮|DialogGallery]]>><</link>>
+<<link [[查看状态绑定表单|FormGallery]]>><</link>>
+<<link [[查看内容替换|ReplaceGallery]]>><</link>>
+
+:: PresentationGallery [reference]
+<<presentationDemo>>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: DialogGallery [reference]
+<<dialogDemo>>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: FormGallery [reference]
+<<set $tips_enabled to $tips_enabled ?? false>>
+<<set $route to $route ?? "quiet">>
+提示开关：<<checkbox "$tips_enabled" false true>>
+安静路线：<<radiobutton "$route" "quiet">>
+探索路线：<<radiobutton "$route" "explore">>
+玩家姓名：<<textbox "$player_name" "Maple">>
+当前值：提示=<<print $tips_enabled>>，路线=<<print $route>>，姓名=<<print $player_name>>。
+<<button [[确认表单并返回|Hall]]>>
+  <<set $form_confirmed to true>>
+<</button>>
+<<link [[刷新当前值|FormGallery]]>><</link>>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: ReplaceGallery [reference]
+<<slot "status-panel">>
+  这段默认内容会被同一份 Presentation 中稍后的 replace 替换。
+<</slot>>
+<<replace "status-panel">>
+  稳定槽 status-panel 已被替换；Tauri 与 TUI 都按 Presentation Key 定位它。
+<</replace>>
+<<replace "header">>
+  替换后的页眉：这是由 replace 容器正文产生的 Presentation。
+<</replace>>
+正文仍保留在 Passage Main；TUI 与 WebView 都能把 header 映射到自己的区域。
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: Library [quiet]
+书架上写着：<<print scriptedGreeting($hero)>>
+<<silently>>
+<<set $found_book to true>>
+<</silently>>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: Cleanup [exit]
+<<set $finished to true>>
+
+:: HighlightWidgets [widget]
+<<widget "highlightCard">>
+  <<print @args[0]>>
+<</widget>>
+
+/%
+  HighlightGallery 只用于检查 VS Code 高亮，不会从正常故事进入。
+  本注释中的 <<set $ignored to true>> 不应按 Macro 着色。
+%/
+:: HighlightGallery [reference exit]
+<<set $hero.profile.name to "Maple">>
+<<set _counter to 42>>
+<<set @choice.label to 'Library'>>
+<<set setup.build.channel to "nightly">>
+
+<<if defined($hero.profile.name) and _counter >= 1>>
+  <<print scriptedGreeting($hero.profile.name)>>
+<<elseif empty(@choice.label)>>
+  <<print string(number(3.14))>>
+<<else>>
+  <<run Object.assign($hero.profile, { ready: true })>>
+<</if>>
+
+<<print `反引号字符串：${$hero.profile.name} / ${string(_counter)}`>>
+
+<<highlightCard "自定义 Widget Macro">>
+<<crossFileCard "跨文件 Widget Macro">>
+
+<<link [[进入大厅|Hall]]>><</link>>
+<<link [[查看藏书室|Library]]>><</link>>
+<span class="highlight-demo" data-passage="HighlightGallery">HTML 标签、属性和文本</span>

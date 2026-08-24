@@ -1,0 +1,3 @@
+:: Start [opening forest]
+你在森林中醒来。
+<<link [[查看四周|LookAround]]>><</link>>

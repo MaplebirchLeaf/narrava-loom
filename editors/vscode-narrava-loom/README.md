@@ -1,0 +1,49 @@
+# Narrava Loom Twee for VS Code
+
+为 Narrava Loom 的 `.twee` 文件提供语法高亮、跨文件 Macro 识别、错误诊断、
+跳转定义、补全、括号补全和 `/% ... %/` 注释配置。
+关键字、Macro 结构和诊断只依据 Narrava Core 当前已实现契约；TextMate scope 使用通用命名，
+以适配常见 VS Code 主题。
+
+高亮范围包括金色 Passage 名、独立颜色的 Passage tag、HTML 标签与属性、内置及自定义 Macro、
+闭合 Macro、`$`/`_`/`@`/`setup` 变量链、Expression 内置函数、字符串、数字、
+运算符、反引号字符串及 `${...}`、`<<link [[label|target]]>>...<</link>>` 链接和 HTML entity。
+`[[...]]` 只在 `link` Macro 参数内着色，Narrava 不支持脱离 Macro 的裸链接，
+也不支持 `[[target<-label]]` 形式。只有反引号字符串内的 `${...}`
+按插值表达式着色，普通正文中的 `${...}` 不会被当成插值。
+
+Widget 的规范定义形式是 `<<widget "name">>`：定义位置的 `"name"` 保持字符串色；
+工作区内已定义的 `<<name>>` 会获得紫色语义高亮。扩展会扫描 `.twee` 中的 Widget，
+以及 `.js`/`.ts` 中的 `Macro.add()`、`Macro.update()`；未定义的 Macro 保持中性色并报告错误。
+因此一个文件定义、另一个文件调用也能识别。Macro 的 `<<`、`/`、`>>` 复用 HTML
+标签的 `punctuation.definition.tag` 边界 scope，与 `</...>` 一样渲染为灰色标点；
+反引号字符串内插值的 `${`/`}` 采用与 JS 模板字符串一致的
+`punctuation.definition.template-expression` scope，按 JS 的插值颜色着色。
+
+扩展还读取脚本 Macro 的 `body: "inline" | "container"`。`widget` 的定义正文是 Container，
+但它注册出来的自定义 Macro 固定为 Inline 调用，例如 `<<highlightCard "内容">>`。
+`<<inlineMacro>><</inlineMacro>>` 会报告多余闭合，`<<containerMacro>>` 缺少对应闭合或闭合名
+不匹配也会报告错误；`if/switch/for/while/link/silently/capture/widget` 使用各自的内置结构规则。
+
+开发安装：
+
+1. 在 VS Code 中打开本目录。
+2. 按 `F5` 启动 Extension Development Host。
+3. 打开任意 `.twee` 文件。
+
+打包安装（产物统一输出到仓库 `dist/vscode-narrava-loom/`）：
+
+```bash
+cd ../.. && scripts/build-vscode-extension.sh
+```
+
+脚本会在缺少依赖时运行 `npm ci`，随后执行回归测试，并把精确版本的 VSIX 写入
+`dist/vscode-narrava-loom/`。构建并立即安装：
+
+```bash
+scripts/build-vscode-extension.sh --install
+# VSCodium 等兼容编辑器：
+scripts/build-vscode-extension.sh --install --editor codium
+```
+
+扩展不访问网络。它只读取当前工作区的 `.twee`、`.js` 和 `.ts` 文件来建立 Macro 索引。

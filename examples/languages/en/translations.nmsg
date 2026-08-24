@@ -1,0 +1,23 @@
+:: p4:Hall:body.1
+[source]
+你已第 {$visits} 次来到大厅。
+[translation]
+This is your visit number {$visits} to the hall.
+
+:: p4:Hall:body.4.branch.0.0
+[source]
+门后的机关已经启动。
+[translation]
+The mechanism behind the door is already active.
+
+:: p5:Start:body.2
+[source]
+欢迎，{$hero}。这是 Narrava Loom 综合示例。
+[translation]
+Welcome, {$hero}. This is the Narrava Loom grand tour.
+
+:: p7:Library:body.0
+[source]
+书架上写着：{value_1}
+[translation]
+The bookshelf reads: {value_1}

@@ -1,0 +1,18 @@
+[package]
+name = "narrava-loom-core" # Core crate 名称
+version = "0.1.0"     # 项目版本
+edition = "2024"      # Rust 2024 Edition
+
+[workspace]
+members = ["hosts/narrava-loom-tauri", "hosts/narrava-loom-tui"] # 官方 Host；ModLoader 独立演进
+exclude = ["crates/narrava-loom-modloader"]
+resolver = "3"                         # Rust 2024 的依赖解析器
+
+[dependencies]
+semver = "1" # 语义化版本处理
+
+serde = { version = "1", features = ["derive", "rc"] } # 序列化/反序列化
+serde_json = "1" # JSON 解析
+sha2 = "0.10" # NAR 内容完整性校验
+toml = "0.9"     # TOML 解析
+zip = { version = "=8.6.0", default-features = false, features = ["deflate"] } # 发布容器 ZIP 编解码

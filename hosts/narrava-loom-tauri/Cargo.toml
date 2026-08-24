@@ -1,0 +1,17 @@
+[package]
+name = "narrava-loom-tauri"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+tauri-build = "2.6.3"
+
+[dependencies]
+boa_engine = "0.21.1"
+boa_gc = "0.21.1"
+narrava-loom-core = { path = "../.." }
+oxc = { version = "0.137.0", features = ["transformer", "codegen", "semantic"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.11.5", features = ["devtools", "image-ico", "image-png"] }
+toml = "0.9"
