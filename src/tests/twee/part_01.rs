@@ -72,23 +72,23 @@ fn macro_header_requires_top_level_left_shift_to_be_grouped() {
 
 #[test]
 fn lexes_passage_declaration_name_and_tags() {
-    let source: Source = Source::load(
-        Path::new("src/tests/fixtures/game"),
-        Path::new("story/main.twee"),
-    )
-    .expect("示例源码应可读取");
+    let source: Source = Source {
+        path: SourcePath::from_path(Path::new("story/tags.twee")).expect("测试路径应有效"),
+        kind: SourceKind::Twee,
+        content: ":: Hall [opening forest]\n正文\n".to_owned(),
+    };
     let tokens: Vec<Token<'_>> = lex(&source);
 
-    assert_eq!(tokens.len(), 3);
+    assert_eq!(tokens.len(), 2);
     assert_eq!(
         tokens[0].kind,
         TokenKind::PassageDeclaration {
-            name: "Start",
+            name: "Hall",
             tags: vec!["opening", "forest"],
         }
     );
     assert_eq!(tokens[0].span.line, 1);
-    assert_eq!(tokens[1].kind, TokenKind::Text("你在森林中醒来。\n"));
+    assert_eq!(tokens[1].kind, TokenKind::Text("正文\n"));
 }
 
 #[test]
@@ -118,15 +118,15 @@ fn groups_declaration_and_text_into_passage() {
 
     assert_eq!(passages.len(), 1);
     assert_eq!(passages[0].name, "Start");
-    assert_eq!(passages[0].tags, vec!["opening", "forest"]);
+    assert!(passages[0].tags.is_empty());
     assert_eq!(
         passages[0].body,
         vec![
             BodyNode {
                 kind: BodyNodeKind::Text("你在森林中醒来。\n"),
                 span: crate::twee::Span {
-                    start: 26,
-                    end: 51,
+                    start: 9,
+                    end: 34,
                     line: 2,
                     column: 1,
                 },
@@ -136,8 +136,8 @@ fn groups_declaration_and_text_into_passage() {
                     name: "link",
                     arguments: "[[查看四周|LookAround]]",
                     arguments_span: crate::twee::Span {
-                        start: 58,
-                        end: 85,
+                        start: 41,
+                        end: 68,
                         line: 3,
                         column: 8,
                     },
@@ -145,8 +145,8 @@ fn groups_declaration_and_text_into_passage() {
                     body: Vec::new(),
                 }),
                 span: crate::twee::Span {
-                    start: 51,
-                    end: 97,
+                    start: 34,
+                    end: 80,
                     line: 3,
                     column: 1,
                 },

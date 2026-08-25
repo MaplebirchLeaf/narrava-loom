@@ -17,7 +17,7 @@ use crate::{
 fn special_passage_names_have_one_shared_definition() {
     use crate::story::special::{
         BAR_PASSAGE, BAR_STOWED_PASSAGE, FOOTER_PASSAGE, HEADER_PASSAGE, START_PASSAGE,
-        STORY_INIT_PASSAGE, is_host_region,
+        STORY_INIT_PASSAGE, is_host_region, is_special,
     };
 
     assert_eq!(START_PASSAGE, "Start");
@@ -27,6 +27,17 @@ fn special_passage_names_have_one_shared_definition() {
     assert!(is_host_region(BAR_PASSAGE));
     assert!(is_host_region(BAR_STOWED_PASSAGE));
     assert!(!is_host_region(START_PASSAGE));
+    for name in [
+        START_PASSAGE,
+        STORY_INIT_PASSAGE,
+        HEADER_PASSAGE,
+        FOOTER_PASSAGE,
+        BAR_PASSAGE,
+        BAR_STOWED_PASSAGE,
+    ] {
+        assert!(is_special(name));
+    }
+    assert!(!is_special("Hall"));
 }
 
 // 大型测试集按用例边界拆成物理分片；门面保留共享导入与模块说明。

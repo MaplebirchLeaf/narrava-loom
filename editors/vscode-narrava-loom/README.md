@@ -1,6 +1,6 @@
 # Narrava Loom Twee for VS Code
 
-为 Narrava Loom 的 `.twee` 文件提供语法高亮、跨文件 Macro 识别、错误诊断、
+为 Narrava Loom 的 `.twee` 文件提供语法高亮、跨文件 Macro／Passage 识别、错误诊断、
 跳转定义、补全、括号补全和 `/% ... %/` 注释配置。
 关键字、Macro 结构和诊断只依据 Narrava Core 当前已实现契约；TextMate scope 使用通用命名，
 以适配常见 VS Code 主题。
@@ -11,6 +11,13 @@
 `[[...]]` 只在 `link` Macro 参数内着色，Narrava 不支持脱离 Macro 的裸链接，
 也不支持 `[[target<-label]]` 形式。只有反引号字符串内的 `${...}`
 按插值表达式着色，普通正文中的 `${...}` 不会被当成插值。
+
+链接的外层方括号使用低调的结构色，内层方括号与 `|` 使用链接操作符色，标签和目标 Passage
+保持各自的语义颜色。链接目标也进入工作区 Passage 索引。在 `[[进入大厅|Hall]]` 的 `Hall` 上按住 `Ctrl`
+并单击（macOS 使用 `Cmd+单击`）会跳到同文件或其他 `.twee` 文件中的 `:: Hall`；目标不存在时，
+扩展只在目标名称下报告 `Passage \`Hall\` 未定义`。Core 保留的 `Start`、`StoryInit`、
+`Header`、`Footer`、`Bar` 和 `BarStowed` 使用特殊 Passage 颜色，与普通 Passage 区分。
+这六个特殊 Passage 都不能带 Tag；扩展会在 Tag 位置直接报告错误。
 
 Widget 的规范定义形式是 `<<widget "name">>`：定义位置的 `"name"` 保持字符串色；
 工作区内已定义的 `<<name>>` 会获得紫色语义高亮。扩展会扫描 `.twee` 中的 Widget，

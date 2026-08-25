@@ -7,7 +7,7 @@
 :: BarStowed
 <<barStowedDemo>>
 
-:: Start [opening]
+:: Start
 <<set $hero to "Maple">>
 <<set $visits to 1>>
 欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。

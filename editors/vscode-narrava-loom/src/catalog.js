@@ -11,11 +11,14 @@ const BUILTIN_MACRO_KINDS = Object.freeze({
   radiobutton: "inline", textbox: "inline",
 })
 const BUILTIN_MACROS = Object.freeze(Object.keys(BUILTIN_MACRO_KINDS))
+const SPECIAL_PASSAGES = Object.freeze(["Start", "StoryInit", "Header", "Footer", "Bar", "BarStowed"])
 
 const COMMENT = /\/%[\s\S]*?%\//g
 const TWEE_MACRO = /<<(\/)?([A-Za-z_][A-Za-z0-9_-]*)/g
 const WIDGET = /<<widget\s+(?:"([A-Za-z_][A-Za-z0-9_]*)"|'([A-Za-z_][A-Za-z0-9_]*)'|([A-Za-z_][A-Za-z0-9_]*))\s*>>/g
 const SCRIPT_MACRO = /\bMacro\s*\.\s*(?:add|update)\s*\(\s*(["'])([A-Za-z_][A-Za-z0-9_-]*)\1/g
+const PASSAGE = /^::[ \t]+([^\[\r\n]+?)(?:[ \t]+\[([^\]\r\n]*)\])?[ \t]*$/gm
+const PASSAGE_LINK = /\[\[([^|\]\r\n]+)\|([^\]\r\n]+)\]\]/g
 
 function withoutComments(text) {
   return text.replace(COMMENT, match => " ".repeat(match.length))
@@ -25,6 +28,8 @@ function scanTwee(text) {
   const source = withoutComments(text)
   const definitions = []
   const calls = []
+  const passages = []
+  const links = []
   for (const match of source.matchAll(WIDGET)) {
     const name = match[1] ?? match[2] ?? match[3]
     const relative = match[0].indexOf(name)
@@ -35,7 +40,30 @@ function scanTwee(text) {
     const relative = match[0].lastIndexOf(name)
     calls.push({ name, start: match.index + relative, length: name.length, closing: Boolean(match[1]) })
   }
-  return { definitions, calls }
+  for (const match of source.matchAll(PASSAGE)) {
+    const name = match[1].trim()
+    const relative = match[0].indexOf(name)
+    const rawTags = match[2]
+    const tags = rawTags?.trim() ? rawTags.trim().split(/\s+/) : []
+    const bracket = rawTags === undefined ? -1 : match[0].lastIndexOf("[")
+    passages.push({
+      name,
+      start: match.index + relative,
+      length: name.length,
+      special: SPECIAL_PASSAGES.includes(name),
+      tags,
+      tagsStart: bracket < 0 ? undefined : match.index + bracket + 1,
+      tagsLength: rawTags?.length ?? 0,
+    })
+  }
+  for (const match of source.matchAll(PASSAGE_LINK)) {
+    const rawTarget = match[2]
+    const target = rawTarget.trim()
+    if (!target) continue
+    const relative = match[0].lastIndexOf(rawTarget) + rawTarget.indexOf(target)
+    links.push({ target, start: match.index + relative, length: target.length })
+  }
+  return { definitions, calls, passages, links }
 }
 
 function scanScript(text) {
@@ -62,4 +90,23 @@ function macroKinds(definitions) {
   return kinds
 }
 
-module.exports = { BUILTIN_MACROS, BUILTIN_MACRO_KINDS, knownNames, macroKinds, scanScript, scanTwee }
+function missingPassageLinks(links, passages) {
+  const names = new Set(passages.map(passage => passage.name))
+  return links.filter(link => !names.has(link.target))
+}
+
+function taggedSpecialPassages(passages) {
+  return passages.filter(passage => passage.special && passage.tags.length > 0)
+}
+
+module.exports = {
+  BUILTIN_MACROS,
+  BUILTIN_MACRO_KINDS,
+  SPECIAL_PASSAGES,
+  knownNames,
+  macroKinds,
+  missingPassageLinks,
+  scanScript,
+  scanTwee,
+  taggedSpecialPassages,
+}

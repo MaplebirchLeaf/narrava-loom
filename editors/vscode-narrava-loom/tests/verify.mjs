@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
+import textmate from "vscode-textmate"
+import oniguruma from "vscode-oniguruma"
 
 const root = new URL("../", import.meta.url)
 const repository = new URL("../../../", import.meta.url)
@@ -11,9 +13,33 @@ const hooks = await readFile(new URL("src/macro_runtime/hooks.rs", repository), 
 const evaluator = await readFile(new URL("src/expression/evaluator/chain.rs", repository), "utf8")
 const gallery = await readFile(new URL("examples/contents/story/main.twee", repository), "utf8")
 const sharedWidgets = await readFile(new URL("examples/contents/story/widgets.twee", repository), "utf8")
+const specialPassages = await readFile(new URL("src/story/special.rs", repository), "utf8")
+const wasm = await readFile(new URL("node_modules/vscode-oniguruma/release/onig.wasm", root))
+
+await oniguruma.loadWASM(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength))
+const registry = new textmate.Registry({
+  onigLib: Promise.resolve({
+    createOnigScanner: sources => new oniguruma.OnigScanner(sources),
+    createOnigString: source => new oniguruma.OnigString(source),
+  }),
+  loadGrammar: async () => textmate.parseRawGrammar(JSON.stringify(grammar), "narrava-twee.tmLanguage.json"),
+})
+const tokenGrammar = await registry.loadGrammar("source.narrava-twee")
+
+function scopeFor(line, text) {
+  const token = tokenGrammar.tokenizeLine(line).tokens.find(item => line.slice(item.startIndex, item.endIndex) === text)
+  return token?.scopes.at(-1)
+}
+
+function scopesFor(line, text) {
+  return tokenGrammar.tokenizeLine(line).tokens
+    .filter(item => line.slice(item.startIndex, item.endIndex) === text)
+    .map(item => item.scopes.at(-1))
+}
 
 assert.equal(manifest.engines.vscode.startsWith("^"), true)
 assert.equal(manifest.main, "./extension.js")
+assert.equal(manifest.version, "0.3.1")
 assert.deepEqual(manifest.contributes.languages[0].extensions, [".twee"])
 assert.equal(manifest.contributes.grammars[0].scopeName, "source.narrava-twee")
 assert.equal(grammar.scopeName, "source.narrava-twee")
@@ -87,9 +113,30 @@ assert.equal(grammar.repository.interpolation.endCaptures["1"].name, "punctuatio
 assert.equal(grammar.repository.macro.name, undefined)
 assert.equal(grammar.repository.passage.captures["2"].name, "entity.name.function.narrava-twee")
 assert.equal(grammar.repository.passage.captures["4"].name, "support.type.passage-tag.narrava-twee")
-assert.equal(grammar.repository.link.captures["1"].name, "punctuation.definition.link.begin.narrava-twee")
-assert.equal(grammar.repository.link.captures["4"].name, "entity.name.function.passage.narrava-twee")
-assert.equal(grammar.repository.link.captures["5"].name, "punctuation.definition.link.end.narrava-twee")
+assert.ok(serialized.includes("support.type.passage.special.narrava-twee"))
+for (const name of ["Start", "StoryInit", "Header", "Footer", "Bar", "BarStowed"]) {
+  assert.ok(specialPassages.includes(`= "${name}"`), `Core should define special Passage ${name}`)
+  assert.ok(grammar.repository["special-passage"].match.includes(name))
+}
+assert.equal(scopeFor(":: StoryInit", "StoryInit"), "support.type.passage.special.narrava-twee")
+assert.equal(scopeFor(":: Hall [hub]", "Hall"), "entity.name.function.narrava-twee")
+assert.equal(
+  scopeFor("<<link [[进入大厅|Hall]]>><</link>>", "Hall"),
+  "entity.name.function.passage.narrava-twee",
+)
+assert.deepEqual(scopesFor("<<link [[进入大厅|Hall]]>><</link>>", "["), [
+  "punctuation.definition.link.outer.narrava-twee",
+  "keyword.operator.link.inner.narrava-twee",
+])
+assert.deepEqual(scopesFor("<<link [[进入大厅|Hall]]>><</link>>", "]"), [
+  "keyword.operator.link.inner.narrava-twee",
+  "punctuation.definition.link.outer.narrava-twee",
+])
+assert.equal(grammar.repository.link.captures["1"].name, "punctuation.definition.link.outer.narrava-twee")
+assert.equal(grammar.repository.link.captures["2"].name, "keyword.operator.link.inner.narrava-twee")
+assert.equal(grammar.repository.link.captures["5"].name, "entity.name.function.passage.narrava-twee")
+assert.equal(grammar.repository.link.captures["6"].name, "keyword.operator.link.inner.narrava-twee")
+assert.equal(grammar.repository.link.captures["7"].name, "punctuation.definition.link.outer.narrava-twee")
 for (const variable of grammar.repository.variable.patterns) {
   assert.equal(variable.name, "variable.language.narrava-twee")
 }

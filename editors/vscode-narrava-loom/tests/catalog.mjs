@@ -2,7 +2,16 @@ import assert from "node:assert/strict"
 import { createRequire } from "node:module"
 
 const require = createRequire(import.meta.url)
-const { BUILTIN_MACROS, knownNames, macroKinds, scanScript, scanTwee } = require("../src/catalog")
+const {
+  BUILTIN_MACROS,
+  SPECIAL_PASSAGES,
+  missingPassageLinks,
+  taggedSpecialPassages,
+  knownNames,
+  macroKinds,
+  scanScript,
+  scanTwee,
+} = require("../src/catalog")
 
 const first = scanTwee(`
 /% <<widget "ignored">> <<ignored>> %/
@@ -11,6 +20,12 @@ const first = scanTwee(`
 <</widget>>
 `)
 const second = scanTwee(`<<crossFileCard "跨文件">>\n<<missing>>`)
+const story = scanTwee(`
+:: StoryInit
+:: Start [opening]
+<<link [[进入大厅|Hall]]>><</link>>
+:: Hall [hub]
+`)
 const scripts = scanScript(`
 Macro.add("scriptCard", () => {})
 Macro.update('updatedCard', {})
@@ -38,5 +53,25 @@ assert.equal(macroKinds([]).get("slot"), "container")
 assert.equal(macroKinds([]).get("checkbox"), "inline")
 assert.equal(macroKinds([]).get("radiobutton"), "inline")
 assert.equal(macroKinds([]).get("textbox"), "inline")
+assert.deepEqual(SPECIAL_PASSAGES, ["Start", "StoryInit", "Header", "Footer", "Bar", "BarStowed"])
+assert.deepEqual(story.passages.map(item => item.name), ["StoryInit", "Start", "Hall"])
+assert.equal(story.passages[0].special, true)
+assert.deepEqual(story.passages[0].tags, [])
+assert.deepEqual(story.passages[1].tags, ["opening"])
+assert.equal(story.passages[2].special, false)
+assert.deepEqual(taggedSpecialPassages(story.passages).map(item => item.name), ["Start"])
+assert.deepEqual(story.links.map(item => item.target), ["Hall"])
+assert.deepEqual(missingPassageLinks(story.links, story.passages), [])
+assert.deepEqual(
+  missingPassageLinks(scanTwee("<<link [[迷路|Missing]]>><</link>>").links, story.passages).map(item => item.target),
+  ["Missing"],
+)
+assert.equal(
+  `\n:: StoryInit\n:: Start [opening]\n<<link [[进入大厅|Hall]]>><</link>>\n:: Hall [hub]\n`.slice(
+    story.links[0].start,
+    story.links[0].start + story.links[0].length,
+  ),
+  "Hall",
+)
 
-console.log("Narrava Twee cross-file Macro catalog verified")
+console.log("Narrava Twee cross-file Macro and Passage catalog verified")

@@ -4,6 +4,7 @@
   "scopeName": "source.narrava-twee",
   "patterns": [
     { "include": "#comment" },
+    { "include": "#special-passage" },
     { "include": "#passage" },
     { "include": "#macro" },
     { "include": "#html" },
@@ -34,6 +35,19 @@
         "7": { "name": "entity.name.function.narrava-twee" }
       },
       "name": "meta.passage.header.narrava-twee"
+    },
+    "special-passage": {
+      "match": "^(::)(?:[ \\t]+)(Start|StoryInit|Header|Footer|Bar|BarStowed)(?:[ \\t]+)(\\[)([^\\]\\r\\n]*)(\\])[ \\t]*$|^(::)(?:[ \\t]+)(Start|StoryInit|Header|Footer|Bar|BarStowed)[ \\t]*$",
+      "captures": {
+        "1": { "name": "punctuation.definition.heading.narrava-twee" },
+        "2": { "name": "support.type.passage.special.narrava-twee" },
+        "3": { "name": "punctuation.definition.metadata.begin.narrava-twee" },
+        "4": { "name": "support.type.passage-tag.narrava-twee" },
+        "5": { "name": "punctuation.definition.metadata.end.narrava-twee" },
+        "6": { "name": "punctuation.definition.heading.narrava-twee" },
+        "7": { "name": "support.type.passage.special.narrava-twee" }
+      },
+      "name": "meta.passage.header.special.narrava-twee"
     },
     "macro": {
       "begin": "(<<)(/)?([A-Za-z_][A-Za-z0-9_-]*)",
@@ -178,13 +192,15 @@
       "name": "punctuation.separator.expression.narrava-twee"
     },
     "link": {
-      "match": "(\\[\\[)([^|\\]\\r\\n]+)(\\|)([^\\]\\r\\n]+)(\\]\\])",
+      "match": "(\\[)(\\[)([^|\\]\\r\\n]+)(\\|)([^\\]\\r\\n]+)(\\])(\\])",
       "captures": {
-        "1": { "name": "punctuation.definition.link.begin.narrava-twee" },
-        "2": { "name": "string.other.link.label.narrava-twee" },
-        "3": { "name": "keyword.operator.link.narrava-twee" },
-        "4": { "name": "entity.name.function.passage.narrava-twee" },
-        "5": { "name": "punctuation.definition.link.end.narrava-twee" }
+        "1": { "name": "punctuation.definition.link.outer.narrava-twee" },
+        "2": { "name": "keyword.operator.link.inner.narrava-twee" },
+        "3": { "name": "string.other.link.label.narrava-twee" },
+        "4": { "name": "keyword.operator.link.narrava-twee" },
+        "5": { "name": "entity.name.function.passage.narrava-twee" },
+        "6": { "name": "keyword.operator.link.inner.narrava-twee" },
+        "7": { "name": "punctuation.definition.link.outer.narrava-twee" }
       },
       "name": "meta.link.narrava-twee"
     },

@@ -398,6 +398,38 @@ fn passage_name_comparison_is_case_sensitive() {
 }
 
 #[test]
+fn rejects_tags_on_every_special_passage() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("示例源码应可读取");
+
+    for name in ["Start", "StoryInit", "Header", "Footer", "Bar", "BarStowed"] {
+        let mut special: Passage<'_> = passage(&source, name, 1);
+        special.tags = vec!["invalid"];
+        let error: SemanticError<'_> = validate(&[special]).expect_err("特殊 Passage 必须拒绝 Tag");
+
+        assert_eq!(error.kind, SemanticErrorKind::SpecialPassageTags);
+        assert_eq!(error.name, name);
+        assert_eq!(error.diagnostic().code, "twee.special_passage_tags");
+    }
+}
+
+#[test]
+fn ordinary_passage_still_accepts_tags() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("示例源码应可读取");
+    let mut ordinary: Passage<'_> = passage(&source, "Hall", 1);
+    ordinary.tags = vec!["hub", "indoor"];
+
+    assert!(validate(&[ordinary]).is_ok());
+}
+
+#[test]
 fn builds_story_from_twee_sources() {
     let sources: SourceList =
         SourceList::discover(Path::new("src/tests/fixtures/game")).expect("示例项目源码应可发现");

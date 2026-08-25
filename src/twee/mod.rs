@@ -201,6 +201,7 @@ impl Error for ParseError<'_> {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SemanticErrorKind {
     DuplicatePassageName,
+    SpecialPassageTags,
 }
 
 /// 带重复名称及其位置的语义错误。
@@ -228,6 +229,18 @@ impl SemanticError<'_> {
                 line: self.span.line,
                 column: self.span.column,
             }),
+            SemanticErrorKind::SpecialPassageTags => Diagnostic::new(
+                "twee.special_passage_tags",
+                DiagnosticSeverity::Error,
+                &format!("特殊 Passage `{}` 不能带有 Tag", self.name),
+            )
+            .with_location(DiagnosticLocation {
+                source: self.source.as_str().to_owned(),
+                start: self.span.start,
+                end: self.span.end,
+                line: self.span.line,
+                column: self.span.column,
+            }),
         }
     }
 }
@@ -236,12 +249,19 @@ impl fmt::Display for SemanticError<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "{}:{}:{}: Passage 名称 `{}` 重复",
+            "{}:{}:{}: ",
             self.source.as_str(),
             self.span.line,
             self.span.column,
-            self.name
-        )
+        )?;
+        match self.kind {
+            SemanticErrorKind::DuplicatePassageName => {
+                write!(formatter, "Passage 名称 `{}` 重复", self.name)
+            }
+            SemanticErrorKind::SpecialPassageTags => {
+                write!(formatter, "特殊 Passage `{}` 不能带有 Tag", self.name)
+            }
+        }
     }
 }
 

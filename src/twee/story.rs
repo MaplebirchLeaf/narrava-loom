@@ -38,6 +38,14 @@ pub fn validate<'source>(passages: &[Passage<'source>]) -> Result<(), SemanticEr
     let mut names: HashSet<&str> = HashSet::new();
 
     for passage in passages {
+        if crate::story::special::is_special(passage.name) && !passage.tags.is_empty() {
+            return Err(SemanticError {
+                source: passage.source,
+                name: passage.name,
+                kind: SemanticErrorKind::SpecialPassageTags,
+                span: passage.span,
+            });
+        }
         let inserted: bool = names.insert(passage.name);
         if !inserted {
             return Err(SemanticError {

@@ -1,11 +1,20 @@
 "use strict"
 
 const vscode = require("vscode")
-const { BUILTIN_MACROS, knownNames, macroKinds, scanScript, scanTwee } = require("./catalog")
+const {
+  BUILTIN_MACROS,
+  knownNames,
+  macroKinds,
+  missingPassageLinks,
+  scanScript,
+  scanTwee,
+  taggedSpecialPassages,
+} = require("./catalog")
 
 class MacroWorkspace {
   constructor() {
     this.definitions = []
+    this.passages = []
     this.known = new Set(BUILTIN_MACROS)
     this.kinds = macroKinds([])
     this.emitter = new vscode.EventEmitter()
@@ -15,12 +24,16 @@ class MacroWorkspace {
   async refresh() {
     const files = await vscode.workspace.findFiles("**/*.{twee,ts,js}", "**/{target,node_modules,.git}/**")
     const definitions = []
+    const passages = []
     for (const uri of files) {
       const document = await vscode.workspace.openTextDocument(uri)
-      const items = uri.path.endsWith(".twee") ? scanTwee(document.getText()).definitions : scanScript(document.getText())
+      const twee = uri.path.endsWith(".twee") ? scanTwee(document.getText()) : undefined
+      const items = twee ? twee.definitions : scanScript(document.getText())
       for (const item of items) definitions.push({ ...item, uri })
+      for (const passage of twee?.passages ?? []) passages.push({ ...passage, uri })
     }
     this.definitions = definitions
+    this.passages = passages
     this.known = knownNames(definitions)
     this.kinds = macroKinds(definitions)
     for (const document of vscode.workspace.textDocuments) this.validate(document)
@@ -29,7 +42,8 @@ class MacroWorkspace {
 
   validate(document) {
     if (document.languageId !== "narrava-twee") return
-    const calls = scanTwee(document.getText()).calls
+    const twee = scanTwee(document.getText())
+    const calls = twee.calls
     const errors = calls
       .filter(call => !call.closing && !this.known.has(call.name))
       .map(call => {
@@ -39,6 +53,30 @@ class MacroWorkspace {
         diagnostic.source = "Narrava Loom"
         return diagnostic
       })
+    for (const link of missingPassageLinks(twee.links, this.passages)) {
+      const range = new vscode.Range(document.positionAt(link.start), document.positionAt(link.start + link.length))
+      const diagnostic = new vscode.Diagnostic(
+        range,
+        `Passage \`${link.target}\` 未定义`,
+        vscode.DiagnosticSeverity.Error,
+      )
+      diagnostic.code = "narrava.passage.undefined"
+      diagnostic.source = "Narrava Loom"
+      errors.push(diagnostic)
+    }
+    for (const passage of taggedSpecialPassages(twee.passages)) {
+      const start = passage.tagsStart ?? passage.start
+      const length = passage.tagsLength || passage.length
+      const range = new vscode.Range(document.positionAt(start), document.positionAt(start + length))
+      const diagnostic = new vscode.Diagnostic(
+        range,
+        `特殊 Passage \`${passage.name}\` 不能带有 Tag`,
+        vscode.DiagnosticSeverity.Error,
+      )
+      diagnostic.code = "narrava.passage.special_tags"
+      diagnostic.source = "Narrava Loom"
+      errors.push(diagnostic)
+    }
     const stack = []
     for (const call of calls) {
       const kind = this.kinds.get(call.name)

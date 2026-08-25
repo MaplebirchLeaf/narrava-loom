@@ -67,6 +67,7 @@ Twee Source
 - Parser 已递归组合嵌套 Macro，并按层级匹配同名闭合符。
 - Parser 已报告未闭合、错名闭合和孤立闭合，并保留 Macro 名称与 Span。
 - Macro Header 中的位移及位移复合赋值必须位于圆括号内；后续 Scanner 只把分组深度为零的 `>>` 作为外壳结束符。
+- `Start`、`StoryInit`、`Header`、`Footer`、`Bar`、`BarStowed` 是保留的特殊 Passage，声明时不能带 Tag。
 - Twee ParseError 已能转换为带稳定代码、相对 Source 和精确 Span 的公共 Diagnostic。
 - Twee SemanticError 与 StoryError 已能转换为公共 Diagnostic，重复 Passage 指向后出现的声明。
 - `MacroNode` 保留名称、原始参数与正文节点，不绑定运行时定义。

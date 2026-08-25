@@ -7,6 +7,15 @@ pub const FOOTER_PASSAGE: &str = "Footer";
 pub const BAR_PASSAGE: &str = "Bar";
 pub const BAR_STOWED_PASSAGE: &str = "BarStowed";
 
+pub const SPECIAL_PASSAGES: [&str; 6] = [
+    START_PASSAGE,
+    STORY_INIT_PASSAGE,
+    HEADER_PASSAGE,
+    FOOTER_PASSAGE,
+    BAR_PASSAGE,
+    BAR_STOWED_PASSAGE,
+];
+
 pub const HOST_REGION_PASSAGES: [&str; 4] = [
     HEADER_PASSAGE,
     FOOTER_PASSAGE,
@@ -16,4 +25,9 @@ pub const HOST_REGION_PASSAGES: [&str; 4] = [
 
 pub fn is_host_region(name: &str) -> bool {
     HOST_REGION_PASSAGES.contains(&name)
+}
+
+/// 返回名称是否属于禁止携带 Tag 的保留 Passage。
+pub fn is_special(name: &str) -> bool {
+    SPECIAL_PASSAGES.contains(&name)
 }

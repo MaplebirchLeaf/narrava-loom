@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use crate::diagnostic::{Diagnostic, DiagnosticSeverity};
-use crate::source::{Source, SourceList, SourcePath};
+use crate::source::{Source, SourceKind, SourceList, SourcePath};
 
 use crate::twee::{
     BodyNode, BodyNodeKind, MacroNode, ParseError, ParseErrorKind, Passage, SemanticError,

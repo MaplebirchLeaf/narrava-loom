@@ -5,7 +5,7 @@
 一个文件可以写多个 Passage：
 
 ```twee
-:: Start [opening daytime]
+:: Entrance [opening daytime]
 你站在门外。
 
 :: Hall [indoor hub]
@@ -18,6 +18,7 @@
 - 空行属于正文排版；
 - `/% 注释 %/` 不会显示给玩家；
 - `StoryInit` 是初始化 Passage，不能当普通导航目标；
+- `Start`、`StoryInit`、`Header`、`Footer`、`Bar`、`BarStowed` 是特殊 Passage，均不能带 Tag；
 - 带 `exit` 标签的 Passage 用于退出型执行，不进入普通导航历史。
 
 推荐按章节拆文件，但不要依赖文件名决定执行顺序。故事顺序应由导航和明确生命周期决定。

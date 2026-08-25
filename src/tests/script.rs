@@ -157,7 +157,7 @@ fn script_story_api_reuses_core_story_queries() {
             HirPassage {
                 source: &source,
                 name: "Start",
-                tags: vec!["opening"],
+                tags: Vec::new(),
                 body: Vec::new(),
             },
             HirPassage {
@@ -176,7 +176,8 @@ fn script_story_api_reuses_core_story_queries() {
 
     assert!(api.has("Start"));
     assert_eq!(api.current().unwrap().name, "Hall");
-    assert_eq!(api.get("Start").unwrap().tags, vec!["opening"]);
+    assert!(api.get("Start").unwrap().tags.is_empty());
+    assert_eq!(api.get("Hall").unwrap().tags, vec!["hub"]);
     assert_eq!(api.visits("Hall"), 2);
 }
 

@@ -432,7 +432,7 @@ fn host_builtin_passage_event_reaches_a_script_subscription() {
     binding
         .emit_builtin_event(
             "passage:init",
-            &serde_json::json!({ "passage": "Start", "tags": ["opening"] }),
+            &serde_json::json!({ "passage": "Start", "tags": [] }),
         )
         .expect("Host 应可投递内置事件");
     let Value::ScriptCallable(callable) = state
