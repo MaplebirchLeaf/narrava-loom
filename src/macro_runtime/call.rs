@@ -23,8 +23,11 @@ pub struct PreparedMacroCall<'call, Handler> {
 /// Macro 调用在进入 Handler 前的准备错误。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MacroCallPreparationError<EvaluationError> {
+    /// Definition 查询失败。
     Definition(MacroDefinitionError),
+    /// 参数列表解析失败。
     ArgumentList(MacroArgumentListError),
+    /// 参数求值失败。
     ArgumentValue(MacroArgumentValueError<EvaluationError>),
 }
 

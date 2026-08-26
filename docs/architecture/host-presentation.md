@@ -41,9 +41,10 @@ Core 不反向调用 DOM、Godot、WebView、TUI 或其他平台对象。Binding
 
 Presentation Protocol 只表达 Narrava 必须理解的跨宿主语义。当前 `presentation` 模块提供：
 
-- 普通 Text，以及可组合的 `TextStyle + TextTone`；
-- Resource 逻辑路径 Image、Header/Main/Footer/Bar/Dialog Region；
+- 普通 Text，以及可组合的 `TextStyle + TextTone`（含可选 `delay` 毫秒延迟浮现）；
+- Resource 逻辑路径 Image、Header/Main/Footer/Bar/BarStowed/Dialog Region；
 - Navigation、SafeReturn 和不触发 Story 导航的 Dismiss Action；
+- 状态绑定 Input（checkbox／radiobutton／textbox），receiver 与允许值由 Core 保留；
 - 版本化 Component capability、纯数据 properties 与必须存在的 fallback；
 - `PresentationKey` 与普通 Container，供 Host 在更新间复用或替换同一语义节点。
 
@@ -51,21 +52,19 @@ Twee 用 `<<slot "name">>...<</slot>>` 建立普通稳定 Key 容器，再用
 `<<replace "name">>...<</replace>>` 替换它。`silently` 会丢弃整块 Presentation，因此其中建立的
 slot 不可见也不可替换；需要空目标时直接写 `<<slot "name">><</slot>>`。
 
-结构样式包括 emphasis、strong、code、deleted、inserted、marked、small、subscript、
-superscript、quote 和六级 heading。语气包括 default、muted、accent、informational、positive、
-warning、negative、critical。这些名称表达跨 Host 的内容意图，不暴露 HTML 标签、CSS class、
-selector 或具体颜色。游戏专用视觉效果应由作者主题映射到合适语义，或声明专用 Component，
-不能成为 Core 的通用颜色 API。
+文本样式共 8 个：emphasis、strong、code、quote、marked、small、inserted、deleted；
+语气是 0..=63 的色阶（对齐二进制边界：灰阶 0-7（白`1`→亮灰`2`→浅灰`3`→灰`4`→深灰`5`→暗灰`6`→黑`7`），光谱 8-63（红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`，每色相 8 级））。StyledText 可携带
+`delay`（毫秒，0..=86400000）：渲染器在此之前保持文本隐藏、到时浮现，以及结构性
+`heading`（1 或 2）：表达文档层级（如弹窗页签的页面标题），不属于字形样式，Host 据此划分页面。
+这些名称表达跨 Host 的内容意图，不暴露 HTML 标签、CSS class、selector 或具体颜色。
+游戏专用视觉效果应由作者主题映射到合适语义，或声明专用 Component，不能成为 Core 的通用颜色 API。
 
 Navigation 由 Core 识别，因此可以参与 Story、SafeReturn、I18n、Save、测试和 Mod 补丁。Host 可以把同一动作表现为按钮、文字链接、3D 物体或终端选项。Host 返回的输入必须引用 Core 提供的稳定动作身份或受验证目标，不能把任意平台回调直接注入 VM。
 
 ## 文本、I18n 与 Mod
 
-Native Narrava 文本不是 HTML。Twee 正文整体进入字面语义 Text，动态 Text 只由 `print` 等显式
-Macro 产生；宿主决定字体、换行、布局和可访问性。HTML 兼容能力若以后加入，应作为显式的
-构建工具或特定 Host 扩展，不能改变 Native Core 协议。
-
-I18n 继续在 Compiler/IR 中保存稳定文本身份与 placeholder，翻译发生在 Host 渲染之前。Presentation 不用 HTML 作为翻译载体。
+Twee 正文进入字面 Text，动态 Text 由 `print` 等显式 Macro 产生；Host 决定字体、布局和
+可访问性。I18n 在 Compiler/IR 中保存文本身份与 placeholder，并在 Host 渲染前完成翻译。
 
 Mod 继续修改 Core 可理解的 Source、AST/IR、资源身份和语义配置。模组不得为了修改核心叙事而依赖某一种 Host；平台专用扩展必须单独声明能力，缺少能力时不能破坏基础 Story。
 
@@ -77,7 +76,7 @@ Mod 继续修改 Core 可理解的 Source、AST/IR、资源身份和语义配置
 
 首个真实 Host 选择 Tauri。Rust 后端把 Presentation 转为带 key 的 DTO；WebView 按 key
 协调现有 DOM，不再在每次更新时清空 Passage。Renderer 将语义文本映射为原生 `em`、`strong`、
-`code`、`del`、`ins`、`mark`、heading 等元素，将 Region 路由到稳定插槽，将 Image 映射为
+`code`、`q`、`mark`、`ins`、`del`、`small` 等元素，将 Region 路由到稳定插槽，将 Image 映射为
 `figure/img/figcaption`。当前原生支持 `meter@1` Component；未知 capability/version 必须渲染
 fallback。WebView 的 HTML、CSS 和 DOM 实现始终只属于 Tauri Host。
 
@@ -148,8 +147,9 @@ Binding 只负责 Rust／Godot 类型转换、对象生命周期和 Diagnostic �
 37. `HostApi::drive_macro_interaction()` 已自动续跑延迟正文、分派后续 Macro，并在正文 Halt 后进入目标 Passage，再复用普通 Host 稳定驱动。Binding 最终仍只处理 Ready 或 Pending；两个待处理容器与动作所有者由 `HostMacroInteractionDriveContext` 明确组合，不进入前端协议。
 
 Host continuation、Widget 注册顺序、同步 StoryInit、`Host.delay()`，以及同步／异步 `link`
-容器正文的基础链已经闭合。I18n 文本与 fallback 已穿过 Host 事务。最小 TUI Renderer 已验证
-Region、稳定 Key 替换与 Component fallback 不依赖 DOM，并能列出输入节点；TUI 输入提交循环尚未
-实现。ModLoader 仍不在本体阶段。
+容器正文的基础链已经闭合。I18n 文本与 fallback 已穿过 Host 事务。TUI Renderer 已验证
+Region、稳定 Key 替换与 Component fallback 不依赖 DOM；终端输入循环会保留允许值，并把玩家
+命令验证为 Host-neutral 操作。完整游戏目录的 ECMAScript／Save／I18n 驱动仍待与 Tauri 共用。
+ModLoader 仍不在本体阶段。
 
 每一步必须保持 Compiler、Runtime 和现有逻辑测试可运行，不借迁移重写 VM。

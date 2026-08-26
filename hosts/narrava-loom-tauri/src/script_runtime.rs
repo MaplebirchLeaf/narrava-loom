@@ -1,3 +1,5 @@
+//! Boa 驱动的游戏脚本运行时边界：TypeScript 转译、State/Resource 桥接与异步 Macro 协调。
+
 use std::{cell::RefCell, path::Path, rc::Rc, time::Duration};
 
 use boa_engine::{Context, JsValue, Source};
@@ -26,6 +28,8 @@ use crate::HostErrorDto;
 mod resource_bridge;
 mod state_bridge;
 
+/// 注入到 Boa 的绑定启动脚本：定义 State/Macro/Event/Host/Engine/Story/Save/Resource/
+/// I18n/Presentation 全局 API，并把跨语言数据经 `__narrava*` 桥接函数交还给 Rust。
 const BOOTSTRAP: &str = r#"
 (() => {
   const functions = new Map();
@@ -212,7 +216,9 @@ const BOOTSTRAP: &str = r#"
       text: String(text),
       key: options.key,
       styles: Object.freeze([...(options.styles ?? [])]),
-      tone: options.tone ?? "default",
+      tone: options.tone ?? 0,
+      delay: options.delay,
+      heading: options.heading,
     }),
     image: (resource, options = {}) => presentationNode("image", {
       resource: String(resource), key: options.key,
@@ -259,14 +265,17 @@ const BOOTSTRAP: &str = r#"
 })();
 "#;
 
+/// 持有 Boa 引擎上下文的脚本运行时（一次启动一个）。
 pub struct EcmaRuntime {
     context: Context,
 }
 
+/// 对运行时上下文的借用访问边界：宏、保存、内置事件与脚本函数调用都经由它。
 pub struct EcmaBinding {
     runtime: RefCell<EcmaRuntime>,
 }
 
+/// 脚本宏挂起等待 Host 操作的凭据（当前只有 `Host.delay`）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScriptPending {
     id: u64,
@@ -274,18 +283,23 @@ pub struct ScriptPending {
 }
 
 impl ScriptPending {
+    /// 需等待的时长。
     pub fn delay(&self) -> Duration {
         self.delay
     }
 }
 
+/// 脚本宏的一次调用结果：立即完成或挂起等待 Host 操作。
 #[derive(Debug, PartialEq)]
 pub enum ScriptMacroOutcome {
+    /// 宏已完成并返回 Core 值。
     Complete(Value),
+    /// 宏挂起，需在 `ScriptPending::delay` 后由 Host 恢复。
     Pending(ScriptPending),
 }
 
 impl EcmaBinding {
+    /// 取出脚本登记的 Save 请求（operation, target）；无请求时返回 `None`。
     pub fn take_save(&self) -> Result<Option<(String, String)>, HostErrorDto> {
         let mut runtime = self.runtime.borrow_mut();
         let value = runtime
@@ -310,6 +324,7 @@ impl EcmaBinding {
         Ok(Some((operation.to_owned(), target.to_owned())))
     }
 
+    /// 把存档结果回传给脚本的 `Save.after` 钩子。
     pub fn complete_save(
         &self,
         operation: &str,
@@ -333,11 +348,14 @@ impl EcmaBinding {
             .map_err(|error| script_error("tauri_host.save_after", error))
     }
 
+    /// 恢复存档后同步脚本变量视图。
+    ///
+    /// State API 直接读取活动 Rust State，恢复存档后不再维护或刷新 JS 镜像。
     pub fn sync_variables(&self, _state: &State) -> Result<(), HostErrorDto> {
-        // State API 直接读取活动 Rust State，恢复存档后不再维护或刷新 JS 镜像。
         Ok(())
     }
 
+    /// 装载脚本源码与桥接并返回绑定；返回 `Rc` 供 State 的脚本分发器共享。
     pub fn load(
         sources: &SourceList,
         resources: &ResourceCatalog,
@@ -356,6 +374,7 @@ impl EcmaBinding {
         }))
     }
 
+    /// 查询脚本是否注册了指定 Macro。
     pub fn has_macro(&self, name: &str) -> Result<bool, HostErrorDto> {
         let expression = format!(
             "__narrava.hasMacro({})",
@@ -369,6 +388,7 @@ impl EcmaBinding {
             .map_err(|error| script_error("tauri_host.script_macro", error))
     }
 
+    /// 调用脚本 Macro；handler 未决时返回 Pending 等待 Host 操作。
     pub fn call_macro(
         &self,
         name: &str,
@@ -393,6 +413,7 @@ impl EcmaBinding {
         })
     }
 
+    /// 解决挂起的 Host 操作（如 `Host.delay` 到期）并继续运行宏。
     pub fn resume_macro(
         &self,
         pending: ScriptPending,
@@ -435,9 +456,22 @@ impl EcmaBinding {
                 HostErrorDto::new("tauri_host.script_event", "Event.emit 没有返回有效序号")
             })
     }
+
+    /// 同步 Host 已确认的运行语言，使脚本侧 `I18n.locale` 与实际渲染语言一致。
+    pub fn select_locale(&self, locale: &str) -> Result<(), HostErrorDto> {
+        let configuration = serde_json::json!({ "locale": locale });
+        let expression: String = format!("__narrava.configure({configuration})");
+        self.runtime
+            .borrow_mut()
+            .context
+            .eval(Source::from_bytes(expression.as_bytes()))
+            .map_err(|error| script_error("tauri_host.script_i18n_locale", error))?;
+        Ok(())
+    }
 }
 
 impl ScriptCallDispatcher for EcmaBinding {
+    /// 供 Core 表达式求值调用脚本函数。
     fn call(
         &self,
         callable: &ScriptCallable,
@@ -449,6 +483,7 @@ impl ScriptCallDispatcher for EcmaBinding {
 }
 
 impl EcmaRuntime {
+    /// 安装 State/Resource 桥接、注入启动脚本并执行全部转译后的模块。
     pub fn load(
         sources: &SourceList,
         resources: &ResourceCatalog,
@@ -495,6 +530,7 @@ impl EcmaRuntime {
 }
 
 impl ScriptFunctionHost for EcmaRuntime {
+    /// 供 Core 以 JSON 形式调用脚本函数并读回结果。
     fn call(
         &mut self,
         callable: &ScriptCallable,
@@ -530,10 +566,12 @@ impl ScriptFunctionHost for EcmaRuntime {
     }
 }
 
+/// 构造脚本错误。
 fn script_error(code: &str, error: impl std::fmt::Display) -> HostErrorDto {
     HostErrorDto::new(code, error.to_string())
 }
 
+/// JsValue → Rust 字符串。
 fn js_string(value: &JsValue, context: &mut Context) -> Result<String, HostErrorDto> {
     value
         .to_string(context)
@@ -541,6 +579,7 @@ fn js_string(value: &JsValue, context: &mut Context) -> Result<String, HostError
         .map_err(|error| script_error("tauri_host.script_value", error))
 }
 
+/// 读宏调用结果：已结算取返回值；未结算则把等待的 Host 操作转成 Pending。
 fn macro_outcome(context: &mut Context) -> Result<ScriptMacroOutcome, HostErrorDto> {
     let settled = context
         .eval(Source::from_bytes(
@@ -613,6 +652,7 @@ fn macro_outcome(context: &mut Context) -> Result<ScriptMacroOutcome, HostErrorD
     Ok(ScriptMacroOutcome::Complete(value))
 }
 
+/// JSON → Core 值（供 Input 与宏返回值转换）。
 pub(crate) fn json_to_value(value: &serde_json::Value) -> Result<Value, HostErrorDto> {
     match value {
         serde_json::Value::Null => Ok(Value::Null),
@@ -635,6 +675,7 @@ pub(crate) fn json_to_value(value: &serde_json::Value) -> Result<Value, HostErro
     }
 }
 
+/// Core 值 → JSON；函数/命名空间不可序列化。
 fn value_to_json(value: &Value) -> Result<serde_json::Value, ()> {
     match value {
         Value::Undefined | Value::Null => Ok(serde_json::Value::Null),
@@ -662,6 +703,7 @@ fn value_to_json(value: &Value) -> Result<serde_json::Value, ()> {
     }
 }
 
+/// 按扩展名转译脚本：`.js` 原样返回，`.ts` 走 oxc 解析/语义/转换/代码生成。
 pub fn transpile(path: &str, source: &str) -> Result<String, HostErrorDto> {
     if path.ends_with(".js") {
         return Ok(source.to_owned());

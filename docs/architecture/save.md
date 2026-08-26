@@ -74,17 +74,25 @@ Host 可以采用自己的持久化方式。Core 不接受绝对路径语义。
 after 不能修改已导出文档或把失败伪装成成功。Hook 身份只在当前进程内有效，
 不进入存档。`off(id)` 取消一条 before 或 after 订阅。
 
-游戏作者最终可以写：
+`.twee` 表达式由 Core 求值，不能直接访问 Worker 的 `Save` 全局。游戏作者在
+`.ts/.js` 里把导出/导入封装成普通函数，再经 `State.global.extend` 暴露后即可在
+`.twee` 中调用：
+
+```ts
+function saveGame(slot = "manual-1"): void {
+  Save.export(slot)
+}
+```
 
 ```twee
-<<run Save.export("manual-1")>>
+<<run saveGame("manual-1")>>
 ```
 
 `run` 会丢弃请求 ID，但导出请求仍进入 Host 队列；需要跟踪结果时应在 scripts
 中保存 ID 并登记 after。该调用不等于“Core 写入 manual-1 文件”。Tauri
 Binding 必须把全局 `Save` 对象连接到同一个 Rust `SaveController`。
 
-## API 与后续
+## 当前限制
 
 当前 Rust API：
 

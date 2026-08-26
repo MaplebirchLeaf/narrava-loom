@@ -2,6 +2,7 @@
 
 use super::*;
 
+/// 把 Source 逐行词法化为 Token：`::` 开头为 Passage 声明，其余为正文 Text。
 pub fn lex(source: &Source) -> Vec<Token<'_>> {
     let mut tokens: Vec<Token<'_>> = Vec::new();
     let mut start: usize = 0;

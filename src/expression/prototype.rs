@@ -27,6 +27,7 @@ impl Prototype {
         }
     }
 
+    /// 只读父原型；Object 是其余内置原型的共同根。
     fn parent(self) -> Option<Self> {
         match self {
             Self::Object => None,

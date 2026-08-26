@@ -102,6 +102,7 @@ fn evaluate_interaction_text<Error>(
     Ok(TextValue::from_units(units))
 }
 
+/// 把交互文本中的整段引用或 `${...}` 内容按标准 Expression 求值并转文本。
 fn evaluate_interaction_expression<Error>(
     source: &str,
     offset: usize,

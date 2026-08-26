@@ -1,3 +1,5 @@
+//! Host 启动资产：样式表与 Resource 元数据的发现，以及打包发行时从保留命名空间恢复。
+
 use std::{fs, io, path::Path};
 
 use narrava_loom_core::resource::ResourceCatalog;
@@ -5,29 +7,42 @@ use serde::Serialize;
 
 use crate::HostErrorDto;
 
+/// 发行包内 Host 样式表占用的保留 Resource 前缀。
 const PACKAGED_STYLE_PREFIX: &str = "__narrava/styles/";
 
+/// 一条可注入 WebView 的样式表。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct HostStyleDto {
+    /// 相对样式根目录的逻辑路径。
     pub path: String,
+    /// CSS 文本。
     pub css: String,
 }
 
+/// 单个 Resource 的元数据（不含字节，避免整包随启动 IPC 传输）。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct HostResourceDto {
+    /// 逻辑路径。
     pub path: String,
+    /// MIME 类型。
     pub media_type: String,
+    /// 字节数。
     pub size: usize,
 }
 
+/// Host 启动时一次性下发给前端的资产清单。
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct HostAssetsDto {
+    /// 窗口标题。
     pub title: String,
+    /// 样式表（发行包优先，其次开发目录 `styles/`）。
     pub styles: Vec<HostStyleDto>,
+    /// Resource 元数据清单。
     pub resources: Vec<HostResourceDto>,
 }
 
 impl HostAssetsDto {
+    /// 从 Resource 目录整理资产：保留前缀的样式表还原为 styles，其余列为元数据。
     pub fn from_catalog(resources: &ResourceCatalog) -> Result<Self, HostErrorDto> {
         let mut styles: Vec<HostStyleDto> = Vec::new();
         let mut metadata: Vec<HostResourceDto> = Vec::new();
@@ -59,12 +74,14 @@ impl HostAssetsDto {
         })
     }
 
+    /// 从开发目录发现资源并补充 `styles/` 下的样式表。
     pub fn discover(game_path: &Path) -> Result<Self, HostErrorDto> {
         let resources = ResourceCatalog::discover(game_path)
             .map_err(|error| HostErrorDto::new("tauri_host.resource", error.to_string()))?;
         Self::discover_with_catalog(game_path, &resources)
     }
 
+    /// 用已有 Resource 目录整理资产，并叠加开发目录样式表。
     pub fn discover_with_catalog(
         game_path: &Path,
         resources: &ResourceCatalog,
@@ -78,6 +95,7 @@ impl HostAssetsDto {
     }
 }
 
+/// 递归发现开发目录 `styles/` 下的全部 `.css` 文件。
 fn discover_styles(game_path: &Path) -> Result<Vec<HostStyleDto>, HostErrorDto> {
     let root = game_path.join("styles");
     if !root.exists() {
@@ -89,6 +107,7 @@ fn discover_styles(game_path: &Path) -> Result<Vec<HostStyleDto>, HostErrorDto> 
     Ok(styles)
 }
 
+/// 递归收集目录树内的 `.css`，路径转为 `/` 分隔的逻辑路径。
 fn collect_styles(
     root: &Path,
     directory: &Path,
@@ -128,6 +147,7 @@ fn collect_styles(
     Ok(())
 }
 
+/// 统一资产读取错误。
 fn read_error(path: &Path, error: io::Error) -> HostErrorDto {
     HostErrorDto::new(
         "tauri_host.asset_read",
@@ -141,6 +161,7 @@ mod tests {
 
     use super::HostAssetsDto;
 
+    /// 开发目录发现按路径排序的 CSS 与 Resource 元数据，且不携带字节。
     #[test]
     fn host_assets_discover_sorted_css_and_resource_metadata_without_bytes() {
         let root = PathBuf::from(format!(
@@ -176,6 +197,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    /// 发行包内保留命名空间的样式表被还原为 Host styles。
     #[test]
     fn packaged_host_styles_are_restored_from_the_reserved_resource_namespace() {
         let resources = narrava_loom_core::resource::ResourceCatalog::new([

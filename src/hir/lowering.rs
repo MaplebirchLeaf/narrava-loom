@@ -34,6 +34,7 @@ use super::{
     HirPrint, HirStory, HirWhile, HirWidget,
 };
 
+/// lowering 过程状态：循环嵌套深度用于校验 break/continue 的合法位置。
 #[derive(Clone, Copy, Debug, Default)]
 struct LoweringContext {
     loop_depth: usize,
@@ -55,6 +56,7 @@ impl LoweringContext {
 }
 
 impl<'source> HirStory<'source> {
+    /// 把通过 Twee 语义检查的 Story 降低为 HIR，并执行 Widget 结构校验。
     pub fn lower(story: &twee::Story<'source>) -> Result<Self, HirError> {
         let passages: Result<Vec<HirPassage<'source>>, HirError> =
             story.passages.iter().map(lower_passage).collect();
@@ -68,6 +70,7 @@ impl<'source> HirStory<'source> {
     }
 }
 
+/// 降低单个 Twee Passage 的正文并保留源码身份。
 fn lower_passage<'source>(
     passage: &twee::Passage<'source>,
 ) -> Result<HirPassage<'source>, HirError> {
@@ -87,6 +90,7 @@ fn lower_passage<'source>(
     })
 }
 
+/// 按 Macro 名称分派，把单个 Twee 正文节点降低为 HIR 节点。
 fn lower_body_node<'source>(
     passage: &twee::Passage<'source>,
     node: &twee::BodyNode<'source>,
@@ -154,7 +158,18 @@ fn lower_body_node<'source>(
             HirBodyKind::Unset(Box::new(lower_unset(passage, macro_node)?))
         }
         BodyNodeKind::Macro(macro_node) if macro_node.name == "print" => {
-            HirBodyKind::Print(lower_print(passage, macro_node)?)
+            if has_print_options(macro_node.arguments) {
+                // 带 tone/styles/delay/heading 选项时走动态宏路径（与脚本/Widget 宏同链路），
+                // 由 Host 求值参数并产生 StyledText；单参数仍是编译器固有 Print（纯 Text）。
+                HirBodyKind::Macro(HirMacro {
+                    name: macro_node.name,
+                    arguments: lower_macro_arguments(passage, macro_node)?,
+                    syntax_kind: macro_node.syntax_kind,
+                    body: Vec::new(),
+                })
+            } else {
+                HirBodyKind::Print(lower_print(passage, macro_node)?)
+            }
         }
         BodyNodeKind::Macro(macro_node) if macro_node.name == "silently" => {
             if !macro_node.arguments.is_empty() {
@@ -239,6 +254,51 @@ fn lower_body_node<'source>(
         kind,
         span: node.span,
     })
+}
+
+/// `print` 的参数是否超过一个（出现 tone/styles/delay/heading 选项）。
+/// 顶层空白分割参数，忽略引号内与括号/中括号/大括号内部的空白。
+pub(super) fn has_print_options(arguments: &str) -> bool {
+    split_print_arguments(arguments).len() > 1
+}
+
+fn split_print_arguments(source: &str) -> Vec<&str> {
+    let mut arguments: Vec<&str> = Vec::new();
+    let mut depth: i32 = 0;
+    let mut quote: Option<char> = None;
+    let mut escaped: bool = false;
+    let mut start: usize = 0;
+    for (offset, ch) in source.char_indices() {
+        if let Some(active) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == active {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' | '`' => quote = Some(ch),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            _ if ch.is_whitespace() && depth == 0 => {
+                if offset > start {
+                    arguments.push(source[start..offset].trim());
+                }
+                start = offset + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if start < source.len() {
+        let tail: &str = source[start..].trim();
+        if !tail.is_empty() {
+            arguments.push(tail);
+        }
+    }
+    arguments
 }
 
 fn lower_print<'source>(

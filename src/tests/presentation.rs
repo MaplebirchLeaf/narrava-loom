@@ -88,8 +88,10 @@ fn presentation_keys_are_explicit_stable_and_unique_within_one_output() {
             title.clone(),
             PresentationNode::StyledText {
                 text: TextValue::from("森林入口"),
-                styles: vec![TextStyle::Heading1],
-                tone: TextTone::Default,
+                styles: vec![TextStyle::Strong],
+                tone: TextTone::DEFAULT,
+                delay: None,
+                heading: None,
             },
         )
         .unwrap();
@@ -128,7 +130,9 @@ fn semantic_text_and_regions_remain_host_neutral() {
     let content = PresentationOutput::from_nodes(vec![PresentationNode::StyledText {
         text: TextValue::from("体力不足"),
         styles: vec![TextStyle::Strong],
-        tone: TextTone::Warning,
+        tone: TextTone::YELLOW,
+        delay: None,
+        heading: None,
     }]);
     let output = PresentationOutput::from_nodes(vec![PresentationNode::Region {
         region: PresentationRegion::Bar,
@@ -142,7 +146,7 @@ fn semantic_text_and_regions_remain_host_neutral() {
     assert!(matches!(
         content.nodes(),
         [PresentationNode::StyledText {
-            tone: TextTone::Warning,
+            tone: TextTone::YELLOW,
             ..
         }]
     ));

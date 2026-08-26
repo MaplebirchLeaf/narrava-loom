@@ -27,6 +27,7 @@ pub struct EngineMacroInteractionTransaction<'hir, 'source> {
 }
 
 impl<'hir, 'source> EngineMacroInteractionTransaction<'hir, 'source> {
+    /// 组合点击 Interaction 前取得的检查点与入口约束。
     pub fn new(
         state_checkpoint: StateCheckpoint,
         story_snapshot: StorySnapshot<'hir, 'source>,
@@ -46,77 +47,123 @@ impl<'hir, 'source> EngineMacroInteractionTransaction<'hir, 'source> {
 
 /// 取消异步 Interaction 后返还给 Macro／Binding 所有者的数据。
 pub struct EngineMacroInteractionCancelled<'hir, 'source, Pending> {
+    /// 原样交还的 Macro 调度句柄。
     pub pending: Pending,
+    /// 被取消的 Interaction 动作。
     pub interaction: MacroInteraction<'hir, 'source>,
     /// State 总能恢复；Story 不属于同一编译结果时显式报告恢复失败。
     pub story_error: Option<StorySnapshotError>,
 }
 
+/// Interaction 异步 Macro 恢复后的状态：再次暂停或已完成。
 pub enum EngineMacroInteractionResume<'hir, 'source, Pending> {
+    /// Handler 再次暂停，continuation 保持完整。
     Pending(EngineMacroInteractionContinuation<'hir, 'source, Pending>),
+    /// Handler 完成，正文可继续驱动。
     Complete(EngineMacroInteractionResumed<'hir, 'source>),
 }
 
+/// Interaction 正文的异步 Macro 已完成，等待继续驱动 VM。
 pub struct EngineMacroInteractionResumed<'hir, 'source> {
+    /// VM 与作用域恢复状态。
     pub runtime: RuntimeMacroBodyResumed,
+    /// 交互正文对应的 MIR 宏体。
     pub mir: MirMacroBody<'hir, 'source>,
+    /// 正在执行的 Interaction 动作。
     pub interaction: MacroInteraction<'hir, 'source>,
+    /// 点击 Interaction 前取得的 State 检查点。
     pub state_checkpoint: StateCheckpoint,
+    /// 点击 Interaction 前取得的 Story 快照。
     pub story_snapshot: StorySnapshot<'hir, 'source>,
+    /// 正文执行期间尚未确认的 Story 请求。
     pub requests: StoryRuntimePending<'hir, 'source>,
+    /// 进入目标 Passage 时携带的参数副本。
     pub params: Value,
+    /// 本事务的控制流预算。
     pub limits: EngineExecutionLimits,
 }
 
+/// 独立 Interaction 正文到达的下一个稳定边界。
 pub enum EngineMacroInteractionBoundary<'hir, 'source> {
+    /// 正文执行完毕，可进入目标 Passage。
     Halted(EngineMacroInteractionResumed<'hir, 'source>),
+    /// 正文遇到动态 Macro，等待分派。
     MacroPending(EngineMacroInteractionResumed<'hir, 'source>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// 驱动 Interaction 正文失败的细分原因。
 pub enum EngineMacroInteractionDriveFailureKind {
+    /// VM 步进失败。
     Vm(MirExecutionError),
+    /// Macro 返回了正文驱动不支持的停止信号。
     UnexpectedControl(BodyControl),
+    /// 正文内部发起了导航请求（交互正文不允许导航）。
     UnexpectedNavigation,
+    /// 边界处残留未消费的 include。
     UnconsumedIncludes { count: usize },
+    /// 边界处残留未确认的 goto。
     UnexpectedGoto,
 }
 
+/// Interaction 正文驱动失败且已完成回滚的结果。
 pub struct EngineMacroInteractionDriveError<'hir, 'source> {
+    /// 具体失败原因。
     pub kind: EngineMacroInteractionDriveFailureKind,
+    /// 失败时正在执行的 Interaction 动作。
     pub interaction: MacroInteraction<'hir, 'source>,
+    /// Story 恢复失败时携带其错误；成功恢复时为 `None`。
     pub story_error: Option<StorySnapshotError>,
 }
 
+/// 分派 Interaction 正文当前动态 Macro 的结果。
 pub enum EngineMacroInteractionDispatch<'hir, 'source, Pending> {
+    /// Macro 异步暂停，等待后续恢复。
     Pending(EngineMacroInteractionContinuation<'hir, 'source, Pending>),
+    /// Macro 完成，正文可继续驱动。
     Complete(EngineMacroInteractionResumed<'hir, 'source>),
 }
 
+/// Interaction 正文 Macro 分派失败的细分原因。
 pub enum EngineMacroInteractionDispatchFailureKind<Pending, DispatchError> {
+    /// 当前边界没有可分派的动态 Macro。
     MissingMacro,
+    /// Story 无法从待处理请求重新附着。
     StoryMismatch,
+    /// 控制器回调失败。
     Callback(DispatchError),
+    /// 暂停句柄与执行身份不一致，无法建立 continuation。
     InvalidSuspension(RuntimeMacroContinuationError<Pending>),
+    /// 完成 Macro 写入 VM 失败。
     Vm(MirExecutionError),
 }
 
+/// Interaction 正文 Macro 分派失败且已完成回滚的结果。
 pub struct EngineMacroInteractionDispatchError<'hir, 'source, Pending, DispatchError> {
+    /// 具体失败原因。
     pub kind: EngineMacroInteractionDispatchFailureKind<Pending, DispatchError>,
+    /// 失败时正在执行的 Interaction 动作。
     pub interaction: MacroInteraction<'hir, 'source>,
+    /// Story 恢复失败时携带其错误；成功恢复时为 `None`。
     pub story_error: Option<StorySnapshotError>,
 }
 
+/// 从 Interaction 边界进入目标 Passage 的失败阶段。
 pub enum EngineMacroInteractionTargetError<'hir, 'source, LifecycleError> {
+    /// 当前边界不是 Halted，不能进入目标。
     NotHalted(Box<EngineMacroInteractionBoundary<'hir, 'source>>),
+    /// 进入目标 Passage 的准备或 VM 驱动失败。
     Begin {
         error: Box<EngineMirBeginError<'hir, 'source, LifecycleError>>,
         interaction: MacroInteraction<'hir, 'source>,
     },
 }
 
+/// Interaction 异步 Macro 恢复失败；`Runtime` 已完成回滚。
 pub enum EngineMacroInteractionResumeError<'hir, 'source, Pending, ResumeError> {
+    /// Story 无法重新附着，continuation 保持完整。
     Story(Box<EngineMacroInteractionContinuation<'hir, 'source, Pending>>),
+    /// Handler 或 VM 恢复失败，事务已回滚。
     Runtime {
         error: RuntimeMacroContinuationResumeError<ResumeError, Pending>,
         interaction: MacroInteraction<'hir, 'source>,
@@ -125,6 +172,7 @@ pub enum EngineMacroInteractionResumeError<'hir, 'source, Pending, ResumeError> 
 }
 
 impl<'hir, 'source, Pending> EngineMacroInteractionContinuation<'hir, 'source, Pending> {
+    /// 组合交互正文暂停事务的全部所有权组件。
     pub fn new(
         runtime: RuntimeMacroBodyContinuation<Pending>,
         mir: MirMacroBody<'hir, 'source>,
@@ -150,14 +198,17 @@ impl<'hir, 'source, Pending> EngineMacroInteractionContinuation<'hir, 'source, P
         }
     }
 
+    /// VM 级交互正文 Macro 暂停句柄。
     pub fn runtime(&self) -> &RuntimeMacroBodyContinuation<Pending> {
         &self.runtime
     }
 
+    /// 交互正文对应的 MIR 宏体。
     pub fn mir(&self) -> &MirMacroBody<'hir, 'source> {
         &self.mir
     }
 
+    /// 正在等待恢复的 Interaction 动作。
     pub fn interaction(&self) -> &MacroInteraction<'hir, 'source> {
         &self.interaction
     }
@@ -554,6 +605,7 @@ impl<'hir, 'source> EngineMacroInteractionResumed<'hir, 'source> {
     }
 }
 
+/// 恢复点击 Interaction 前的 State 与 Story，并组装正文驱动失败。
 fn rollback_macro_interaction_drive<'hir, 'source>(
     state: &mut State,
     story: &mut Story<'hir, 'source>,
@@ -571,6 +623,7 @@ fn rollback_macro_interaction_drive<'hir, 'source>(
     })
 }
 
+/// 恢复点击 Interaction 前的 State 与 Story，并组装正文分派失败。
 fn rollback_macro_interaction_dispatch<'hir, 'source, Pending, DispatchError>(
     state: &mut State,
     story: &mut Story<'hir, 'source>,

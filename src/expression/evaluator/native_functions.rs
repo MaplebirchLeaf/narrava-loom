@@ -6,6 +6,7 @@ use crate::expression::{
     value::{NativeFunction, TextValue, Value},
 };
 
+/// 按函数签名检查参数数量，再分派到具体求值函数。
 pub(super) fn call_native_function(
     function: NativeFunction,
     arguments: Vec<Value>,
@@ -62,6 +63,7 @@ pub(super) fn call_native_function(
     }
 }
 
+/// Object.assign：先快照所有源对象，经授权后把属性合并进目标对象。
 fn evaluate_object_assign(
     arguments: &[Value],
     argument_nodes: &[Expression<'_>],
@@ -97,6 +99,7 @@ fn evaluate_object_assign(
     Ok(arguments[0].clone())
 }
 
+/// Object.hasOwn：只检查目标对象的自身属性，不进入原型表。
 fn evaluate_object_has_own(
     arguments: &[Value],
     argument_nodes: &[Expression<'_>],
@@ -118,6 +121,7 @@ fn evaluate_object_has_own(
     )))
 }
 
+/// random 与 either 共用随机源；先校验随机单位，再计算返回值。
 fn evaluate_random_function(
     function: NativeFunction,
     arguments: Vec<Value>,
@@ -143,6 +147,7 @@ fn evaluate_random_function(
     }
 }
 
+/// Boolean、Number、String 三个转换函数共用的分派。
 fn evaluate_conversion_function(
     function: NativeFunction,
     argument: &Value,
@@ -175,6 +180,7 @@ fn evaluate_conversion_function(
     }
 }
 
+/// abs、ceil、floor、round 只接受 Number 参数，其余类型报错。
 fn evaluate_numeric_function(
     function: NativeFunction,
     argument: &Value,
@@ -207,6 +213,7 @@ fn evaluate_numeric_function(
     Ok(Value::Number(result))
 }
 
+/// min、max、clamp 的参数检查与 Web 语义计算；clamp 额外校验区间顺序。
 fn evaluate_range_numeric_function(
     function: NativeFunction,
     arguments: &[Value],
@@ -265,6 +272,7 @@ fn evaluate_range_numeric_function(
     Ok(Value::Number(result))
 }
 
+/// 对齐 Web Math.min：任一操作数为 NaN 即 NaN，双零取带负号的一方。
 fn web_min(left: f64, right: f64) -> f64 {
     if left.is_nan() || right.is_nan() {
         return f64::NAN;
@@ -279,6 +287,7 @@ fn web_min(left: f64, right: f64) -> f64 {
     left.min(right)
 }
 
+/// 对齐 Web Math.max：任一操作数为 NaN 即 NaN，双零取带正号的一方。
 fn web_max(left: f64, right: f64) -> f64 {
     if left.is_nan() || right.is_nan() {
         return f64::NAN;
@@ -312,6 +321,7 @@ fn round_web(number: f64) -> f64 {
     }
 }
 
+/// keys、values、entries 共用集合条目快照与结果形状转换。
 fn evaluate_collection_function(
     function: NativeFunction,
     collection: &Value,

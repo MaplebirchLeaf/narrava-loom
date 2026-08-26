@@ -148,6 +148,7 @@ fn requires_container_syntax(name: &str) -> bool {
     )
 }
 
+/// 在后续 Token 中查找同名 Macro 闭合行；遇到 Passage 声明视为没有闭合。
 fn has_matching_closing(tokens: &[Token<'_>], start: usize, name: &str) -> bool {
     for token in &tokens[start..] {
         match token.kind {
@@ -341,6 +342,7 @@ fn parse_if_macro<'source>(
     })
 }
 
+/// if/switch 正在累积的子句；遇到下一个子句或结束标签时定型为 Container BodyNode。
 struct PendingIfClause<'source> {
     name: &'source str,
     arguments: &'source str,
@@ -349,6 +351,7 @@ struct PendingIfClause<'source> {
     body: Vec<BodyNode<'source>>,
 }
 
+/// 把解析出的节点追加到当前子句，否则追加到外层正文。
 fn append_if_body<'source>(
     body: &mut Vec<BodyNode<'source>>,
     clause: &mut Option<PendingIfClause<'source>>,
@@ -360,6 +363,7 @@ fn append_if_body<'source>(
     }
 }
 
+/// 把累积的子句定型为 Container 形式的 BodyNode，并以结束偏移收尾 Span。
 fn finish_if_clause<'source>(
     body: &mut Vec<BodyNode<'source>>,
     clause: Option<PendingIfClause<'source>>,
@@ -399,6 +403,7 @@ fn parse_macro_header_line(text: &str) -> Option<(&str, &str)> {
     })
 }
 
+/// 检测圆括号深度为零处的 `<<`/`>>`，避免与 Macro 定界符产生歧义。
 fn has_ungrouped_shift(source: &str) -> bool {
     let bytes: &[u8] = source.as_bytes();
     let mut depth: usize = 0;

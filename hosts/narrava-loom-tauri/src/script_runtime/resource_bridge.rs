@@ -12,6 +12,7 @@ struct Resources {
     catalog: ResourceCatalog,
 }
 
+/// 安装 `__narravaResource*` 原生函数并持有只读 Resource 目录。
 pub(super) fn install(context: &mut Context, resources: ResourceCatalog) -> JsResult<()> {
     context.insert_data(Resources { catalog: resources });
     register(context, "__narravaResourcePaths", 0, paths)?;
@@ -22,6 +23,7 @@ pub(super) fn install(context: &mut Context, resources: ResourceCatalog) -> JsRe
     Ok(())
 }
 
+/// 注册一个原生全局函数。
 fn register(
     context: &mut Context,
     name: &'static str,
@@ -35,6 +37,7 @@ fn register(
     )
 }
 
+/// 全部 Resource 逻辑路径（`Resource.paths`）。
 fn paths(_: &JsValue, _: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let paths = resources(context)
         .paths()
@@ -43,11 +46,13 @@ fn paths(_: &JsValue, _: &[JsValue], context: &mut Context) -> JsResult<JsValue>
     JsValue::from_json(&serde_json::json!(paths), context)
 }
 
+/// 路径是否存在（`Resource.has`）。
 fn has(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let path = path_argument(arguments, context)?;
     Ok(JsValue::new(resources(context).has(&path)))
 }
 
+/// 路径元数据（`Resource.info`）；不存在返回 undefined。
 fn info(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let path = path_argument(arguments, context)?;
     let Some(info) = resources(context).info(&path) else {
@@ -63,6 +68,7 @@ fn info(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<J
     )
 }
 
+/// 读取字节为 Uint8Array（`Resource.read`）；不存在返回 undefined。
 fn read(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let path = path_argument(arguments, context)?;
     let Some(bytes) = resources(context).read(&path).map_err(resource_error)? else {
@@ -72,6 +78,7 @@ fn read(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<J
     JsValue::from_json(&serde_json::json!(bytes), context)
 }
 
+/// 按 UTF-8 读取文本（`Resource.text`）；不存在返回 undefined。
 fn text(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let path = path_argument(arguments, context)?;
     let value = resources(context)
@@ -84,12 +91,14 @@ fn text(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<J
     }
 }
 
+/// Resource 读取错误 → JS 错误。
 fn resource_error(error: impl std::fmt::Display) -> boa_engine::JsError {
     JsNativeError::error()
         .with_message(error.to_string())
         .into()
 }
 
+/// 取桥接持有的 Resource 目录。
 fn resources(context: &Context) -> &ResourceCatalog {
     &context
         .get_data::<Resources>()
@@ -97,6 +106,7 @@ fn resources(context: &Context) -> &ResourceCatalog {
         .catalog
 }
 
+/// 取路径字符串参数。
 fn path_argument(arguments: &[JsValue], context: &mut Context) -> JsResult<String> {
     arguments
         .get_or_undefined(0)

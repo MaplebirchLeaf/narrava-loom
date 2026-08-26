@@ -55,7 +55,7 @@ version = "1.2.0"
 
 [game]
 id = "example.forest"
-versions = ">=0.1.0, <0.2.0"
+versions = ">=0.2.0, <0.3.0"
 
 [[dependencies]]
 id = "shared.library"

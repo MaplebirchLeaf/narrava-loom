@@ -32,6 +32,7 @@ pub(super) struct AssignmentPath {
 }
 
 impl AssignmentPath {
+    /// 把可写目标解析为根与成员路径；动态索引在此求值一次，避免重复执行。
     pub(super) fn resolve(
         target: &Expression<'_>,
         session: &mut EvaluationSession<'_>,
@@ -85,6 +86,7 @@ impl AssignmentPath {
         }
     }
 
+    /// 从 Context 读取路径根值；根绑定缺失时按目标类型报错。
     pub(super) fn read_root(&self, session: &EvaluationSession<'_>) -> Result<Value, EvalError> {
         match &self.root {
             AssignmentRoot::Global(name) => session
@@ -105,10 +107,12 @@ impl AssignmentPath {
         }
     }
 
+    /// 沿成员路径从根读取最终值；空路径返回根本身。
     pub(super) fn read_value(&self, root: &Value) -> Result<Value, EvalError> {
         read_segments(root, &self.members)
     }
 
+    /// 沿成员路径写入最终值；空路径直接替换根。
     pub(super) fn set_value(&self, root: &mut Value, value: Value) -> Result<(), EvalError> {
         if self.members.is_empty() {
             *root = value;
@@ -134,6 +138,7 @@ impl AssignmentPath {
         self.set_value(root, value)
     }
 
+    /// 把新根值提交到 Context；Context 拒绝时映射为 ContextWriteRejected。
     pub(super) fn write_root(
         &self,
         value: Value,
@@ -164,6 +169,7 @@ impl AssignmentPath {
         delete_segments(&mut root, &self.members)
     }
 
+    /// 删除根绑定并返回被删除的值；setup 根不可删除。
     fn delete_root(&self, session: &mut EvaluationSession<'_>) -> Result<Option<Value>, EvalError> {
         let writer: &mut dyn WritableEvaluationContext = session.context.writer(self.root_span)?;
         let deleted: Result<Option<Value>, ContextWriteError> = match &self.root {
@@ -176,6 +182,7 @@ impl AssignmentPath {
     }
 }
 
+/// 删除前校验：末段必须是对象属性，Array 中间段只允许进入不允许删除。
 fn validate_delete_segments(
     current: &Value,
     segments: &[AssignmentSegment],
@@ -218,6 +225,7 @@ fn validate_delete_segments(
     }
 }
 
+/// 写入前校验：对象键必须存在，Array 索引必须落在稠密范围内。
 fn validate_segments(current: &Value, segments: &[AssignmentSegment]) -> Result<(), EvalError> {
     let Some((segment, remaining)) = segments.split_first() else {
         return Ok(());
@@ -257,6 +265,7 @@ fn validate_segments(current: &Value, segments: &[AssignmentSegment]) -> Result<
     }
 }
 
+/// 沿路径逐段读取；中间缺失按 UnknownMember 或 InvalidArrayIndex 报错。
 fn read_segments(current: &Value, segments: &[AssignmentSegment]) -> Result<Value, EvalError> {
     let Some((segment, remaining)) = segments.split_first() else {
         return Ok(current.clone());
@@ -289,6 +298,7 @@ fn read_segments(current: &Value, segments: &[AssignmentSegment]) -> Result<Valu
     }
 }
 
+/// 沿路径写入；末段可新建对象键或在数组末尾追加元素。
 fn set_segments(
     current: &mut Value,
     segments: &[AssignmentSegment],
@@ -341,6 +351,7 @@ fn set_segments(
     }
 }
 
+/// 删除路径末端的对象键并返回原值；Array 只进入中间段，保持稠密。
 fn delete_segments(
     current: &mut Value,
     segments: &[AssignmentSegment],
@@ -380,6 +391,7 @@ fn delete_segments(
     }
 }
 
+/// 把成员或索引段统一为键名与出错位置。
 fn object_key(segment: &AssignmentSegment) -> Result<(String, Span), EvalError> {
     match segment {
         AssignmentSegment::Member { name, span } => Ok((name.clone(), *span)),

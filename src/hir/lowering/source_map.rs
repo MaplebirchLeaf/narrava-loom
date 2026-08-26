@@ -9,6 +9,7 @@ use crate::{
 
 use super::super::HirError;
 
+/// 把宏参数 Expression 解析错误映射到 Twee Source 的公共 Diagnostic。
 pub(super) fn map_macro_expression_error(
     passage: &twee::Passage<'_>,
     macro_node: &twee::MacroNode<'_>,
@@ -17,6 +18,7 @@ pub(super) fn map_macro_expression_error(
     map_macro_expression_fragment_error(passage, macro_node, 0, error)
 }
 
+/// 解析参数片段，保留片段相对宏参数的起点偏移用于错误定位。
 pub(super) fn parse_for_expression<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -28,6 +30,7 @@ pub(super) fn parse_for_expression<'source>(
     })
 }
 
+/// 把带偏移的片段解析错误映射到 Twee Source 位置；映射失败回退到宏参数 Span。
 pub(super) fn map_macro_expression_fragment_error(
     passage: &twee::Passage<'_>,
     macro_node: &twee::MacroNode<'_>,
@@ -53,6 +56,7 @@ pub(super) fn map_macro_expression_fragment_error(
     }
 }
 
+/// 构造宏参数内片段在 Twee Source 中的 DiagnosticLocation。
 pub(super) fn for_argument_location(
     passage: &twee::Passage<'_>,
     macro_node: &twee::MacroNode<'_>,
@@ -62,6 +66,7 @@ pub(super) fn for_argument_location(
     node_location(passage, macro_argument_span(macro_node, start, end))
 }
 
+/// 把宏参数内的相对范围换算为 Twee Span。
 pub(super) fn macro_argument_span(
     macro_node: &twee::MacroNode<'_>,
     start: usize,
@@ -75,10 +80,12 @@ pub(super) fn macro_argument_span(
     }
 }
 
+/// 把 Passage 内的 Twee Span 转换为带 Source 的 DiagnosticLocation。
 pub(super) fn node_location(passage: &twee::Passage<'_>, span: twee::Span) -> DiagnosticLocation {
     span_location(passage.source, span)
 }
 
+/// 把 Twee Span 与 Source 组合为 DiagnosticLocation。
 pub(super) fn span_location(source: &SourcePath, span: twee::Span) -> DiagnosticLocation {
     DiagnosticLocation {
         source: source.as_str().to_owned(),

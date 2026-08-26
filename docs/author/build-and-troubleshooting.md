@@ -1,6 +1,6 @@
 # 运行、构建、自检与故障排查
 
-## 22. 运行、检查、构建：三个命令不是一回事
+## 运行、检查、构建：三个命令不是一回事
 
 ### 22.1 只检查游戏
 
@@ -16,7 +16,7 @@ cargo run -p narrava-loom-core -- my-game
 cargo run -p narrava-loom-tauri -- my-game
 ```
 
-它编译并运行桌面 Host。开发二进制位于：
+它编译并运行 Tauri Host 的桌面入口。开发二进制位于：
 
 ```text
 target/debug/narrava-loom-tauri
@@ -78,7 +78,7 @@ NarravaGame/
 Linux、Windows、macOS 的可移动 `NarravaGame` 压缩包，并同时构建 VS Code 扩展。这里发布的是
 完整游戏目录，不是一个脱离 `game.nar` 的通用 Host 安装器；游戏身份和内容始终一起交付。
 
-## 23. 修改后怎样自检
+## 修改后怎样自检
 
 每次只改一点，然后运行：
 
@@ -86,24 +86,19 @@ Linux、Windows、macOS 的可移动 `NarravaGame` 压缩包，并同时构建 V
 cargo run -p narrava-loom-core -- my-game
 ```
 
-确认通过后再开桌面窗口：
+确认通过后再开 Tauri 桌面窗口：
 
 ```bash
 cargo run -p narrava-loom-tauri -- my-game
 ```
 
-引擎开发者提交仓库前运行：
+这不是移动端启动命令。共享 crate 已保留 mobile entry point，但仓库尚无 Android/iOS 工程与
+打包脚本；移动交付必须另行完成 Tauri 平台初始化、签名和真机验收。
 
-```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --all-targets --locked
-node --check hosts/narrava-loom-tauri/frontend/main.js
-```
+普通游戏作者不需要运行 Clippy 或全仓库测试。引擎开发者使用的完整门禁见
+[仓库命令](../development/commands.md)。
 
-普通游戏作者不需要运行 Clippy 或全仓库测试。
-
-## 24. 错误信息怎么看
+## 错误信息怎么看
 
 错误通常以 `领域.阶段` 形式出现，例如：
 
@@ -129,7 +124,7 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 不是正常提示。它表示执行失败，但 Core 已把本次未完成修改回滚，避免留下半更新状态。优先检查
 当前 Passage 中的 Macro、脚本函数、变量类型和导航目标。
 
-## 25. 超详细故障排查表
+## 超详细故障排查表
 
 | 现象 | 最可能原因 | 处理方法 |
 |---|---|---|
@@ -155,12 +150,12 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 | 只有默认深色样式 | 游戏没有 CSS | 正常；默认 CSS 属于 Host |
 | 没看到 Narrava Loom 标题 | 固定品牌标题已删除 | 正常；窗口标题来自游戏配置 |
 | `Save.export()` 没有文件 | target 非法或目录不可写 | 查看“日志”页与 `save/` 目录权限 |
-| 语言列表只有默认语言 | 未安装语言包 | 把构建出的 `*.nlang` 放入 `languages/` |
+| 语言列表只有默认语言 | 没有有效语言输入 | 开发目录放 `languages/<locale>/`；发行目录放构建出的 `languages/<locale>.nlang` |
 | Promise 一直不完成 | 依赖外部异步任务 | 当前只支持可由 microtask job queue 完成的 Promise |
 | 窗口启动后空白 | 启动或 Renderer 报错 | 看错误 Dialog 和终端输出，先运行 Core 检查命令 |
 | 再次启动说端口占用 | 通常是你另开的开发服务 | Tauri Host 本身不要求作者启动 HTTP 服务 |
 
-## 26. 新手最容易犯的十个错误
+## 新手最容易犯的十个错误
 
 1. 修改引擎 `src/`，却以为是在写游戏。
 2. 把游戏放到 `examples/contents/` 里面，而不是复制整个 `examples/`。
@@ -173,7 +168,7 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 9. 认为 `cargo build` 已生成玩家安装包。
 10. 把 ModLoader/ModUtils 当成基础游戏 API。
 
-## 27. 推荐的制作顺序
+## 推荐的制作顺序
 
 1. 只写 `config.toml` 和一个 `Start`。
 2. 加两个 Passage 和来回 link。
@@ -184,9 +179,9 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 7. 先用 `State.global` 导入一个纯函数。
 8. 再加入 Resource。
 9. 最后加入可选 CSS 和语言包。
-10. 最后用 `:: Bar` 中的 `<<hostTools>>` 入口验证存档、语言和日志；模组能力等待独立 ModLoader。
+10. 最后用 `:: Bar` 中的 `<<barDemo>>` 入口验证存档、语言和日志；模组能力等待独立 ModLoader。
 
-## 28. 当前能力状态表
+## 当前能力状态表
 
 | 能力 | 状态 | 作者现在怎么用 |
 |---|---|---|
@@ -208,7 +203,7 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 | ModLoader/ModUtils | 本体之外 | 等 `narrava-loom-modloader` |
 | 正式发布流水线 | 已配置 | tag 或手动触发 `Release packages` |
 
-## 29. 一个可直接复制的最小游戏
+## 一个可直接复制的最小游戏
 
 `config.toml`：
 

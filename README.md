@@ -2,7 +2,8 @@
 
 Narrava Loom 是以 Rust 实现、与宿主平台无关的叙事编译与运行核心。它负责 Twee 编译、
 Expression、Macro、State、Story、I18n、Save、VM 和事务化 Engine；画面、输入、文件选择与
-平台对象由 Tauri、Godot 或其他 Host 负责。官方桌面 Host 位于 `hosts/narrava-loom-tauri`；
+平台对象由 Tauri、Godot 或其他 Host 负责。官方 Tauri Host 位于 `hosts/narrava-loom-tauri`：
+桌面入口可运行和发行，移动端目前只完成共享入口与布局基础；
 游戏交付物是可移动的 `NarravaGame/` 目录，不要求作者维护 Rust 源码。文档从
 [文档总入口](docs/README.md) 开始。
 
@@ -63,15 +64,14 @@ Core 不依赖 ModLoader、Tauri、DOM、CSS 或具体 Renderer。详细边界�
 
 | 命令 | 用途 |
 |---|---|
-| `cargo test --workspace --all-targets --locked` | 运行 Core 与 Host 测试；不包含独立 ModLoader |
-| `cargo clippy --workspace --all-targets --locked -- -D warnings` | 将静态检查警告作为错误 |
-| `cargo fmt --all -- --check` | 检查 Rust 格式 |
 | `cargo run --locked -p narrava-loom-core -- examples` | 检查示例游戏源码和完整编译管线 |
-| `cargo run --locked -p narrava-loom-tauri -- examples` | 用当前 Tauri Host 启动示例游戏 |
-| `cargo test --locked -p narrava-loom-tui` | 验证非 Web Presentation 映射 |
-| `cargo run --locked -p narrava-loom-tui --example visual_demo` | 打印 TUI 语义可视 Demo |
-| `cargo test --locked -p narrava-loom-tauri` | 运行不打开窗口的桌面 Host 测试 |
-| `scripts/build-vscode-extension.sh` | 构建 VSIX；传入 `--install` 可立即安装扩展 |
+| `cargo run --locked -p narrava-loom-tauri -- examples` | 启动 Tauri 桌面 Host |
+| `cargo run --locked -p narrava-loom-tui --example visual_demo` | 启动可操作的 TUI 语义示例 |
+| `cargo test --workspace --all-targets --locked` | 运行 Rust workspace 测试 |
+| `bun run check` | 检查 TypeScript、前端、格式和 VS Code 扩展 |
+
+参数含义、窄范围命令、格式／Clippy／文档／发行命令统一见
+[仓库命令](docs/development/commands.md)。
 
 ## 当前边界
 
@@ -81,7 +81,7 @@ Host Presentation、I18n fallback、Save 数据模型、Resource、Event，以�
 Core 已建立 `.nar` 的拥有型源码记录、游戏身份、格式版本、内容哈希、可直接反序列化的
 拥有型 Bytecode、Script Bundle 与逐资源哈希边界。更广的平台能力只在出现稳定用例后扩展。
 Tauri Host 已在 Rust Worker 内通过 Boa/Oxc 执行游戏 JS/TS，并提供默认 Renderer、可选作者
-CSS，以及存档、语言和诊断面板。模组 patch、模组 Story/Resource
+CSS，以及供作者脚本调用的存档、语言和诊断能力；具体管理界面仍由游戏作者定义。模组 patch、模组 Story/Resource
 组合和玩家模组属于独立 `narrava-loom-modloader`，均不计入 Core 完成度。当前状态以各领域
 文档为准；当前完成度和下一阶段边界统一记录在
 [项目状态](docs/development/status.md)，不在多个计划文件中重复维护。

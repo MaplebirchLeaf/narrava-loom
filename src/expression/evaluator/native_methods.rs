@@ -6,6 +6,7 @@ use crate::expression::{
     value::{NativeMethod, TextValue, Value},
 };
 
+/// 按方法签名检查参数数量，再分派到具体方法求值。
 pub(super) fn call_native_method(
     receiver: Value,
     method: NativeMethod,
@@ -187,6 +188,7 @@ fn evaluate_string_split(
     Ok(Value::array(parts))
 }
 
+/// 按 UTF-16 码元序列查找分隔符并切分；空分隔符按单码元切分。
 fn split_text(text: &TextValue, separator: &TextValue, limit: usize) -> Vec<TextValue> {
     if separator.is_empty() {
         return text
@@ -237,6 +239,7 @@ fn evaluate_array_join(
     Ok(Value::String(joined))
 }
 
+/// 递归连接数组元素；嵌套数组固定以逗号分隔，函数与对象拒绝转换。
 fn join_array(
     items: &[Value],
     separator: &TextValue,
@@ -428,6 +431,7 @@ fn is_web_whitespace(unit: u16) -> bool {
     )
 }
 
+/// 移除文本两端属于 Web 空白集合的码元。
 fn trim_web_text(text: &TextValue) -> TextValue {
     let units: &[u16] = text.as_units();
     let start: usize = units

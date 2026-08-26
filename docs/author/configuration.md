@@ -1,6 +1,6 @@
 # `config.toml` 与第一个 Passage
 
-## 5. 配置 `config.toml`
+## 配置 `config.toml`
 
 最小配置：
 
@@ -52,7 +52,8 @@ maximized = false
 
 `game.name`（或显式的 `host.tauri.title`）用于系统窗口标题，不会被 Host 硬编码到侧栏中。
 侧栏展开内容由 `:: Bar` 决定，收起后的窄栏内容由 `:: BarStowed` 决定。游戏不写 `styles/`
-也会自动获得侧栏、正文、Header／Footer 与弹窗布局；自定义 CSS 只用于主题覆盖。
+也会自动获得侧栏、正文、Header／Footer、弹窗、表单、图片、64 级 tone 和全部 8 种语义字形；
+自定义 CSS 只用于品牌主题覆盖，不是制作游戏的必需文件。
 
 开发者模式开启后，在游戏窗口按 F12 可以开关 WebView DevTools。控制台通过
 `window.narrava` 提供：
@@ -88,7 +89,7 @@ window.narrava.help()          // 显示所有调试方法说明
 developer = false
 ```
 
-## 6. 写第一个能运行的故事
+## 写第一个能运行的故事
 
 把 `contents/story/main.twee` 改成：
 

@@ -2,21 +2,25 @@
 
 ## 当前定位
 
-`hosts/narrava-loom-tui` 是 Core Presentation 的最小终端适配器，用来证明同一语义输出不依赖
-DOM、CSS 或 Tauri。它目前是 library，不是完整的可执行终端游戏壳：没有键盘事件循环、终端
-布局库、存档菜单或脚本 Runtime Worker。
+`hosts/narrava-loom-tui` 是 Core Presentation 的终端适配器与阻塞式输入前端，用来证明同一
+语义输出和交互协议不依赖 DOM、CSS 或 Tauri。它不使用 alternate screen，普通标准输入／输出
+即可操作，也便于管道测试和嵌入其他 Native Host。
 
 当前适配器负责：
 
 - 把 Header、Main、Footer、Bar、BarStowed、Dialog 映射为六组终端文本；
 - 保留稳定 Presentation Key，并执行 Region／Key `replace`；
-- 把文本样式降级为 Markdown 风格的终端表示；
+- 把文本样式降级为 Markdown 风格的终端表示，并按 `TextTone` 色阶染色；
+- 把带 `delay` 的 StyledText 停放在 `frame.delayed`，由消费方用 `render_at(elapsed)` 到点显示；
 - 把图片降级为包含替代文字和 Resource 路径的文本；
 - 为未知 Component 显示语义 fallback；
-- 把导航、按钮、复选框、单选框和文本框收集为只读 `TuiInteraction` 清单。
+- 把导航、按钮、复选框、单选框和文本框收集为 `TuiInteraction` 清单；
+- 保留输入允许值，并把玩家命令解析为 `Activate`、`Input` 或 `Dismiss`；
+- 提供可恢复错误的输入循环，以及帮助、重绘和退出命令。
 
-当前清单只保留显示标签、交互类型和可用的不透明 Interaction ID；它尚未执行输入、保存 Radio
-group 或把值提交回 Host。不要把“节点可以降级显示”写成“终端表单已经可操作”。
+`run_terminal` 不拥有游戏 Runtime；调用方把已验证的 `TuiOperation` 提交给 Core worker，再返回
+下一帧。当前 crate 尚未提供加载完整游戏目录的脚本 Worker、存档菜单或语言菜单，因此不能把
+交互前端完成写成“与 Tauri 游戏能力完全等价”。
 
 ## 快速验证
 
@@ -50,11 +54,16 @@ cargo tree -p narrava-loom-tui
 cargo run --locked -p narrava-loom-tui --example visual_demo
 ```
 
-它会把同一份 `PresentationOutput` 打印为 Header、Main、Bar、Dialog 和 Actions。示例同时建立
+它会把同一份 `PresentationOutput` 打印为 Header、Main、Bar、Dialog 和操作列表，并等待玩家
+输入。输入 `1` 切换复选框，`set 2 游侠` 修改文本框，输入 `3` 激活“返回大厅”；`help` 显示
+命令，`redraw` 重绘，`quit` 退出。示例同时建立
 `status` slot，再用 `replace` 替换，因此 Main 中应只出现“替换完成”，不出现“等待替换”。
+带 `delay` 的文本保留在 `frame.delayed`，完整 Runtime 驱动方应按最小 `delay_ms` 调用
+`render_at`。可用管道做一次真实输入回归：
 
-这是一份确定性的语义可视化，不会进入 alternate screen，也不读取键盘。未来完整终端 Host 可以
-在它之上接入 Ratatui 等布局层，但不能改变 `TuiFrame` 已验证的区域与交互含义。
+```bash
+printf 'help\n1\nset 2 游侠\n3\nquit\n' | cargo run --locked -p narrava-loom-tui --example visual_demo
+```
 
 ## 修改 Renderer 时必须覆盖什么
 
@@ -64,14 +73,14 @@ cargo run --locked -p narrava-loom-tui --example visual_demo
 2. 同一个稳定 Key 被替换时不增加重复 Block；
 3. 不支持的视觉能力有可读 fallback，不静默丢失内容；
 4. 可交互节点保留 Core 提供的不透明 Interaction ID；
-5. 若开始实现输入提交，必须显式保留 Radio group、receiver 和允许值，不能依赖 HTML 属性；
+5. 输入提交必须使用 Core 提供的 Interaction ID 和允许值，不能依赖显示标签或 HTML 属性；
 6. TUI crate 没有反向引入平台类型到 Core。
 
-新增行为应写成 `TuiFrame` 精确断言。不要用 ANSI 颜色快照代替语义断言；颜色和终端宽度属于
-未来完整 TUI 外壳，当前测试只固定跨 Host 契约。
+新增行为应写成 `TuiFrame`、`TuiCommand` 或 `TuiOperation` 精确断言。不要用 ANSI 颜色快照
+代替语义断言；终端尺寸与全屏布局不属于当前输入协议。
 
 ## 当前完成标准
 
-TUI 验证通过只说明 Presentation 可以被非 Web Host 消费，不代表“终端版游戏已经完成”。完整
-TUI Host 还需要独立实现输入循环、Runtime 驱动、异步唤醒、终端尺寸变化和平台文件能力；这些
-能力应依赖 Core 公共接口，而不是复制 Tauri Worker。
+TUI 已能实际读取命令并产生经验证的 Host 操作，但完整游戏目录仍需要 Runtime 驱动、ECMAScript
+Binding、异步唤醒、Save／I18n 文件能力。它们应抽成可复用 Native Binding，不应复制 Tauri
+Worker 或让 TUI 依赖 Tauri crate。

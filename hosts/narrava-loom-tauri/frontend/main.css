@@ -1,3 +1,5 @@
+/* Narrava Tauri WebView 的 Host 主题。作者 CSS 只依赖 nv-story 上的 --narrava-* 语义 token、
+   [data-tone="N"] 与 .text-* 字形钩子；不要依赖这里的像素布局细节。 */
 :root {
   color-scheme: dark;
 }
@@ -27,6 +29,8 @@ nv-story {
   --narrava-warning: #e0b85c;
   --narrava-negative: #e58c8c;
   --narrava-critical: #ff6868;
+  --narrava-code-surface: rgb(255 255 255 / 7%);
+  --narrava-quote-border: rgb(255 255 255 / 24%);
   --narrava-focus: rgb(221 221 221 / 60%);
   --narrava-control: #222;
   --narrava-control-hover: #333;
@@ -236,26 +240,10 @@ nv-ui-bar.stowed + nv-passage {
   margin-left: 4.5em;
 }
 
-.presentation-text[data-tone="muted"] {
-  color: var(--narrava-muted);
-}
-.presentation-text[data-tone="accent"] {
-  color: var(--narrava-accent);
-}
-.presentation-text[data-tone="informational"] {
-  color: var(--narrava-info);
-}
-.presentation-text[data-tone="positive"] {
-  color: var(--narrava-positive);
-}
-.presentation-text[data-tone="warning"] {
-  color: var(--narrava-warning);
-}
-.presentation-text[data-tone="negative"] {
-  color: var(--narrava-negative);
-}
-.presentation-text[data-tone="critical"] {
-  color: var(--narrava-critical);
+/* 状态色阶 0..=63：颜色由渲染器按热度梯度写入 --narrava-tone（0 不染色）。
+   游戏 CSS 可用 [data-tone="N"] 规则覆盖任意色阶。 */
+.presentation-text {
+  color: var(--narrava-tone, inherit);
 }
 .presentation-text.text-strong {
   font-weight: 700;
@@ -263,19 +251,62 @@ nv-ui-bar.stowed + nv-passage {
 .presentation-text.text-emphasis {
   font-style: italic;
 }
-.presentation-text.text-marked {
-  padding-inline: 0.15em;
-  color: #111;
-  background: var(--narrava-warning);
+.presentation-text.text-code {
+  padding-inline: 0.2em;
+  border-radius: 0.1em;
+  background: var(--narrava-code-surface);
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+  font-size: 0.9375em;
 }
-.presentation-text.text-heading1,
-.presentation-text.text-heading2,
-.presentation-text.text-heading3,
-.presentation-text.text-heading4,
-.presentation-text.text-heading5,
-.presentation-text.text-heading6 {
-  margin-block: 0.75em 0.35em;
+.presentation-text.text-quote {
+  padding-inline-start: 0.5em;
+  border-inline-start: 0.15em solid var(--narrava-quote-border);
+  color: var(--narrava-tone, var(--narrava-muted));
+  font-style: italic;
+}
+.presentation-text.text-marked {
+  /* marked 是“需要注意”的语义底色；tone 仍只控制文字，不参与背景计算。 */
+  padding-inline: 0.2em;
+  border-radius: 0.1em;
+  background: color-mix(in srgb, var(--narrava-warning) 28%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--narrava-warning) 72%, transparent);
+}
+.presentation-text.text-small {
+  font-size: 0.875em;
+}
+.presentation-text.text-inserted {
+  color: var(--narrava-tone, var(--narrava-positive));
+  text-decoration: underline;
+  text-decoration-style: double;
+  text-underline-offset: 0.15em;
+}
+.presentation-text.text-deleted {
+  color: var(--narrava-tone, var(--narrava-negative));
+  text-decoration: line-through;
+}
+
+/* heading 是结构语义，不要求作者另写标题排版。 */
+.presentation-text:is(h1, h2) {
+  margin: 0 0 0.75em;
+  color: var(--narrava-tone, inherit);
   line-height: 1.25;
+}
+.presentation-text:is(h1) {
+  font-size: 1.75em;
+}
+.presentation-text:is(h2) {
+  font-size: 1.35em;
+}
+
+/* 延迟显示（浮现）：带 delay 的文本先隐藏，等待 delay 毫秒后淡入。
+   由渲染器按节点 delay 设置 animation；TUI 用 frame.delayed + render_at 实现同序。 */
+@keyframes narrava-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 nv-story figure[data-presentation-type="image"] {
@@ -555,6 +586,7 @@ nv-story #dialog-close .ui-icon {
   display: none;
 }
 
+/* 断点：71em 以下收缩正文边距；39.5em 以下默认收起侧栏并让 Dialog 全屏化。 */
 @media (max-width: 71em) {
   nv-passage {
     margin-left: 18.5em;
@@ -589,6 +621,7 @@ nv-story #dialog-close .ui-icon {
   }
 }
 
+/* 触屏设备：放大控件尺寸并优化点击目标。 */
 @media (pointer: coarse) {
   nv-story {
     --narrava-control-size: 2.75rem;
@@ -599,6 +632,7 @@ nv-story #dialog-close .ui-icon {
   }
 }
 
+/* 系统减少动态偏好：关闭过渡与动画。 */
 @media (prefers-reduced-motion: reduce) {
   nv-passage {
     transition: none;

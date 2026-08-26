@@ -3,12 +3,14 @@
 use super::chain::{ChainValue, evaluate_chain, native_function, native_namespace};
 use super::*;
 
+/// 只读或可写 Context 的统一访问门面；读取方法对两种模式等价。
 pub(crate) enum ContextAccess<'a> {
     Read(&'a dyn EvaluationContext),
     Write(&'a mut dyn WritableEvaluationContext),
 }
 
 impl ContextAccess<'_> {
+    /// 只读查询 State.global；Read 与 Write 模式行为一致。
     pub(crate) fn global(&self, name: &str) -> Option<&Value> {
         match self {
             Self::Read(context) => context.global(name),
@@ -16,6 +18,7 @@ impl ContextAccess<'_> {
         }
     }
 
+    /// 只读查询 setup State；Read 与 Write 模式行为一致。
     pub(crate) fn setup(&self) -> Option<&Value> {
         match self {
             Self::Read(context) => context.setup(),
@@ -23,6 +26,7 @@ impl ContextAccess<'_> {
         }
     }
 
+    /// 只读查询指定作用域的变量绑定；Read 与 Write 模式行为一致。
     pub(crate) fn variable(&self, scope: VariableScope, name: &str) -> Option<&Value> {
         match self {
             Self::Read(context) => context.variable(scope, name),
@@ -30,6 +34,7 @@ impl ContextAccess<'_> {
         }
     }
 
+    /// 取回可变 Context；只读会话在此报出 MissingWriteContext。
     pub(crate) fn writer(
         &mut self,
         span: Span,
@@ -40,6 +45,7 @@ impl ContextAccess<'_> {
         }
     }
 
+    /// 修改型原生函数在触碰共享引用前单独取得授权。
     pub(crate) fn authorize_reference_write(&mut self, span: Span) -> Result<(), EvalError> {
         match self {
             Self::Read(_) => Err(EvalError::MissingWriteContext(span)),
@@ -49,6 +55,7 @@ impl ContextAccess<'_> {
         }
     }
 
+    /// 把脚本可调用值交回 Binding 执行；只读会话或调用失败都映射为 EvalError。
     pub(crate) fn call_script(
         &mut self,
         callable: &ScriptCallable,
@@ -62,11 +69,13 @@ impl ContextAccess<'_> {
     }
 }
 
+/// 一次求值会话：持有 Context 访问方式与可选随机源，随求值调用创建。
 pub(crate) struct EvaluationSession<'a> {
     pub(crate) context: ContextAccess<'a>,
     pub(crate) random: Option<&'a mut dyn RandomSource>,
 }
 
+/// 不提供任何全局值、变量与 setup 的只读 Context。
 pub(crate) struct EmptyContext;
 
 impl EvaluationContext for EmptyContext {
@@ -75,6 +84,7 @@ impl EvaluationContext for EmptyContext {
     }
 }
 
+/// 求值单个 Expression 节点；链式表达式与赋值目标走专门路径。
 pub(crate) fn evaluate_in(
     expression: &Expression<'_>,
     session: &mut EvaluationSession<'_>,
@@ -197,6 +207,7 @@ pub(crate) fn evaluate_in(
     }
 }
 
+/// 前缀/后缀自增自减：解析目标路径、读旧值、提交新值，再按位置决定返回值。
 fn evaluate_update(
     operator: UpdateOperator,
     position: UpdatePosition,
@@ -220,6 +231,7 @@ fn evaluate_update(
     }))
 }
 
+/// 赋值求值：普通赋值直接写入，复合赋值先读当前值，短路赋值按真假值决定是否写入。
 fn evaluate_assignment(
     operator: AssignmentOperator,
     target: &Expression<'_>,
@@ -268,6 +280,7 @@ fn evaluate_assignment(
     Ok(result)
 }
 
+/// 把复合赋值运算符映射回对应的二元运算符；普通赋值与短路赋值返回 `None`。
 fn assignment_binary_operator(operator: AssignmentOperator) -> Option<BinaryOperator> {
     match operator {
         AssignmentOperator::Add => Some(BinaryOperator::Add),

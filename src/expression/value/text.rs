@@ -12,18 +12,22 @@ pub struct TextValue {
 }
 
 impl TextValue {
+    /// 从 UTF-16 码元序列创建文本值。
     pub fn from_units(units: Vec<u16>) -> Self {
         Self { units }
     }
 
+    /// 返回 UTF-16 码元数量。
     pub fn len(&self) -> usize {
         self.units.len()
     }
 
+    /// 是否为空文本。
     pub fn is_empty(&self) -> bool {
         self.units.is_empty()
     }
 
+    /// 返回底层 UTF-16 码元切片。
     pub fn as_units(&self) -> &[u16] {
         &self.units
     }
@@ -42,10 +46,12 @@ impl TextValue {
         String::from_utf16(&self.units).ok()
     }
 
+    /// 追加另一段文本的码元。
     pub(in crate::expression) fn append(&mut self, other: &Self) {
         self.units.extend_from_slice(&other.units);
     }
 
+    /// 是否包含另一段文本；空文本恒为真。
     pub(in crate::expression) fn contains(&self, other: &Self) -> bool {
         other.is_empty()
             || self
@@ -54,22 +60,27 @@ impl TextValue {
                 .any(|window: &[u16]| window == other.units)
     }
 
+    /// 是否以另一段文本开头。
     pub(in crate::expression) fn starts_with(&self, other: &Self) -> bool {
         self.units.starts_with(&other.units)
     }
 
+    /// 是否以另一段文本结尾。
     pub(in crate::expression) fn ends_with(&self, other: &Self) -> bool {
         self.units.ends_with(&other.units)
     }
 
+    /// 按 Unicode 规则转小写；孤立代理项原样保留。
     pub(in crate::expression) fn to_lowercase(&self) -> Self {
         self.map_case(char::to_lowercase)
     }
 
+    /// 按 Unicode 规则转大写；孤立代理项原样保留。
     pub(in crate::expression) fn to_uppercase(&self) -> Self {
         self.map_case(char::to_uppercase)
     }
 
+    /// 逐字符应用大小写映射；解码失败的孤立代理项不参与映射。
     fn map_case<I>(&self, map: impl Fn(char) -> I) -> Self
     where
         I: Iterator<Item = char>,

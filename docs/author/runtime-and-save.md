@@ -1,6 +1,6 @@
 # Story、Engine、Event、I18n 与 Save
 
-## 18. Story、Engine 与重新开始
+## Story、Engine 与重新开始
 
 声明文件提供：
 
@@ -22,7 +22,7 @@ Engine.restart()
 完整实时同步与平台动作仍在收束。现阶段正式剧情导航优先使用 `<<link>>` 和 `<<goto>>`，不要把
 关键流程只押在脚本 `Engine.goto()` 上。
 
-## 19. Logger 与 Event
+## Logger 与 Event
 
 ### 19.1 当前到底有哪些基础事件
 
@@ -100,7 +100,7 @@ Engine 内部仍以同步事务回调执行
 里阻塞或改写当前事务；脚本只能在下一次获得执行机会时 `take()`。include 不创建独立 Passage
 生命周期，StoryInit 也不是 PassageInit。
 
-## 20. I18n 多语言
+## I18n 多语言
 
 原文语言由 `default_locale` 决定。一个解包语言目录：
 
@@ -116,7 +116,7 @@ languages/en/
 - `dictionary.json`：动态运行时值的翻译；
 - `.nlang`：上述内容的单语言发布包，不是第四种翻译格式。
 
-脚本可读：
+脚本可读并导出译者模板：
 
 ```ts
 I18n.defaultLocale
@@ -128,12 +128,16 @@ const templateJson = I18n.export()
 和按稳定文本 ID 排列的 `passages`。Rust Worker 没有浏览器 `File` 和下载能力，因此返回
 `string`；把字符串保存成文件属于 Host 功能。
 
-Core 已有 fallback 和翻译数据模型；当前 Tauri Host 默认使用 `default_locale`，尚无玩家语言
-选择界面。不要在脚本中自行复制一套语言状态。
+开发运行时会直接校验并导入 `languages/<locale>/` 解包目录；发行构建会把同一目录编码为
+`languages/<locale>.nlang`，发行 Host 再导入该包。两条路径共用 Core 校验，不存在只在开发
+模式可用的宽松翻译格式。
 
-详细格式见 [/docs/reference/i18n.md](/docs/reference/i18n.md)。
+Core 已有 fallback 和翻译数据模型；Tauri 提供语言查询与切换命令，但可见的语言选择界面仍由
+游戏作者通过脚本和 Twee 定义。不要在脚本中自行复制一套语言状态。
 
-## 21. Save 存档
+详细格式见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md)。
+
+## Save 存档
 
 进入存档：`$` 变量、Story 历史以及 Core 规定的数据。
 不进入存档：`_` 临时变量、`@` 局部变量、脚本函数、DOM、Blob URL、平台对象。
@@ -170,4 +174,4 @@ before 可以返回新字符串改写 Host target。after 只在操作取得真�
 目录中的 `save/<target>.nsave`，磁盘操作完成后才触发 after。target 只允许 1 至 80 个 ASCII
 字母、数字、`-` 或 `_`，所以不能借此访问 `save/` 外的文件。
 
-详细边界见 [/docs/reference/save.md](/docs/reference/save.md)。
+详细边界见 [/docs/architecture/save.md](/docs/architecture/save.md)。

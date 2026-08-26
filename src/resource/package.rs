@@ -7,9 +7,12 @@ use sha2::{Digest, Sha256};
 
 use super::{ResourceCatalog, ResourceInput};
 
+/// `.nres` 内的 manifest 文件名。
 const MANIFEST: &str = "manifest.json";
+/// `.nres` 内资源数据文件的前缀。
 const DATA_PREFIX: &str = "data/";
 
+/// `.nres` manifest 的直接 JSON 映射。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Manifest {
     package_type: String,
@@ -17,17 +20,20 @@ struct Manifest {
     resources: BTreeMap<String, Entry>,
 }
 
+/// manifest 中单个资源的媒体类型与 SHA-256 摘要。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Entry {
     media_type: String,
     hash: String,
 }
 
+/// `.nres` 的规范内存文件清单：`manifest.json` 加 `data/<path>` 数据文件。
 #[derive(Clone, Debug)]
 pub struct NresPackage {
     files: Vec<(String, Vec<u8>)>,
 }
 
+/// `.nres` 构建或验证阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NresPackageError {
     InvalidManifest,
@@ -40,6 +46,7 @@ pub enum NresPackageError {
 }
 
 impl NresPackage {
+    /// 由资源目录生成清单与数据文件；内容哈希写入 manifest。
     pub fn build(catalog: &ResourceCatalog) -> Result<Self, NresPackageError> {
         let mut resources = BTreeMap::new();
         let mut files = Vec::new();
@@ -75,6 +82,7 @@ impl NresPackage {
         Ok(Self { files })
     }
 
+    /// 接收已解包的内存文件；先完成路径与重复检查。
     pub fn from_files(files: Vec<(String, Vec<u8>)>) -> Result<Self, NresPackageError> {
         let mut names = BTreeSet::new();
         for (path, _) in &files {
@@ -94,10 +102,12 @@ impl NresPackage {
         Ok(Self { files })
     }
 
+    /// 以（路径，字节）对的形式遍历全部文件。
     pub fn files(&self) -> impl Iterator<Item = (String, Vec<u8>)> + '_ {
         self.files.iter().cloned()
     }
 
+    /// 校验 manifest、文件集与内容哈希，成功时重建资源目录。
     pub fn validate(&self) -> Result<ResourceCatalog, NresPackageError> {
         let manifest = self
             .file(MANIFEST)
@@ -133,6 +143,7 @@ impl NresPackage {
         ResourceCatalog::new(inputs).map_err(|error| NresPackageError::Catalog(error.to_string()))
     }
 
+    /// 按文件名读取原始内容。
     fn file(&self, name: &str) -> Option<&[u8]> {
         self.files
             .iter()
@@ -140,6 +151,7 @@ impl NresPackage {
     }
 }
 
+/// 计算内容 SHA-256 摘要的十六进制字符串。
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }

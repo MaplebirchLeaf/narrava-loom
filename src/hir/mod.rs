@@ -21,6 +21,8 @@ pub struct HirBodyNode<'source> {
     pub span: twee::Span,
 }
 
+/// 正文节点的具体语义；编译器认识的逻辑 Macro（if/for/switch/set 等）在此定型，
+/// 其余通用 Macro 保留为未绑定的 [`HirMacro`] 调用。
 #[derive(Debug, PartialEq, Eq)]
 pub enum HirBodyKind<'source> {
     Text(&'source str),
@@ -48,10 +50,13 @@ pub enum HirBodyKind<'source> {
 /// `print` 显式区分求值参数与反引号字面文本。
 #[derive(Debug, PartialEq, Eq)]
 pub enum HirPrint<'source> {
+    /// 求值后输出其文本形式。
     Expression(Expression<'source>),
+    /// 反引号包裹的原样字面文本。
     Literal(&'source str),
 }
 
+/// Widget 定义：声明名称与正文；调用处始终是 Inline Macro，不能携带调用正文。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirWidget<'source> {
     pub name: &'source str,
@@ -65,6 +70,7 @@ pub struct HirCapture<'source> {
     pub body: Vec<HirBodyNode<'source>>,
 }
 
+/// switch 结构：只求值一次的主值与按源码顺序严格比较的 case 列表。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirSwitch<'source> {
     pub value: Expression<'source>,
@@ -72,18 +78,21 @@ pub struct HirSwitch<'source> {
     pub default: Option<Vec<HirBodyNode<'source>>>,
 }
 
+/// 一个 case 分支：与主值严格比较的 Expression 及其正文。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirSwitchCase<'source> {
     pub value: Expression<'source>,
     pub body: Vec<HirBodyNode<'source>>,
 }
 
+/// while 循环：每次迭代前求值的条件与循环正文。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirWhile<'source> {
     pub condition: Expression<'source>,
     pub body: Vec<HirBodyNode<'source>>,
 }
 
+/// for 循环：写入目标、迭代模式与循环正文。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirFor<'source> {
     pub target: HirForTarget<'source>,
@@ -91,12 +100,14 @@ pub struct HirFor<'source> {
     pub body: Vec<HirBodyNode<'source>>,
 }
 
+/// for 循环的写入目标变量及其源码位置。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirForTarget<'source> {
     pub value: Expression<'source>,
     pub span: twee::Span,
 }
 
+/// for 的三种迭代模式：`in`（集合键）、`of`（集合值）与数值 `range`。
 #[derive(Debug, PartialEq, Eq)]
 pub enum HirForKind<'source> {
     In {
@@ -117,12 +128,14 @@ pub enum HirForKind<'source> {
     },
 }
 
+/// if 结构：依次尝试的条件分支与可选的 fallback 正文。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirIf<'source> {
     pub branches: Vec<HirIfBranch<'source>>,
     pub fallback: Option<Vec<HirBodyNode<'source>>>,
 }
 
+/// if/elseif 的一个条件分支：条件与命中时的正文。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirIfBranch<'source> {
     pub condition: Expression<'source>,
@@ -141,8 +154,11 @@ pub struct HirMacro<'source> {
 /// 只有编译器认识的逻辑 Macro 才会提前解析参数。
 #[derive(Debug, PartialEq, Eq)]
 pub enum HirMacroArguments<'source> {
+    /// 不接受参数（如 `else`）。
     None,
+    /// 参数原文，由运行时 Macro Definition 自行解析。
     Raw(&'source str),
+    /// 编译器已解析为 Expression 的逻辑参数（if/while/run）。
     Expression(Expression<'source>),
 }
 
@@ -167,6 +183,7 @@ impl HirPassage<'_> {
     }
 }
 
+/// 一份 Twee Story 编译后的完整 HIR 集合。
 #[derive(Debug, PartialEq, Eq)]
 pub struct HirStory<'source> {
     pub passages: Vec<HirPassage<'source>>,

@@ -37,10 +37,12 @@ pub struct Token<'source> {
 /// 当前只区分 Passage 声明与尚未解析的正文。
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind<'source> {
+    /// `::` 开头的 Passage 声明行。
     PassageDeclaration {
         name: &'source str,
         tags: Vec<&'source str>,
     },
+    /// 尚未解析的正文行。
     Text(&'source str),
 }
 
@@ -61,7 +63,9 @@ pub enum BodyNodeKind<'source> {
 /// Macro 源码是否显式包含对应的闭合标签。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MacroSyntaxKind {
+    /// 单行调用，没有显式闭合标签。
     Inline,
+    /// 显式闭合标签包裹的正文容器。
     Container,
 }
 

@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 use narrava_loom_core::{
     expression::value::{ObjectValue, TextValue, Value},
     presentation::{
-        ActionRole, ComponentCapability, PresentationAction, PresentationKey, PresentationNode,
-        PresentationOutput, PresentationRegion, PresentationValue, TextStyle, TextTone,
+        ActionRole, ComponentCapability, HeadingLevel, PresentationAction, PresentationKey,
+        PresentationNode, PresentationOutput, PresentationRegion, PresentationValue, TextStyle,
+        TextTone,
     },
     resource::ResourcePath,
 };
@@ -16,6 +17,7 @@ use crate::HostErrorDto;
 const MARKER: &str = "__narravaPresentation";
 const MAX_DEPTH: usize = 32;
 
+/// 若脚本返回值带 Presentation 标记则解析为语义输出，否则返回 `None`。
 pub(super) fn output(value: &Value) -> Result<Option<PresentationOutput>, HostErrorDto> {
     let Value::Object(object) = value else {
         return Ok(None);
@@ -26,6 +28,7 @@ pub(super) fn output(value: &Value) -> Result<Option<PresentationOutput>, HostEr
     parse_output(value, 0).map(Some)
 }
 
+/// 解析标记对象：`fragment` 只作输出/Region 子内容，其余按单节点处理。
 fn parse_output(value: &Value, depth: usize) -> Result<PresentationOutput, HostErrorDto> {
     if depth > MAX_DEPTH {
         return Err(invalid("Presentation 嵌套超过 32 层"));
@@ -41,6 +44,7 @@ fn parse_output(value: &Value, depth: usize) -> Result<PresentationOutput, HostE
     }
 }
 
+/// 校验并推送单个节点；带 `key` 时按 key 入树，否则追加。
 fn push_node(
     output: &mut PresentationOutput,
     object: &ObjectValue,
@@ -52,6 +56,8 @@ fn push_node(
             text: TextValue::from(string_property(object, "text")?),
             styles: styles(object)?,
             tone: tone(object)?,
+            delay: delay(object)?,
+            heading: heading(object)?,
         },
         "image" => {
             let resource = string_property(object, "resource")?;
@@ -115,6 +121,7 @@ fn push_node(
     }
 }
 
+/// 解析 `children` 数组：字符串直接成文本，对象递归为节点。
 fn parse_children(object: &ObjectValue, depth: usize) -> Result<PresentationOutput, HostErrorDto> {
     let Value::Array(children) = required_property(object, "children")? else {
         return Err(invalid("Presentation children 必须是数组"));
@@ -134,6 +141,7 @@ fn parse_children(object: &ObjectValue, depth: usize) -> Result<PresentationOutp
     Ok(output)
 }
 
+/// 解析 8 个语义字形名（emphasis/strong/code/quote/marked/small/inserted/deleted）。
 fn styles(object: &ObjectValue) -> Result<Vec<TextStyle>, HostErrorDto> {
     let Some(value) = property(object, "styles") else {
         return Ok(Vec::new());
@@ -148,41 +156,33 @@ fn styles(object: &ObjectValue) -> Result<Vec<TextStyle>, HostErrorDto> {
             "emphasis" => Ok(TextStyle::Emphasis),
             "strong" => Ok(TextStyle::Strong),
             "code" => Ok(TextStyle::Code),
-            "deleted" => Ok(TextStyle::Deleted),
-            "inserted" => Ok(TextStyle::Inserted),
             "marked" => Ok(TextStyle::Marked),
             "small" => Ok(TextStyle::Small),
-            "subscript" => Ok(TextStyle::Subscript),
-            "superscript" => Ok(TextStyle::Superscript),
+            "inserted" => Ok(TextStyle::Inserted),
+            "deleted" => Ok(TextStyle::Deleted),
             "quote" => Ok(TextStyle::Quote),
-            "heading1" => Ok(TextStyle::Heading1),
-            "heading2" => Ok(TextStyle::Heading2),
-            "heading3" => Ok(TextStyle::Heading3),
-            "heading4" => Ok(TextStyle::Heading4),
-            "heading5" => Ok(TextStyle::Heading5),
-            "heading6" => Ok(TextStyle::Heading6),
             style => Err(invalid(format!("未知 Presentation text style：{style}"))),
         })
         .collect()
 }
 
+/// 解析 0..=63 的整数 tone；缺省或 null 用 `TextTone::DEFAULT`。
 fn tone(object: &ObjectValue) -> Result<TextTone, HostErrorDto> {
-    match optional_string(object, "tone")?
-        .as_deref()
-        .unwrap_or("default")
-    {
-        "default" => Ok(TextTone::Default),
-        "muted" => Ok(TextTone::Muted),
-        "accent" => Ok(TextTone::Accent),
-        "informational" => Ok(TextTone::Informational),
-        "positive" => Ok(TextTone::Positive),
-        "warning" => Ok(TextTone::Warning),
-        "negative" => Ok(TextTone::Negative),
-        "critical" => Ok(TextTone::Critical),
-        tone => Err(invalid(format!("未知 Presentation text tone：{tone}"))),
+    match property(object, "tone") {
+        None | Some(Value::Undefined | Value::Null) => Ok(TextTone::DEFAULT),
+        Some(Value::Number(index)) => {
+            let index: f64 = index;
+            if !index.is_finite() || !(0.0..=63.0).contains(&index) || index.fract() != 0.0 {
+                return Err(invalid("Presentation text tone 必须是 0 到 63 的整数"));
+            }
+            TextTone::from_index(index as u8)
+                .ok_or_else(|| invalid("Presentation text tone 必须是 0 到 63 的整数"))
+        }
+        Some(_) => Err(invalid("Presentation text tone 必须是 0 到 63 的整数")),
     }
 }
 
+/// 解析区域名（header/main/footer/bar/bar-stowed/dialog）。
 fn region(object: &ObjectValue) -> Result<PresentationRegion, HostErrorDto> {
     match string_property(object, "region")?.as_str() {
         "header" => Ok(PresentationRegion::Header),
@@ -195,6 +195,7 @@ fn region(object: &ObjectValue) -> Result<PresentationRegion, HostErrorDto> {
     }
 }
 
+/// 解析组件属性为纯数据 Presentation 值。
 fn properties(object: &ObjectValue) -> Result<BTreeMap<String, PresentationValue>, HostErrorDto> {
     let Value::Object(properties) = required_property(object, "properties")? else {
         return Err(invalid("Presentation component properties 必须是对象"));
@@ -206,6 +207,7 @@ fn properties(object: &ObjectValue) -> Result<BTreeMap<String, PresentationValue
         .collect()
 }
 
+/// 任意 Core 值 → Presentation 值（函数/命名空间拒绝）。
 fn presentation_value(value: &Value) -> Result<PresentationValue, HostErrorDto> {
     match value {
         Value::Undefined | Value::Null => Ok(PresentationValue::Null),
@@ -231,6 +233,7 @@ fn presentation_value(value: &Value) -> Result<PresentationValue, HostErrorDto> 
     }
 }
 
+/// 取值对象，非对象报错。
 fn object(value: &Value) -> Result<&ObjectValue, HostErrorDto> {
     match value {
         Value::Object(object) => Ok(object),
@@ -238,6 +241,7 @@ fn object(value: &Value) -> Result<&ObjectValue, HostErrorDto> {
     }
 }
 
+/// 取可选属性（未出现视为缺失）。
 fn property(object: &ObjectValue, name: &str) -> Option<Value> {
     object
         .snapshot()
@@ -245,14 +249,17 @@ fn property(object: &ObjectValue, name: &str) -> Option<Value> {
         .find_map(|(key, value)| (key == name).then_some(value))
 }
 
+/// 取必填属性，缺失报错。
 fn required_property(object: &ObjectValue, name: &str) -> Result<Value, HostErrorDto> {
     property(object, name).ok_or_else(|| invalid(format!("Presentation 缺少 `{name}`")))
 }
 
+/// 取必填 Unicode 字符串属性。
 fn string_property(object: &ObjectValue, name: &str) -> Result<String, HostErrorDto> {
     unicode(&required_property(object, name)?)
 }
 
+/// 取必填数字属性。
 fn number_property(object: &ObjectValue, name: &str) -> Result<f64, HostErrorDto> {
     match required_property(object, name)? {
         Value::Number(value) => Ok(value),
@@ -260,6 +267,7 @@ fn number_property(object: &ObjectValue, name: &str) -> Result<f64, HostErrorDto
     }
 }
 
+/// 取可选字符串属性；缺失或 null/undefined 视为无。
 fn optional_string(object: &ObjectValue, name: &str) -> Result<Option<String>, HostErrorDto> {
     match property(object, name) {
         None | Some(Value::Undefined | Value::Null) => Ok(None),
@@ -267,6 +275,43 @@ fn optional_string(object: &ObjectValue, name: &str) -> Result<Option<String>, H
     }
 }
 
+/// 读取可选 `delay`（毫秒）：0..=86_400_000 的非负整数，上限与 `Host.delay` 一致。
+fn delay(object: &ObjectValue) -> Result<Option<u64>, HostErrorDto> {
+    match property(object, "delay") {
+        None | Some(Value::Undefined | Value::Null) => Ok(None),
+        Some(Value::Number(milliseconds)) => {
+            if !milliseconds.is_finite()
+                || !(0.0..=86_400_000.0).contains(&milliseconds)
+                || milliseconds.fract() != 0.0
+            {
+                return Err(invalid(
+                    "Presentation text delay 必须是 0 到 86400000 的整数毫秒",
+                ));
+            }
+            Ok(Some(milliseconds as u64))
+        }
+        Some(_) => Err(invalid("Presentation text delay 必须是数值毫秒")),
+    }
+}
+
+/// 读取可选 `heading`（结构性标题级别）：必须为 1 或 2 的整数。
+fn heading(object: &ObjectValue) -> Result<Option<HeadingLevel>, HostErrorDto> {
+    match property(object, "heading") {
+        None | Some(Value::Undefined | Value::Null) => Ok(None),
+        Some(Value::Number(level)) => {
+            let level: f64 = level;
+            if !level.is_finite() || level.fract() != 0.0 || !(1.0..=2.0).contains(&level) {
+                return Err(invalid("Presentation text heading 必须是 1 或 2 的整数"));
+            }
+            HeadingLevel::from_u8(level as u8)
+                .map(Some)
+                .ok_or_else(|| invalid("Presentation text heading 必须是 1 或 2 的整数"))
+        }
+        Some(_) => Err(invalid("Presentation text heading 必须是 1 或 2 的整数")),
+    }
+}
+
+/// 取 Unicode 字符串，非字符串或非 Unicode 报错。
 fn unicode(value: &Value) -> Result<String, HostErrorDto> {
     match value {
         Value::String(text) => text
@@ -276,6 +321,7 @@ fn unicode(value: &Value) -> Result<String, HostErrorDto> {
     }
 }
 
+/// 统一 Presentation 校验错误。
 fn invalid(message: impl Into<String>) -> HostErrorDto {
     HostErrorDto::new("tauri_host.presentation", message)
 }
@@ -293,6 +339,7 @@ mod tests {
         Value::String(TextValue::from(value))
     }
 
+    /// 脚本 builder 值被解析为带 key 的语义节点树。
     #[test]
     fn builder_values_become_keyed_semantic_text_image_and_regions() {
         let value = Value::object(vec![
@@ -305,7 +352,7 @@ mod tests {
                     ("__narravaPresentation".into(), text("text")),
                     ("text".into(), text("危险")),
                     ("styles".into(), Value::array(vec![text("strong")])),
-                    ("tone".into(), text("critical")),
+                    ("tone".into(), Value::Number(8.0)),
                 ])]),
             ),
         ]);
@@ -319,11 +366,12 @@ mod tests {
         assert_eq!(*region, PresentationRegion::Bar);
         assert!(matches!(
             content.nodes(),
-            [PresentationNode::StyledText { styles, tone: TextTone::Critical, .. }]
+            [PresentationNode::StyledText { styles, tone: TextTone::RED, .. }]
                 if styles == &[TextStyle::Strong]
         ));
     }
 
+    /// 未知样式等 DOM 风格值被拒绝，错误码统一为 `tauri_host.presentation`。
     #[test]
     fn builder_values_reject_dom_names_and_unknown_semantics() {
         let value = Value::object(vec![

@@ -17,10 +17,12 @@ pub struct PresentationKey(String);
 pub struct InputGroupId(String);
 
 impl InputGroupId {
+    /// 从编译生成的 key 建立组身份；仅 crate 内部使用。
     pub(crate) fn from_key(key: impl Into<String>) -> Self {
         Self(key.into())
     }
 
+    /// 稳定字符串表示，供 Host 序列化。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -45,6 +47,7 @@ impl fmt::Display for PresentationKeyError {
 impl Error for PresentationKeyError {}
 
 impl PresentationKey {
+    /// 校验并构造 key；空字符串被拒绝。
     pub fn parse(key: impl Into<String>) -> Result<Self, PresentationKeyError> {
         let key: String = key.into();
         if key.is_empty() {
@@ -53,54 +56,130 @@ impl PresentationKey {
         Ok(Self(key))
     }
 
+    /// 稳定字符串表示，供 Host 跨更新引用。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-/// 文本的跨宿主含义，不包含 CSS class、颜色或 HTML 标签。
+/// 由各 Host 映射视觉效果的文本语义。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TextStyle {
+    /// 强调（斜体）。
     Emphasis,
+    /// 加粗。
     Strong,
+    /// 代码/等宽。
     Code,
-    Deleted,
-    Inserted,
-    Marked,
-    Small,
-    Subscript,
-    Superscript,
+    /// 引用。
     Quote,
-    Heading1,
-    Heading2,
-    Heading3,
-    Heading4,
-    Heading5,
-    Heading6,
+    /// 标记/高亮。
+    Marked,
+    /// 小字。
+    Small,
+    /// 新增内容（编辑痕迹）。
+    Inserted,
+    /// 删除内容（编辑痕迹）。
+    Deleted,
 }
 
-/// 与主题配色关联的语义语气；颜色由 Host 决定。
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum TextTone {
-    #[default]
-    Default,
-    Muted,
-    Accent,
-    Informational,
-    Positive,
-    Warning,
-    Negative,
-    Critical,
+/// 结构性标题级别：表达文档层级（如弹窗页签的页面标题），不属于字形样式。
+/// Host 用它划分页面或渲染标题元素；无标题时是普通文本。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HeadingLevel {
+    /// 一级标题。
+    H1,
+    /// 二级标题。
+    H2,
+}
+
+impl HeadingLevel {
+    /// 从 `1..=2` 解析；其他值返回 `None`。
+    pub fn from_u8(level: u8) -> Option<Self> {
+        match level {
+            1 => Some(Self::H1),
+            2 => Some(Self::H2),
+            _ => None,
+        }
+    }
+
+    /// 数值级别（`1` 或 `2`），供 Host 序列化。
+    pub fn level(self) -> u8 {
+        match self {
+            Self::H1 => 1,
+            Self::H2 => 2,
+        }
+    }
+}
+
+/// 64 级状态色阶（0..=63）：单一"状态"强度维度，0 最弱、63 最强。
+/// 0..=63 恰好占 6 位，可紧凑地二进制记录。
+/// 两端 Host 的映射参考（对齐二进制边界）：灰阶 0-7（3 位），
+/// 光谱 8-63、每个色相 8 级：红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TextTone(u8);
+
+impl TextTone {
+    /// 色阶最大值（含）。
+    pub const MAX_INDEX: u8 = 63;
+    /// 正文默认（不染色，由 Host 默认前景呈现）。
+    pub const DEFAULT: TextTone = TextTone(0);
+    /// 白（灰阶）。
+    pub const WHITE: TextTone = TextTone(1);
+    /// 亮灰（灰阶）。
+    pub const BRIGHT_GRAY: TextTone = TextTone(2);
+    /// 浅灰（灰阶）。
+    pub const LIGHT_GRAY: TextTone = TextTone(3);
+    /// 灰（灰阶）。
+    pub const GRAY: TextTone = TextTone(4);
+    /// 深灰（灰阶）。
+    pub const DARK_GRAY: TextTone = TextTone(5);
+    /// 暗灰/近黑（灰阶）。
+    pub const NEAR_BLACK: TextTone = TextTone(6);
+    /// 黑（灰阶）。
+    pub const BLACK: TextTone = TextTone(7);
+    /// 红（光谱，8 级色相族起点）。
+    pub const RED: TextTone = TextTone(8);
+    /// 橙（光谱）。
+    pub const ORANGE: TextTone = TextTone(16);
+    /// 黄（光谱）。
+    pub const YELLOW: TextTone = TextTone(24);
+    /// 绿（光谱）。
+    pub const GREEN: TextTone = TextTone(32);
+    /// 蓝（光谱）。
+    pub const BLUE: TextTone = TextTone(40);
+    /// 紫（光谱）。
+    pub const VIOLET: TextTone = TextTone(48);
+    /// 深紫（光谱）。
+    pub const DEEP_VIOLET: TextTone = TextTone(56);
+    /// 光谱终点。
+    pub const PEAK: TextTone = TextTone(63);
+
+    /// 从 0..=63 构造；越界返回 `None`。
+    pub fn from_index(value: u8) -> Option<TextTone> {
+        (value <= Self::MAX_INDEX).then_some(TextTone(value))
+    }
+
+    /// 色阶序号 0..=63。
+    pub fn index(self) -> u8 {
+        self.0
+    }
 }
 
 /// Host 可映射到稳定容器的布局区域。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PresentationRegion {
+    /// 顶部区域。
     Header,
+    /// 主体区域。
     Main,
+    /// 底部区域。
     Footer,
+    /// 侧栏（工具栏）区域。
     Bar,
+    /// 侧栏收起状态区域。
     BarStowed,
+    /// 对话框区域。
     Dialog,
 }
 
@@ -114,23 +193,31 @@ pub enum PresentationTarget {
 /// 不进入 Story 导航的宿主级动作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PresentationAction {
+    /// 关闭当前对话层，不触发 Story 导航。
     Dismiss,
 }
 
 /// 动作在交互层级中的语义，不规定具体颜色或控件。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ActionRole {
+    /// 常规动作。
     #[default]
     Default,
+    /// 主动作。
     Primary,
+    /// 次级动作。
     Secondary,
+    /// 危险动作。
     Danger,
 }
 
+/// 导航交互在界面语义中的角色，不规定具体控件样式。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum NavigationRole {
+    /// 链接式导航。
     #[default]
     Link,
+    /// 按钮式导航。
     Button,
 }
 
@@ -179,6 +266,7 @@ impl PresentationInputBinding {
 pub struct ComponentCapability(String);
 
 impl ComponentCapability {
+    /// 校验并构造能力名；空字符串被拒绝。
     pub fn parse(value: impl Into<String>) -> Result<Self, PresentationKeyError> {
         let value: String = value.into();
         if value.is_empty() {
@@ -187,6 +275,7 @@ impl ComponentCapability {
         Ok(Self(value))
     }
 
+    /// 稳定字符串表示，供 Host 与能力注册表对照。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -264,6 +353,12 @@ pub enum PresentationNode {
         text: TextValue,
         styles: Vec<TextStyle>,
         tone: TextTone,
+        /// 显示延迟（毫秒）：渲染器应在此之前保持文本不可见，到时淡入浮现。
+        /// 属于表现时序提示，不改变文本语义与 I18n 身份。
+        delay: Option<u64>,
+        /// 结构性标题级别（可选）：用于页面划分（如弹窗页签的页面标题），
+        /// 不属于字形样式；Host 决定如何呈现标题层级。
+        heading: Option<HeadingLevel>,
     },
     Image {
         resource: String,
@@ -333,6 +428,15 @@ impl PresentationOutput {
     pub fn push(&mut self, node: PresentationNode) {
         self.nodes.push(node);
         self.keys.push(None);
+    }
+
+    /// 收束最终可见文本的换行语义：源码中的 CR/LF 只作为排版空白，作者只有写出
+    /// `<br>` 才能请求硬换行。转换发生在 HostUpdate 边界，因此 VM、脚本 Macro、
+    /// I18n 与嵌套 Region/Component fallback 都遵守同一规则，各 Host 无需重复处理。
+    pub(crate) fn normalize_visible_line_breaks(&mut self) {
+        for node in &mut self.nodes {
+            normalize_node_line_breaks(node);
+        }
     }
 
     /// 使用稳定 key 追加节点；同一输出内拒绝重复 key。
@@ -432,4 +536,103 @@ impl PresentationOutput {
                 _ => None,
             })
     }
+}
+
+/// 递归规范一个最终 Presentation 节点中确实会显示给玩家的文本字段。
+fn normalize_node_line_breaks(node: &mut PresentationNode) {
+    match node {
+        PresentationNode::Text(text) | PresentationNode::StyledText { text, .. } => {
+            *text = normalize_visible_text(text);
+        }
+        PresentationNode::Image { alt, caption, .. } => {
+            *alt = normalize_visible_text(alt);
+            if let Some(caption) = caption {
+                *caption = normalize_visible_text(caption);
+            }
+        }
+        PresentationNode::Region { content, .. }
+        | PresentationNode::Container { content }
+        | PresentationNode::Replace { content, .. } => content.normalize_visible_line_breaks(),
+        PresentationNode::Component {
+            properties,
+            fallback,
+            ..
+        } => {
+            for value in properties.values_mut() {
+                normalize_presentation_value_line_breaks(value);
+            }
+            fallback.normalize_visible_line_breaks();
+        }
+        PresentationNode::Action { label, .. } | PresentationNode::Navigation { label, .. } => {
+            *label = normalize_visible_text(label);
+        }
+        PresentationNode::Input { .. } | PresentationNode::SafeReturn { .. } => {}
+    }
+}
+
+/// Component 属性由 Host 决定哪些字段可见，因此递归规范其中的文本值；Input 的
+/// State 绑定不经过这里，避免把玩家实际输入的数据改写为排版文本。
+fn normalize_presentation_value_line_breaks(value: &mut PresentationValue) {
+    match value {
+        PresentationValue::Text(text) => *text = normalize_visible_string(text),
+        PresentationValue::List(values) => {
+            for value in values {
+                normalize_presentation_value_line_breaks(value);
+            }
+        }
+        PresentationValue::Map(properties) => {
+            for value in properties.values_mut() {
+                normalize_presentation_value_line_breaks(value);
+            }
+        }
+        PresentationValue::Null | PresentationValue::Boolean(_) | PresentationValue::Number(_) => {}
+    }
+}
+
+/// PresentationValue 的文本保证是 Unicode String，复用同一 UTF-16 规则后再转回。
+fn normalize_visible_string(text: &str) -> String {
+    normalize_visible_text(&TextValue::from(text))
+        .to_unicode_string()
+        .expect("Unicode String 经过 ASCII 换行规范后仍应是 Unicode")
+}
+
+/// 在 UTF-16 码元上识别 ASCII `<br>`，因此即使文本含孤立代理项也不会损失数据。
+/// 普通源码换行及其缩进折叠为一个空格；显式 `<br>` 转成宿主无关的 `\n`。
+fn normalize_visible_text(text: &TextValue) -> TextValue {
+    const BREAK: [u16; 4] = [b'<' as u16, b'b' as u16, b'r' as u16, b'>' as u16];
+
+    let input: &[u16] = text.as_units();
+    let mut output: Vec<u16> = Vec::with_capacity(input.len());
+    let mut index: usize = 0;
+    while index < input.len() {
+        if input[index..].starts_with(&BREAK) {
+            while matches!(output.last(), Some(unit) if matches!(*unit, 0x20 | 0x09)) {
+                output.pop();
+            }
+            output.push(b'\n' as u16);
+            index += BREAK.len();
+            while matches!(input.get(index), Some(unit) if matches!(*unit, 0x20 | 0x09 | 0x0a | 0x0d))
+            {
+                index += 1;
+            }
+            continue;
+        }
+        if matches!(input[index], 0x0a | 0x0d) {
+            while matches!(output.last(), Some(unit) if matches!(*unit, 0x20 | 0x09)) {
+                output.pop();
+            }
+            index += 1;
+            while matches!(input.get(index), Some(unit) if matches!(*unit, 0x20 | 0x09 | 0x0a | 0x0d))
+            {
+                index += 1;
+            }
+            if !output.is_empty() && output.last() != Some(&(b'\n' as u16)) && index < input.len() {
+                output.push(b' ' as u16);
+            }
+            continue;
+        }
+        output.push(input[index]);
+        index += 1;
+    }
+    TextValue::from_units(output)
 }

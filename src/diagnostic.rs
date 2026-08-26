@@ -35,6 +35,7 @@ pub struct DiagnosticLocator<'source> {
 }
 
 impl<'source> DiagnosticLocator<'source> {
+    /// 用完整 Source 文本与当前片段内容建立定位器。
     pub fn new(source: &'source str, content: &'source str) -> Self {
         Self { source, content }
     }

@@ -48,8 +48,11 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HostInput {
+    /// 玩家激活上一份 Presentation 中的交互（导航或按钮）。
     Activate { interaction: InteractionId },
+    /// 恢复 Host 先前保存的异步执行。
     Resume { execution: HostExecutionToken },
+    /// 取消等待并回滚其 Engine 事务。
     Cancel { execution: HostExecutionToken },
 }
 
@@ -77,10 +80,12 @@ impl HostInput {
 pub struct HostExecutionToken(RuntimeExecutionIdentity);
 
 impl HostExecutionToken {
+    /// 从 Engine 执行身份建立令牌。
     pub fn from_identity(identity: RuntimeExecutionIdentity) -> Self {
         Self(identity)
     }
 
+    /// 取回底层执行身份。
     pub fn identity(self) -> RuntimeExecutionIdentity {
         self.0
     }
@@ -106,6 +111,7 @@ pub struct HostMirAdvanceRequest<'update, 'params> {
     pub language: Option<&'params I18nRuntimeLanguage>,
 }
 
+/// 启动或进入一条 LIR Passage 链所需的内部请求。
 struct HostMirEntryRequest<'params> {
     name: &'params str,
     params: &'params Value,
@@ -130,6 +136,7 @@ pub struct HostMacroInteractionPending<'hir, 'source, Pending> {
 }
 
 impl<'hir, 'source, Pending> HostMacroInteractionPending<'hir, 'source, Pending> {
+    /// 把交互身份与 Engine continuation 绑定保存。
     pub fn new(
         interaction: InteractionId,
         continuation: EngineMacroInteractionContinuation<'hir, 'source, Pending>,
@@ -140,10 +147,12 @@ impl<'hir, 'source, Pending> HostMacroInteractionPending<'hir, 'source, Pending>
         }
     }
 
+    /// 待处理交互的身份。
     pub fn interaction(&self) -> &InteractionId {
         &self.interaction
     }
 
+    /// 对应的 Engine continuation。
     pub fn continuation(&self) -> &EngineMacroInteractionContinuation<'hir, 'source, Pending> {
         &self.continuation
     }
@@ -155,6 +164,7 @@ pub enum HostMacroInteractionResume<'hir, 'source> {
     Continue(Box<HostMacroInteractionResumed<'hir, 'source>>),
 }
 
+/// 已恢复、Host 可驱动正文事务的 Interaction 状态。
 pub struct HostMacroInteractionResumed<'hir, 'source> {
     execution: HostExecutionToken,
     interaction: InteractionId,
@@ -173,6 +183,7 @@ pub struct HostMacroInteractionDriveContext<'host, 'hir, 'source, Pending> {
 impl<'host, 'hir, 'source, Pending>
     HostMacroInteractionDriveContext<'host, 'hir, 'source, Pending>
 {
+    /// 绑定交互、Passage 与互动注册表三份可变所有权。
     pub fn new(
         interaction_pending: &'host mut HostPendingExecutions<
             HostMacroInteractionPending<'hir, 'source, Pending>,
@@ -191,20 +202,24 @@ impl<'host, 'hir, 'source, Pending>
 }
 
 impl HostMacroInteractionResumed<'_, '_> {
+    /// 该执行链的令牌。
     pub fn execution(&self) -> HostExecutionToken {
         self.execution
     }
 
+    /// 恢复的交互身份。
     pub fn interaction(&self) -> &InteractionId {
         &self.interaction
     }
 
+    /// 可驱动的事务。
     pub fn transaction(&self) -> &EngineMacroInteractionResumed<'_, '_> {
         &self.transaction
     }
 }
 
 impl<Pending> HostPendingExecutions<Pending> {
+    /// 建立空集合。
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
@@ -225,14 +240,17 @@ impl<Pending> HostPendingExecutions<Pending> {
         Ok(())
     }
 
+    /// 该令牌是否已有保存的执行。
     pub fn has(&self, token: HostExecutionToken) -> bool {
         self.entries.contains_key(&token)
     }
 
+    /// 已保存的执行数。
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// 是否不含任何保存的执行。
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -266,6 +284,7 @@ pub struct HostStateView<'state> {
 }
 
 impl<'state> HostStateView<'state> {
+    /// 借用 State 建立只读视图；仅 crate 内部使用。
     fn new(state: &'state State) -> Self {
         Self { state }
     }
@@ -299,7 +318,9 @@ pub struct HostUpdate {
 }
 
 impl HostUpdate {
-    pub(crate) fn new(current: &str, presentation: PresentationOutput) -> Self {
+    /// 用当前 Passage 名与语义输出建立更新；仅 crate 内部使用。
+    pub(crate) fn new(current: &str, mut presentation: PresentationOutput) -> Self {
+        presentation.normalize_visible_line_breaks();
         Self {
             current: current.to_owned(),
             presentation,
@@ -320,8 +341,9 @@ impl HostUpdate {
     pub fn append_region(
         &mut self,
         region: crate::presentation::PresentationRegion,
-        content: PresentationOutput,
+        mut content: PresentationOutput,
     ) {
+        content.normalize_visible_line_breaks();
         self.presentation
             .push(crate::presentation::PresentationNode::Region { region, content });
     }
@@ -362,10 +384,12 @@ pub struct HostResumed<'hir, 'source> {
 }
 
 impl<'hir, 'source> HostResumed<'hir, 'source> {
+    /// 该事务的执行令牌。
     pub fn execution(&self) -> HostExecutionToken {
         self.execution
     }
 
+    /// 当前执行的运行时位置。
     pub fn location(&self) -> RuntimeExecutionLocation {
         RuntimeExecutionLocation::new(
             self.transaction.runtime.identity,
@@ -374,11 +398,16 @@ impl<'hir, 'source> HostResumed<'hir, 'source> {
     }
 }
 
+/// Host 可检查的稳定边界类型。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostStableBoundary {
+    /// 执行链正常结束，可提交或导航。
     Halted,
+    /// 等待确认 Passage 导航。
     NavigationPending,
+    /// 等待 Macro 互动结果。
     MacroPending,
+    /// Passage 正文停止，等待下一段执行。
     PassageStopped,
 }
 
@@ -388,21 +417,25 @@ pub struct HostStable<'hir, 'source> {
     boundary: EngineMirVmResume<'hir, 'source>,
 }
 
+/// 提交失败：边界不是 Halted，或事务回滚失败。
 pub enum HostCommitError<'hir, 'source> {
     NotHalted(Box<HostStable<'hir, 'source>>),
     Failed(Diagnostic),
 }
 
+/// 导航请求失败：边界不是 NavigationPending，或导航失败。
 pub enum HostNavigationError<'hir, 'source> {
     NotNavigation(Box<HostStable<'hir, 'source>>),
     Failed(Diagnostic),
 }
 
+/// Macro 分发结果：等待异步 Handler 或继续驱动稳定事务。
 pub enum HostMacroDispatch<'hir, 'source> {
     Pending { execution: HostExecutionToken },
     Continue(Box<HostStable<'hir, 'source>>),
 }
 
+/// Macro 分发失败：边界不是 MacroPending，或分发失败并尽可能返还 Pending。
 pub enum HostMacroDispatchError<'hir, 'source, Pending> {
     NotMacro(Box<HostStable<'hir, 'source>>),
     Failed {
@@ -432,6 +465,7 @@ pub struct HostResumeCallbacks<Lifecycle, Resume, Dispatch> {
 }
 
 impl<Lifecycle, Resume, Dispatch> HostResumeCallbacks<Lifecycle, Resume, Dispatch> {
+    /// 绑定三个回调边界。
     pub fn new(lifecycle: Lifecycle, resume: Resume, dispatch: Dispatch) -> Self {
         Self {
             lifecycle,
@@ -442,10 +476,12 @@ impl<Lifecycle, Resume, Dispatch> HostResumeCallbacks<Lifecycle, Resume, Dispatc
 }
 
 impl<'hir, 'source> HostStable<'hir, 'source> {
+    /// 该稳定状态对应的执行令牌。
     pub fn execution(&self) -> HostExecutionToken {
         self.execution
     }
 
+    /// 稳定边界的类型。
     pub fn boundary(&self) -> HostStableBoundary {
         match &self.boundary {
             EngineMirVmResume::Halted(_) => HostStableBoundary::Halted,
@@ -455,6 +491,7 @@ impl<'hir, 'source> HostStable<'hir, 'source> {
         }
     }
 
+    /// 当前执行的运行时位置。
     pub fn location(&self) -> RuntimeExecutionLocation {
         let transaction: &EngineMirResumedTransaction<'_, '_> = match &self.boundary {
             EngineMirVmResume::Halted(transaction)

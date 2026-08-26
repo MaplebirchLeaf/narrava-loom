@@ -1,5 +1,6 @@
 //! Macro 参数原文的轻量顶层扫描。
 
+/// 返回原文首个以空白分隔的单词及其相对范围。
 pub(super) fn first_word(source: &str) -> Option<(&str, usize, usize)> {
     let start: usize = trim_start_index(source, 0, source.len());
     let end: usize = source[start..]
@@ -8,6 +9,7 @@ pub(super) fn first_word(source: &str) -> Option<(&str, usize, usize)> {
     (start < end).then_some((&source[start..end], start, end))
 }
 
+/// 去除首尾空白后返回切片及其绝对范围；全空白返回 None。
 pub(super) fn trimmed_slice(
     source: &str,
     start: usize,
@@ -105,6 +107,7 @@ pub(super) fn find_top_level_assignment(source: &str) -> Option<usize> {
     None
 }
 
+/// 返回 [start, end) 内第一个非空白字符的偏移；全空白返回 end。
 pub(super) fn trim_start_index(source: &str, start: usize, end: usize) -> usize {
     source[start..end]
         .char_indices()

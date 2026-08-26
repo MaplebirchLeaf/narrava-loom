@@ -13,112 +13,169 @@ use crate::{
         CapturedMacroLocals, MacroInteraction, MacroInteractionError, MacroInteractions,
     },
     presentation::{
-        InputGroupId, InteractionId, NavigationRole, PresentationInputBinding,
+        HeadingLevel, InputGroupId, InteractionId, NavigationRole, PresentationInputBinding,
         PresentationInputKind, PresentationNode, PresentationOutput, PresentationRegion,
         PresentationTarget, PresentationValue, TextStyle, TextTone,
     },
     runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity},
 };
 
-/// 从 Twee `<<text value options?>>` 产生带语义样式的文字。
-pub fn text(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
+/// 从 Twee `<<print value options?>>` 求值并入 Passage 输出；带选项时产生 StyledText。
+///
+/// 单参数（无样式选项）输出纯 Text，与编译器固有 `<<print expression>>` 一致；
+/// 带选项时由 `print` 直接构造 StyledText：
+/// - `value`：内容，可来自变量或其他 Twee Expression；
+/// - `options?`：可为 tone 字符串（随后可跟多个 style 字符串），或对象
+///   `{ tone, styles, delay, heading }`；
+/// - `tone`：0..=63 的状态色阶；`styles`：8 个语义字形之一；
+/// - `delay`：毫秒，渲染器在此之前隐藏文本、到时浮现（见 `PresentationNode::StyledText`）；
+/// - `heading`：1 或 2 的结构性标题级别，用于页面划分（如弹窗页签标题），不是字形样式。
+pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
     let Some(value) = arguments.first() else {
-        return Err(text_error("`text` 至少需要一个文字参数"));
+        return Err(print_error("`print` 至少需要一个文字参数"));
     };
     let text: TextValue =
-        value_to_text(value).ok_or_else(|| text_error("`text` 的第一个参数必须能转换为文字"))?;
-    let (styles, tone): (Vec<TextStyle>, TextTone) = match arguments.get(1) {
-        None | Some(Value::Undefined | Value::Null) => (Vec::new(), TextTone::Default),
-        Some(Value::Object(options)) => text_options(&options.snapshot())?,
+        value_to_text(value).ok_or_else(|| print_error("`print` 的第一个参数必须能转换为文字"))?;
+    let options: PrintOptions = match arguments.get(1) {
+        None | Some(Value::Undefined | Value::Null) => PrintOptions::default(),
+        Some(Value::Object(options)) => print_options(&options.snapshot())?,
         Some(value) => {
-            let tone: TextTone = text_tone(value)?;
+            let tone: TextTone = print_tone(value)?;
             let styles: Vec<TextStyle> = arguments[2..]
                 .iter()
-                .map(text_style)
+                .map(print_style)
                 .collect::<Result<Vec<_>, _>>()?;
-            (styles, tone)
+            PrintOptions {
+                styles,
+                tone,
+                delay: None,
+                heading: None,
+            }
+        }
+    };
+    let node: PresentationNode = if options.styles.is_empty()
+        && options.tone == TextTone::DEFAULT
+        && options.delay.is_none()
+        && options.heading.is_none()
+    {
+        PresentationNode::Text(text)
+    } else {
+        PresentationNode::StyledText {
+            text,
+            styles: options.styles,
+            tone: options.tone,
+            delay: options.delay,
+            heading: options.heading,
         }
     };
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: PresentationOutput::from_nodes(vec![PresentationNode::StyledText {
-            text,
-            styles,
-            tone,
-        }]),
+        output: PresentationOutput::from_nodes(vec![node]),
     })
 }
 
-fn text_options(properties: &[(String, Value)]) -> Result<(Vec<TextStyle>, TextTone), Diagnostic> {
-    let mut styles: Vec<TextStyle> = Vec::new();
-    let mut tone: TextTone = TextTone::Default;
+/// 解析 `print` 的对象 options；未知字段名直接报错。
+#[derive(Default)]
+struct PrintOptions {
+    styles: Vec<TextStyle>,
+    tone: TextTone,
+    delay: Option<u64>,
+    heading: Option<HeadingLevel>,
+}
+
+fn print_options(properties: &[(String, Value)]) -> Result<PrintOptions, Diagnostic> {
+    let mut options: PrintOptions = PrintOptions::default();
     for (name, value) in properties {
         match name.as_str() {
             "styles" => {
                 let Value::Array(values) = value else {
-                    return Err(text_error("`text` options.styles 必须是 Array"));
+                    return Err(print_error("`print` options.styles 必须是 Array"));
                 };
-                styles = values
+                options.styles = values
                     .snapshot()
                     .iter()
-                    .map(text_style)
+                    .map(print_style)
                     .collect::<Result<Vec<_>, _>>()?;
             }
-            "tone" => tone = text_tone(value)?,
-            name => return Err(text_error(&format!("`text` 不认识 options.{name}"))),
+            "tone" => options.tone = print_tone(value)?,
+            "delay" => options.delay = Some(print_delay(value)?),
+            "heading" => options.heading = Some(print_heading(value)?),
+            name => return Err(print_error(&format!("`print` 不认识 options.{name}"))),
         }
     }
-    Ok((styles, tone))
+    Ok(options)
 }
 
-fn text_style(value: &Value) -> Result<TextStyle, Diagnostic> {
+/// 解析 `heading`（结构性标题级别）：必须为 1 或 2 的整数。
+fn print_heading(value: &Value) -> Result<HeadingLevel, Diagnostic> {
+    let Value::Number(level) = value else {
+        return Err(print_error("`print` options.heading 必须是 1 或 2 的整数"));
+    };
+    let level: f64 = *level;
+    if level.fract() != 0.0 || !(1.0..=2.0).contains(&level) {
+        return Err(print_error("`print` options.heading 必须是 1 或 2 的整数"));
+    }
+    HeadingLevel::from_u8(level as u8)
+        .ok_or_else(|| print_error("`print` options.heading 必须是 1 或 2 的整数"))
+}
+
+/// 解析 `delay`（毫秒）：非负整数，上限与 `Host.delay` 一致。
+fn print_delay(value: &Value) -> Result<u64, Diagnostic> {
+    let Value::Number(milliseconds) = value else {
+        return Err(print_error("`print` options.delay 必须是数值毫秒"));
+    };
+    let milliseconds: f64 = *milliseconds;
+    if !milliseconds.is_finite() || !(0.0..=86_400_000.0).contains(&milliseconds) {
+        return Err(print_error(
+            "`print` options.delay 必须在 0 到 86400000 毫秒之间",
+        ));
+    }
+    if milliseconds.fract() != 0.0 {
+        return Err(print_error("`print` options.delay 必须是整数毫秒"));
+    }
+    Ok(milliseconds as u64)
+}
+
+fn print_style(value: &Value) -> Result<TextStyle, Diagnostic> {
     match text_name(value)?.as_str() {
         "emphasis" => Ok(TextStyle::Emphasis),
         "strong" => Ok(TextStyle::Strong),
         "code" => Ok(TextStyle::Code),
-        "deleted" => Ok(TextStyle::Deleted),
-        "inserted" => Ok(TextStyle::Inserted),
         "marked" => Ok(TextStyle::Marked),
         "small" => Ok(TextStyle::Small),
-        "subscript" => Ok(TextStyle::Subscript),
-        "superscript" => Ok(TextStyle::Superscript),
+        "inserted" => Ok(TextStyle::Inserted),
+        "deleted" => Ok(TextStyle::Deleted),
         "quote" => Ok(TextStyle::Quote),
-        "heading1" => Ok(TextStyle::Heading1),
-        "heading2" => Ok(TextStyle::Heading2),
-        "heading3" => Ok(TextStyle::Heading3),
-        "heading4" => Ok(TextStyle::Heading4),
-        "heading5" => Ok(TextStyle::Heading5),
-        "heading6" => Ok(TextStyle::Heading6),
-        name => Err(text_error(&format!("未知 TextStyle：{name}"))),
+        name => Err(print_error(&format!("未知 TextStyle：{name}"))),
     }
 }
 
-fn text_tone(value: &Value) -> Result<TextTone, Diagnostic> {
-    match text_name(value)?.as_str() {
-        "default" => Ok(TextTone::Default),
-        "muted" => Ok(TextTone::Muted),
-        "accent" => Ok(TextTone::Accent),
-        "informational" => Ok(TextTone::Informational),
-        "positive" => Ok(TextTone::Positive),
-        "warning" => Ok(TextTone::Warning),
-        "negative" => Ok(TextTone::Negative),
-        "critical" => Ok(TextTone::Critical),
-        name => Err(text_error(&format!("未知 TextTone：{name}"))),
+/// 解析 `tone`：0..=63 的整数状态色阶；不接收颜色或语义字符串名。
+fn print_tone(value: &Value) -> Result<TextTone, Diagnostic> {
+    let Value::Number(index) = value else {
+        return Err(print_error("`print` tone 必须是 0 到 63 的整数"));
+    };
+    let index: f64 = *index;
+    if !index.is_finite() || !(0.0..=63.0).contains(&index) || index.fract() != 0.0 {
+        return Err(print_error("`print` tone 必须是 0 到 63 的整数"));
     }
+    TextTone::from_index(index as u8)
+        .ok_or_else(|| print_error("`print` tone 必须是 0 到 63 的整数"))
 }
 
 fn text_name(value: &Value) -> Result<String, Diagnostic> {
     let Value::String(value) = value else {
-        return Err(text_error("TextStyle 与 TextTone 必须是文字"));
+        return Err(print_error("TextStyle 与 TextTone 必须是文字"));
     };
     value
         .to_unicode_string()
-        .ok_or_else(|| text_error("TextStyle 与 TextTone 必须是有效 Unicode"))
+        .ok_or_else(|| print_error("TextStyle 与 TextTone 必须是有效 Unicode"))
 }
 
-fn text_error(message: &str) -> Diagnostic {
+/// 构造 `print` 参数错误的统一稳定 Diagnostic。
+fn print_error(message: &str) -> Diagnostic {
     Diagnostic::new(
-        "macro.text.invalid_arguments",
+        "macro.print.invalid_arguments",
         DiagnosticSeverity::Error,
         message,
     )
@@ -177,6 +234,7 @@ pub fn button_with_body<'hir, 'source>(
     Ok(link_output(prepared, NavigationRole::Button))
 }
 
+/// 校验单个 Interaction Target 参数并计算稳定 Interaction ID。
 fn prepare_link(
     arguments: &[Value],
     identity: RuntimeExecutionIdentity,
@@ -195,6 +253,7 @@ fn prepare_link(
     Ok(PreparedLink { id, label, target })
 }
 
+/// 把准备好的链接组装为导航语义输出。
 fn link_output(prepared: PreparedLink, role: NavigationRole) -> BodyExecution {
     BodyExecution {
         control: BodyControl::Continue,
@@ -207,6 +266,7 @@ fn link_output(prepared: PreparedLink, role: NavigationRole) -> BodyExecution {
     }
 }
 
+/// 从 Interaction 参数对象中读取指定字段并强制为文本。
 fn interaction_text(properties: &[(String, Value)], name: &str) -> Result<TextValue, Diagnostic> {
     properties
         .iter()
@@ -223,6 +283,7 @@ fn interaction_text(properties: &[(String, Value)], name: &str) -> Result<TextVa
         .ok_or_else(|| link_error(&format!("`link` 的 `{name}` 必须是文本")))
 }
 
+/// 由执行身份、显示文本与目标生成稳定的链接 ID。
 fn link_identity(
     identity: RuntimeExecutionIdentity,
     label: &TextValue,
@@ -237,6 +298,7 @@ fn link_identity(
     InteractionId::from_key(key)
 }
 
+/// 构造 `link` 参数错误的统一稳定 Diagnostic。
 fn link_error(message: &str) -> Diagnostic {
     Diagnostic::new(
         "macro.link.invalid_arguments",
@@ -245,6 +307,7 @@ fn link_error(message: &str) -> Diagnostic {
     )
 }
 
+/// 把 Interaction 登记失败映射为稳定 Diagnostic。
 fn link_interaction_error(error: MacroInteractionError) -> Diagnostic {
     let message: &str = match error {
         MacroInteractionError::Duplicate => "`link` 生成了重复的 Interaction ID",
@@ -327,6 +390,7 @@ pub fn textbox(
     )
 }
 
+/// 校验输入 receiver 并组装输入语义输出。
 fn input_output(
     receiver: &str,
     control: &str,
@@ -358,6 +422,7 @@ fn input_output(
     })
 }
 
+/// 把运行时值递归转换为可呈现的输入值；函数与命名空间被拒绝。
 fn input_value(value: &Value) -> Result<PresentationValue, Diagnostic> {
     match value {
         Value::Undefined | Value::Null => Ok(PresentationValue::Null),
@@ -386,6 +451,7 @@ fn input_value(value: &Value) -> Result<PresentationValue, Diagnostic> {
     }
 }
 
+/// 构造输入 Macro 参数错误的统一稳定 Diagnostic。
 fn input_error(message: &str) -> Diagnostic {
     Diagnostic::new(
         "macro.input.invalid_arguments",
@@ -439,10 +505,12 @@ pub fn slot(key: &str, content: PresentationOutput) -> Result<BodyExecution, Dia
     })
 }
 
+/// 构造 `slot` key 错误的统一稳定 Diagnostic。
 fn slot_error(message: &str) -> Diagnostic {
     Diagnostic::new("macro.slot.invalid_key", DiagnosticSeverity::Error, message)
 }
 
+/// 构造 `replace` 目标错误的统一稳定 Diagnostic。
 fn replace_error(message: &str) -> Diagnostic {
     Diagnostic::new(
         "macro.replace.invalid_target",

@@ -5,6 +5,7 @@
 
 use super::*;
 
+/// 递归收集一段正文中的可见文本，把相邻静态文本与动态表达式合并为一条消息。
 pub(super) fn collect_body(
     source: &str,
     passage: &str,
@@ -139,6 +140,7 @@ pub(super) fn collect_body(
     flush_visible(source, passage, path, &mut visible, messages);
 }
 
+/// 正在累积的一条可见消息：静态文本与按出现顺序排列的 placeholder。
 struct VisibleMessage {
     start_index: usize,
     text: String,
@@ -148,6 +150,7 @@ struct VisibleMessage {
 }
 
 impl VisibleMessage {
+    /// 以节点序号开始累积一条消息。
     fn new(start_index: usize, span: Span) -> Self {
         Self {
             start_index,
@@ -158,6 +161,7 @@ impl VisibleMessage {
         }
     }
 
+    /// 追加静态文本；源码花括号按模板语法转义为双花括号。
     fn push_text(&mut self, text: &str, span: Span) {
         // 模板使用单花括号标记 placeholder，源码花括号必须先转义。
         for character in text.chars() {
@@ -171,6 +175,7 @@ impl VisibleMessage {
         self.has_static_text |= !text.trim().is_empty();
     }
 
+    /// 追加一个动态表达式占位符，并记录其 HIR 来源路径。
     fn push_expression(&mut self, expression: &Expression<'_>, node_path: String, span: Span) {
         let ordinal: usize = self.placeholders.len() + 1;
         let name: String = placeholder_name(expression, ordinal);
@@ -182,6 +187,7 @@ impl VisibleMessage {
     }
 }
 
+/// 结束当前消息并写入目录；只有动态值、没有可翻译文字时不生成条目。
 fn flush_visible(
     source: &str,
     passage: &str,
@@ -207,6 +213,7 @@ fn flush_visible(
     });
 }
 
+/// 为占位符取名：优先使用可静态确定的读取链，否则回退到序号。
 fn placeholder_name(expression: &Expression<'_>, ordinal: usize) -> String {
     placeholder_path(expression).unwrap_or_else(|| format!("value_{ordinal}"))
 }

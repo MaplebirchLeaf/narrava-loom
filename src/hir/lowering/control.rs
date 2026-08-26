@@ -18,6 +18,7 @@ use super::{
     syntax::{find_top_level_keyword, first_word, trim_start_index, trimmed_slice},
 };
 
+/// 把 switch 正文降低为按源码顺序的 case 列表与可选 default。
 pub(super) fn lower_switch<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -77,6 +78,7 @@ pub(super) fn lower_switch<'source>(
     })
 }
 
+/// 解析 for 目标与迭代模式，降低正文并进入循环上下文。
 pub(super) fn lower_for<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -140,6 +142,7 @@ pub(super) fn lower_for<'source>(
     })
 }
 
+/// 把 if/elseif/else 子句归组为条件分支与 fallback。
 pub(super) fn lower_if<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -188,6 +191,7 @@ pub(super) fn lower_if<'source>(
     Ok(HirIf { branches, fallback })
 }
 
+/// 解析 `range start to end [step n]` 的边界、步长及其源码位置。
 fn lower_for_range<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,

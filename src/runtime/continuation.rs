@@ -24,6 +24,7 @@ pub struct RuntimeExecutionIdentity {
 }
 
 impl RuntimeExecutionIdentity {
+    /// 组合 Story 与执行链编号，建立联合身份。
     pub fn new(story: u64, chain: u64) -> Self {
         Self { story, chain }
     }
@@ -40,14 +41,17 @@ pub struct RuntimeExecutionLocation {
 }
 
 impl RuntimeExecutionLocation {
+    /// 组合执行身份与当前位置。
     pub fn new(identity: RuntimeExecutionIdentity, position: MirExecutionPosition) -> Self {
         Self { identity, position }
     }
 
+    /// 该位置所属的执行身份。
     pub fn identity(self) -> RuntimeExecutionIdentity {
         self.identity
     }
 
+    /// 执行链中的 MIR 位置。
     pub fn position(self) -> MirExecutionPosition {
         self.position
     }
@@ -92,15 +96,22 @@ pub struct RuntimeMacroBodyContinuation<Pending> {
     suspension: MacroSuspension<Pending>,
 }
 
+/// 独立容器 Macro 正文的异步 Macro 完成后交回 VM 与控制状态。
 #[derive(Debug, PartialEq)]
 pub struct RuntimeMacroBodyResumed {
+    /// 暂停所属的执行身份。
     pub identity: RuntimeExecutionIdentity,
+    /// 已完成 Macro 写入、等待继续驱动的 VM 帧。
     pub frame: MirExecutionFrame,
+    /// Macro 请求的控制信号。
     pub control: BodyControl,
+    /// Macro 调用期间展开的 include 数量（用于预算检查）。
     pub includes_entered: usize,
+    /// 恢复后仍归外层持有的 Macro 局部作用域。
     pub scopes: MacroLocalScopes<Value>,
 }
 
+/// 容器 Macro 正文的 Handler 恢复完成，或携带新句柄再次暂停。
 #[derive(Debug, PartialEq)]
 pub enum RuntimeMacroBodyContinuationResume<Pending> {
     Complete(RuntimeMacroBodyResumed),
@@ -110,10 +121,15 @@ pub enum RuntimeMacroBodyContinuationResume<Pending> {
 /// 异步 Macro 完成后交回 Engine 的 VM 与控制状态。
 #[derive(Debug, PartialEq)]
 pub struct RuntimeMacroResumed {
+    /// 暂停所属的执行身份。
     pub identity: RuntimeExecutionIdentity,
+    /// 已完成 Macro 写入、等待继续驱动的 VM 帧。
     pub frame: MirExecutionFrame,
+    /// Macro 请求的控制信号。
     pub control: BodyControl,
+    /// Macro 调用期间展开的 include 数量（用于预算检查）。
     pub includes_entered: usize,
+    /// 恢复后仍归外层持有的 Macro 局部作用域。
     pub scopes: MacroLocalScopes<Value>,
 }
 
@@ -127,10 +143,12 @@ pub enum RuntimeMacroContinuationResume<Pending> {
 /// 恢复失败时保留尚未继续执行的 VM frame。
 #[derive(Debug, PartialEq)]
 pub enum RuntimeMacroContinuationResumeError<ResumeError, Pending> {
+    /// Handler 恢复失败；frame 尚未推进。
     Macro {
         frame: Box<MirExecutionFrame>,
         error: MacroResumeError<ResumeError, Pending>,
     },
+    /// 完成输出写入 VM 失败；frame 与作用域一并交还。
     Vm {
         frame: Box<MirExecutionFrame>,
         error: MirExecutionError,
@@ -165,18 +183,22 @@ impl<Pending> RuntimeMacroContinuation<Pending> {
         })
     }
 
+    /// 暂停所属的执行身份。
     pub fn identity(&self) -> RuntimeExecutionIdentity {
         self.identity
     }
 
+    /// 暂停位置：身份加当前 VM 位置，不含任何状态。
     pub fn location(&self) -> RuntimeExecutionLocation {
         RuntimeExecutionLocation::new(self.identity, self.frame.location())
     }
 
+    /// 暂停时的 VM 执行帧。
     pub fn frame(&self) -> &MirExecutionFrame {
         &self.frame
     }
 
+    /// 暂停的 Handler 句柄。
     pub fn suspension(&self) -> &MacroSuspension<Pending> {
         &self.suspension
     }
@@ -251,6 +273,7 @@ impl<Pending> RuntimeMacroContinuation<Pending> {
 }
 
 impl<Pending> RuntimeMacroBodyContinuation<Pending> {
+    /// 校验身份一致且 frame 停在正文的动态 Macro 位置后建立 continuation。
     pub fn new(
         identity: RuntimeExecutionIdentity,
         frame: MirExecutionFrame,
@@ -277,26 +300,32 @@ impl<Pending> RuntimeMacroBodyContinuation<Pending> {
         })
     }
 
+    /// 暂停所属的执行身份。
     pub fn identity(&self) -> RuntimeExecutionIdentity {
         self.identity
     }
 
+    /// 暂停位置：身份加当前 VM 位置，不含任何状态。
     pub fn location(&self) -> RuntimeExecutionLocation {
         RuntimeExecutionLocation::new(self.identity, self.frame.location())
     }
 
+    /// 暂停时的 VM 执行帧。
     pub fn frame(&self) -> &MirExecutionFrame {
         &self.frame
     }
 
+    /// 暂停的 Handler 句柄。
     pub fn suspension(&self) -> &MacroSuspension<Pending> {
         &self.suspension
     }
 
+    /// 恢复时一次性取回 frame 与暂停句柄两个所有权组件。
     pub fn into_parts(self) -> (MirExecutionFrame, MacroSuspension<Pending>) {
         (self.frame, self.suspension)
     }
 
+    /// 恢复 Handler，并把完成输出写回原容器正文的 Macro 指令。
     pub fn resume<ResumeError>(
         self,
         body: &MirMacroBody<'_, '_>,

@@ -47,8 +47,7 @@ impl ParsedFragment<'_> {
 ///
 /// 输入是一段正文片段（不含 Passage 声明），例如
 /// `<<link [[查看|X]]>><</link>>` 或 `<<print $name>>`；普通 `${...}` 仍是字面文本，
-/// 只有显式 Macro 参数才进入 Expression 求值边界。
-/// 解析为 Expression，通用 Macro 参数保持 Raw。片段使用虚拟来源定位，
+/// 只有显式 Macro 参数才进入 Expression 求值边界。片段使用虚拟来源定位，
 /// 解析失败时返回携带稳定 Diagnostic 的 [`FragmentParseError`]。
 pub fn parse_fragment(text: &str) -> Result<ParsedFragment<'_>, FragmentParseError> {
     let source: SourcePath = SourcePath::fragment();

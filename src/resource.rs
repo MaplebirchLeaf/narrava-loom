@@ -13,10 +13,12 @@ use serde::{Deserialize, Serialize};
 mod package;
 pub use package::{NresPackage, NresPackageError};
 
+/// 规范化资源逻辑路径；只接受无前缀斜杠、无空段、无 `.`/`..` 的 `a/b/c` 形态。
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ResourcePath(String);
 
 impl ResourcePath {
+    /// 校验并构造路径；格式非法时返回 `ResourceError::InvalidPath`。
     pub fn parse(path: &str) -> Result<Self, ResourceError> {
         if path.is_empty()
             || path.starts_with('/')
@@ -30,11 +32,13 @@ impl ResourcePath {
         Ok(Self(path.to_owned()))
     }
 
+    /// 原始字符串形式的逻辑路径。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+/// 一块待注册的原始资源：逻辑路径、可选媒体类型与字节内容。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceInput {
     path: String,
@@ -43,6 +47,7 @@ pub struct ResourceInput {
 }
 
 impl ResourceInput {
+    /// 用路径与字节构造输入；媒体类型由扩展名推断。
     pub fn new(path: impl Into<String>, bytes: Vec<u8>) -> Self {
         Self {
             path: path.into(),
@@ -51,6 +56,7 @@ impl ResourceInput {
         }
     }
 
+    /// 用路径、显式媒体类型与字节构造输入。
     pub fn with_media_type(
         path: impl Into<String>,
         media_type: impl Into<String>,
@@ -63,19 +69,23 @@ impl ResourceInput {
         }
     }
 
+    /// 读取逻辑路径；仅 crate 内部使用。
     pub(crate) fn path(&self) -> &str {
         &self.path
     }
 
+    /// 读取媒体类型；未显式提供时返回 `None`。仅 crate 内部使用。
     pub(crate) fn media_type(&self) -> Option<&str> {
         self.media_type.as_deref()
     }
 
+    /// 消耗输入，取得字节内容；仅 crate 内部使用。
     pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
 }
 
+/// 目录中的一条资源记录：媒体类型、大小与内容来源。
 #[derive(Clone, Debug)]
 struct ResourceEntry {
     media_type: String,
@@ -83,6 +93,7 @@ struct ResourceEntry {
     backing: ResourceBacking,
 }
 
+/// 资源内容的来源：内存字节或磁盘文件（首次读取后缓存）。
 #[derive(Clone, Debug)]
 enum ResourceBacking {
     Memory(Arc<[u8]>),
@@ -93,6 +104,7 @@ enum ResourceBacking {
 }
 
 impl ResourceBacking {
+    /// 读取内容；磁盘资源首次读取后写入共享缓存。
     fn read(&self) -> Result<&[u8], ResourceError> {
         match self {
             Self::Memory(bytes) => Ok(bytes),
@@ -111,6 +123,7 @@ impl ResourceBacking {
     }
 }
 
+/// 一条资源的只读元信息，不包含内容本身。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ResourceInfo<'resource> {
     path: &'resource str,
@@ -119,25 +132,30 @@ pub struct ResourceInfo<'resource> {
 }
 
 impl ResourceInfo<'_> {
+    /// 逻辑路径。
     pub fn path(&self) -> &str {
         self.path
     }
 
+    /// 媒体类型。
     pub fn media_type(&self) -> &str {
         self.media_type
     }
 
+    /// 内容字节数。
     pub fn size(&self) -> usize {
         self.size
     }
 }
 
+/// Host 无关的基础游戏资源目录：逻辑路径到内容与元数据的映射。
 #[derive(Clone, Debug, Default)]
 pub struct ResourceCatalog {
     entries: BTreeMap<ResourcePath, ResourceEntry>,
 }
 
 impl ResourceCatalog {
+    /// 从内存输入建立目录；路径重复或媒体类型非法时整体失败。
     pub fn new(inputs: impl IntoIterator<Item = ResourceInput>) -> Result<Self, ResourceError> {
         let mut entries = BTreeMap::new();
         for input in inputs {
@@ -176,16 +194,19 @@ impl ResourceCatalog {
         Ok(Self { entries })
     }
 
+    /// 按路径字典序遍历全部逻辑路径。
     pub fn paths(&self) -> impl ExactSizeIterator<Item = &str> {
         self.entries.keys().map(ResourcePath::as_str)
     }
 
+    /// 查询逻辑路径是否已注册。
     pub fn has(&self, path: &str) -> bool {
         ResourcePath::parse(path)
             .ok()
             .is_some_and(|path| self.entries.contains_key(&path))
     }
 
+    /// 从候选路径中取第一个已注册者；供 Host 按偏好顺序选择资源。
     pub fn pick<I, P>(&self, candidates: I) -> Option<&str>
     where
         I: IntoIterator<Item = P>,
@@ -199,6 +220,7 @@ impl ResourceCatalog {
         })
     }
 
+    /// 查询资源的元信息；未注册或路径非法时返回 `None`。
     pub fn info(&self, path: &str) -> Option<ResourceInfo<'_>> {
         let path = ResourcePath::parse(path).ok()?;
         let (path, entry) = self.entries.get_key_value(&path)?;
@@ -218,6 +240,7 @@ impl ResourceCatalog {
             .transpose()
     }
 
+    /// 把资源内容按 UTF-8 读取为文本；非 UTF-8 时返回 `InvalidUtf8`。
     pub fn text(&self, path: &str) -> Result<Option<&str>, ResourceError> {
         let Some(bytes) = self.read(path)? else {
             return Ok(None);
@@ -227,14 +250,17 @@ impl ResourceCatalog {
             .map_err(|_| ResourceError::InvalidUtf8(path.to_owned()))
     }
 
+    /// 目录是否不含任何资源。
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// 目录中的资源条数。
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// 导出为内存输入，供打包（NAR/NRES）与校验使用；磁盘资源在此处读取。
     pub(crate) fn inputs(&self) -> Result<Vec<ResourceInput>, ResourceError> {
         self.entries
             .iter()
@@ -249,6 +275,7 @@ impl ResourceCatalog {
     }
 }
 
+/// 资源目录建立、发现与读取阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResourceError {
     InvalidPath(String),
@@ -266,6 +293,7 @@ impl fmt::Display for ResourceError {
 
 impl Error for ResourceError {}
 
+/// 递归遍历目录，把文件以相对根目录的逻辑路径登记为磁盘资源。
 fn collect_resources(
     root: &Path,
     directory: &Path,
@@ -321,6 +349,7 @@ fn collect_resources(
     Ok(())
 }
 
+/// 把 I/O 错误包装为 `ResourceError::Read` 的简写。
 fn read_error(path: &Path, error: io::Error) -> ResourceError {
     ResourceError::Read {
         path: path.to_path_buf(),
@@ -328,6 +357,7 @@ fn read_error(path: &Path, error: io::Error) -> ResourceError {
     }
 }
 
+/// 校验媒体类型为无空白、含非空主/子类型的 `kind/subtype` 形态。
 fn validate_media_type(media_type: String) -> Result<String, ResourceError> {
     let valid = !media_type.is_empty()
         && !media_type.chars().any(char::is_whitespace)
@@ -341,6 +371,7 @@ fn validate_media_type(media_type: String) -> Result<String, ResourceError> {
     }
 }
 
+/// 按扩展名推断媒体类型；未知扩展名回退到 `application/octet-stream`。
 fn infer_media_type(path: &str) -> &'static str {
     let extension = Path::new(path)
         .extension()

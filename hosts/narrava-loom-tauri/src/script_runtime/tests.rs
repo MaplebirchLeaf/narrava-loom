@@ -10,6 +10,7 @@ use narrava_loom_core::{
 
 use super::{BOOTSTRAP, EcmaBinding, EcmaRuntime, ScriptMacroOutcome, state_bridge, transpile};
 
+/// 启动脚本只暴露扁平全局 API，且不存在 `window`/`narrava` 浏览器对象。
 #[test]
 fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
     let mut context = Context::default();
@@ -54,6 +55,7 @@ fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
     assert!(value.get("missing").is_none());
 }
 
+/// Presentation builder 是冻结且 Host 中立的（不依赖 `narrava` 全局）。
 #[test]
 fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
     let mut context = Context::default();
@@ -86,6 +88,7 @@ fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
     assert_eq!(value["value"]["children"][0]["tone"], "warning");
 }
 
+/// Save 钩子按注册顺序执行，可改写目标，且 after 等待完成结果。
 #[test]
 fn bootstrap_save_hooks_preserve_order_rewrite_targets_and_wait_for_completion() {
     let mut context = Context::default();
@@ -140,6 +143,7 @@ fn bootstrap_save_hooks_preserve_order_rewrite_targets_and_wait_for_completion()
     );
 }
 
+/// TypeScript 源码被转译为真实 ECMAScript 并由 Boa 执行。
 #[test]
 fn typescript_is_transformed_and_executed_by_boa() {
     let javascript = transpile(
@@ -159,6 +163,7 @@ fn typescript_is_transformed_and_executed_by_boa() {
     assert_eq!(result.as_number(), Some(42.0));
 }
 
+/// 纯 JavaScript 源不经改写原样返回。
 #[test]
 fn javascript_is_not_rewritten() {
     assert_eq!(
@@ -167,6 +172,7 @@ fn javascript_is_not_rewritten() {
     );
 }
 
+/// 模块顶层登记的数据与函数进入 Rust State（含 I18n 模板导出）。
 #[test]
 fn ecma_runtime_imports_data_and_callable_into_core_state() {
     let root = std::path::PathBuf::from(format!(
@@ -215,6 +221,7 @@ fn ecma_runtime_imports_data_and_callable_into_core_state() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// 脚本函数读取的是活动 Rust State，无需 JS 侧镜像。
 #[test]
 fn script_reads_the_current_rust_state_without_a_javascript_mirror() {
     let root = std::path::PathBuf::from(format!(
@@ -254,6 +261,7 @@ fn script_reads_the_current_rust_state_without_a_javascript_mirror() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// Resource 读取由原生桥按需解析，不预载全部字节。
 #[test]
 fn script_resource_reads_are_resolved_lazily_by_the_native_bridge() {
     let root = std::path::PathBuf::from(format!(
@@ -308,6 +316,7 @@ fn script_resource_reads_are_resolved_lazily_by_the_native_bridge() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// 异步宏 handler 立即结算时直接返回完成值。
 #[test]
 fn ecma_binding_resolves_async_macro_handlers() {
     let root = std::path::PathBuf::from(format!(
@@ -339,6 +348,7 @@ fn ecma_binding_resolves_async_macro_handlers() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// 未等待 Host 操作而悬空的 Promise 被报告为未管理错误。
 #[test]
 fn ecma_binding_reports_promises_that_need_external_async_work() {
     let root = std::path::PathBuf::from(format!(
@@ -369,6 +379,7 @@ fn ecma_binding_reports_promises_that_need_external_async_work() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// `Host.delay` 产生 Pending 凭据，恢复后宏继续并返回结果。
 #[test]
 fn ecma_binding_suspends_and_resumes_host_delay_promises() {
     let root = std::path::PathBuf::from(format!(
@@ -405,6 +416,7 @@ fn ecma_binding_suspends_and_resumes_host_delay_promises() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// Host 投递的 `passage:init` 内置事件到达脚本订阅。
 #[test]
 fn host_builtin_passage_event_reaches_a_script_subscription() {
     let root = std::path::PathBuf::from(format!(

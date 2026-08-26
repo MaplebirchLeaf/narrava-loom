@@ -3,6 +3,7 @@
 use super::binary::parse_assignment;
 use super::*;
 
+/// 解析前缀自增自减、一元运算符；都不是时回落到主表达式解析。
 pub(crate) fn parse_unary<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -60,6 +61,7 @@ pub(crate) fn parse_unary<'source>(
     })
 }
 
+/// 解析原子表达式，并持续应用成员、索引、调用与后缀更新。
 fn parse_primary<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -204,6 +206,7 @@ fn parse_primary<'source>(
     Ok(expression)
 }
 
+/// 解析实参列表；optional 决定生成普通还是可选调用节点。
 fn parse_call<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -278,6 +281,7 @@ fn parse_call<'source>(
     }
 }
 
+/// 解析基础字面量、变量与括号分组；复合字面量转交数组/对象解析。
 fn parse_atom<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -326,6 +330,7 @@ fn parse_atom<'source>(
     })
 }
 
+/// 解析数组字面量元素；空数组直接返回，元素之间必须用逗号分隔。
 fn parse_array<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -374,6 +379,7 @@ fn parse_array<'source>(
     }
 }
 
+/// 解析对象字面量属性；键只接受裸标识符或字符串，值按赋值优先级解析。
 fn parse_object<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,

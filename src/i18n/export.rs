@@ -26,14 +26,17 @@ pub struct I18nExportObsolete {
 }
 
 impl I18nExportObsolete {
+    /// 过时消息的文本身份。
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// 过时原因：消息被移除或结构不兼容。
     pub fn reason(&self) -> I18nExportObsoleteReason {
         self.reason
     }
 
+    /// 被保留的旧消息内容。
     pub fn message(&self) -> &I18nTemplateMessage {
         &self.message
     }
@@ -49,22 +52,27 @@ pub struct I18nExport {
 }
 
 impl I18nExport {
+    /// 合并后的可序列化模板。
     pub fn template(&self) -> &I18nTemplate {
         &self.template
     }
 
+    /// 消耗导出结果，取得合并后的模板。
     pub fn into_template(self) -> I18nTemplate {
         self.template
     }
 
+    /// 本次新增或重生成的消息 ID。
     pub fn added(&self) -> &[String] {
         &self.added
     }
 
+    /// 保留原译文的消息 ID。
     pub fn retained(&self) -> &[String] {
         &self.retained
     }
 
+    /// 不再属于当前目录的旧消息。
     pub fn obsolete(&self) -> &[I18nExportObsolete] {
         &self.obsolete
     }
@@ -92,6 +100,7 @@ impl fmt::Display for I18nExportError {
 
 impl std::error::Error for I18nExportError {}
 
+/// 生成新模板，并在不覆盖有效译文的前提下合并上次导出结果。
 pub(super) fn export(
     catalog: &I18nCatalog,
     language: String,
@@ -164,6 +173,7 @@ pub(super) fn export(
     })
 }
 
+/// 旧译文只有在原文未变、placeholder 集合一致且字典绑定存在时才能保留。
 fn is_compatible(
     source: &I18nMessage,
     previous: &I18nTemplateMessage,

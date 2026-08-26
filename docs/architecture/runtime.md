@@ -134,7 +134,7 @@ Widget 调用建立独立 `@args` 帧；嵌套 Widget 各自隔离。`exit` 在�
 
 动态 Twee 语法仍由 Macro 拥有。`macro_runtime::parse_fragment()` 解析显式片段，`RuntimeExecutionContext::execute_parsed_fragment()` 复用相同 HIR 执行链。普通字符串中的 `<<name>>` 只是文本，不会自动再次解析。
 
-完整 Macro 语法与实现状态见 [/docs/reference/macro.md](/docs/reference/macro.md)。
+完整 Macro 语法与实现状态见 [/docs/architecture/macro.md](/docs/architecture/macro.md)。
 
 ## Story
 
@@ -153,11 +153,14 @@ Story 拥有编译后的 Passage 查询、当前位置、history、导航分支�
 
 ## Presentation
 
-Runtime 用 `BodyExecution` 同时返回 `BodyControl` 和有序 `PresentationOutput`。当前最小节点只有：
+Runtime 用 `BodyExecution` 同时返回 `BodyControl` 和有序 `PresentationOutput`。当前语义节点包括：
 
-- Text；
-- Navigation；
-- SafeReturn。
+- Text，以及可组合的 StyledText（`TextStyle + TextTone`，可选 `delay` 毫秒延迟浮现、结构性 `heading` 1/2 页面标题）；
+- Image 与 Region（Header／Main／Footer／Bar／BarStowed／Dialog）；
+- Container 与 Replace（稳定 Presentation Key）；
+- Component（capability、properties 与 fallback）与 Dismiss Action；
+- 状态绑定 Input（checkbox／radiobutton／textbox）；
+- Navigation 与 SafeReturn。
 
 Native Twee 正文整体产生字面 Text，`$name` 与 `${expression}` 都没有自动求值特权。固有 `print` Macro 已显式产生动态或反引号字面 Text；include 与 Widget 的输出进入同一有序执行链。`silently` 使用隔离输出缓冲区执行正文，保留 State 副作用与 `goto`、`exit` 等控制信号，但丢弃该块产生的语义输出。
 
@@ -167,22 +170,83 @@ Navigation 与 SafeReturn 携带 `InteractionId`。Host 回送身份而不是自
 
 ## scripts、Callable 与 Prototype
 
-`.ts/.js` 已通过 `ScriptBundle` 与叙事源码分流，并由宿主实现的 `ScriptBinding::load()` 接收。`ScriptLoadContext` 当前只开放 State；Binding 可以把后续宿主函数登记为带稳定身份的 `ScriptCallable`，实际函数保存在该 Binding 的 Callable Registry。Core Value 不直接序列化宿主函数，函数值默认不进入 Save。
+Narrava Core 接受 `.ts` 与 `.js`，但不内嵌浏览器、Node.js 或固定 JavaScript 引擎。Core 负责脚本源码分流、Narrava Value、函数身份、State/Macro/Logger API 和 VM 调用边界；宿主 Binding 负责 TypeScript 转译、模块加载、真实函数对象、Promise 与平台安全策略。
 
-脚本扩展 Narrava 原型时使用受控 Prototype Registry，不修改宿主语言自身的原型对象。State API 负责导入值，Prototype API 负责挂接 Narrava Array、String、Function 等成员。
+```text
+.ts / .js Source
+→ ScriptBundle
+→ Host ScriptBinding
+→ 显式 Narrava API
+→ Engine / State / Macro / Story / Logger / Event / Save / Resource / I18n
+```
 
-Script Bundle、Callable、State 导入、Macro／Logger Bridge 与 TypeScript 声明已经实现。宿主脚本原型扩展和真实 ECMAScript Adapter 仍未实现；前者不能穿透宿主 JavaScript 原型，后者由首个 Tauri Binding 提供。
+`ScriptCallable` 只包含 `id` 与调试名称；真实函数保存在 Binding 的 Callable Registry，不进入 Value 图、IR、Save 或 Core 注册表。脚本扩展 Narrava 原型时使用受控 Prototype Registry，不修改宿主语言自身的原型对象。
+
+### 启动加载
+
+`ScriptBundle::from_sources()` 只收集 TypeScript 与 JavaScript，保留 Source 顺序、相对路径、语言和源码文本；空 Bundle 合法。Binding 实现 `ScriptBinding::load(bundle, context)`，`ScriptLoadContext` 按宿主实际配置开放：
+
+- `state()`：完整的受控 State API；
+- `global_set()`／`global_extend()`／`global_function()`：导入普通全局或函数；
+- `macro_api()`：可选的 Macro 增删查改与 Hook；
+- `logger()`、`events()`、`resources()`、`i18n()`：可选的结构化能力；
+- `Save` 由 Binding 在运行期提供控制器对象，不导入 `State.variables`。
+
+ECMAScript `export/import` 只组织脚本模块，不会自动进入 Twee；脚本必须通过 State API 显式导入：
+
+```ts
+State.global.set("gameTitle", "Forest")
+State.global.extend({ difficulty: 2, author: "Maple" })
+State.global.set("sum", sum)
+```
+
+### State 与 Expression
+
+脚本和 Twee 使用同一份 Rust `State`。Tauri Boa Binding 的 `State.*` 是原生 Host operation：每次 get/has/set/del/setup 都直接访问当前 Engine 调用所借用的 Rust State，不在 JavaScript 中保存命名空间镜像，也不在函数或 Macro 完成后全量回灌。命名空间对应关系：
+
+| Twee / scripts 概念 | Core 所有者 |
+| --- | --- |
+| 普通导入名 | `State.global` |
+| `$name` | `State.variables` |
+| `_name` | `State.temporary` |
+| `setup` | `State.setup` |
+| `@name`、`@args` | 当前 Macro Local，不属于 State |
+
+`ScriptRuntimeContext` 组合借用 State 与 `ScriptFunctionHost`，因此 VM 无需知道 JavaScript 引擎。导入的 `ScriptCallable`：`typeof` 返回 `function`，可由普通调用表达式执行，参数与返回值均为 Narrava `Value`，调用可通过同一上下文修改 State；没有 Binding 的只读求值明确返回 `MissingWriteContext`，Binding 调用失败映射为 `expression.script_call_failed`。普通脚本函数调用是同步 Expression 能力；Promise 不允许伪装成普通 Value，异步工作应注册为 `MacroExecutionKind::Async`，走已有 suspension/resume/cancel 事务链。
+
+### 文本与动态 Macro
+
+脚本函数返回字符串 `"<<notice>>"` 时它仍是普通文本：`<<print abc()>>` 输出该字符串，不进行第二次 Macro 解析；`<<run abc()>>` 只执行副作用，不显示返回值。需要解析动态 Twee 时，Binding 必须调用 Macro/Compiler 明确提供的解析入口；不能让任意字符串在输出阶段自动变成代码。这一规则避免翻译文本、玩家输入或 Mod 数据意外获得执行权限。
+
+### Macro API
+
+`ScriptMacroApi` 复用 Core 的 `MacroDefinitions` 与 `MacroLifecycleSubscriptions`，提供 `add/update/del/get/has` 与 `before/after/off`。定义包含三个维度：`MacroBodyKind::Inline|Container`、`MacroArgumentKind::Raw|ArgumentList`、`MacroExecutionKind::Sync|Async`。Handler 与 Hook 都保存 `ScriptCallable`；before 可修改当前调用帧的 `@args`，after 接收并替换该 Macro 的隔离语义输出。`if`、`set`、`for`、`while` 等编译器固有逻辑不允许注册 Hook。Async Macro 使用现有不透明 Pending 句柄，Binding 把 Promise 映射为 resume/cancel，不把 Promise 塞进 Core。
+
+### Logger 与错误
+
+加载期可选注入 `Logger`，脚本写入普通 `LogEvent` 或附带 `Diagnostic` 的事件。边界错误保持稳定分类：源码编译与模块错误归 Binding；Expression 调用错误归 `EvalError`；Macro 定义、正文形态、同步/异步违规与 Hook 错误归 Macro Diagnostic。Binding 可以保留更详细的引擎堆栈，但不能让平台异常对象穿过 Core 公共类型。
+
+### 完成边界
+
+Core Script 契约已闭合：源码分流、加载契约、批量 State 导入、不可保存函数身份、Expression 调用、Macro CRUD、生命周期 Hook、同步/异步所有权，以及 Engine、Story、Logger、Event、Save、Resource、I18n 边界均有稳定类型和测试。首个 Tauri Binding 已使用 Boa 执行 ECMAScript，以 Oxc 去除 TypeScript 类型，并把真实 Function、Promise Macro、Host delay、State、Save、Resource、I18n 与事件桥接到 Runtime Worker。作者侧声明在 `bindings/typescript/narrava.d.ts`；后续平台能力必须继续沿用同一窄 Binding 边界，不能让 DOM、Tauri 对象或 JavaScript 引擎类型进入 Core。
 
 ## I18n、Mod、Resource、Save 与 Event
 
 - I18n 从稳定文本 ID 解析当前语言文本，并回退到 `default_locale` 原文；
 - ModLoader 管理模组启停、排序、依赖和有效构建事务；
 - ModUtils 是模组可用的受控工具集合；
-- Resource 以逻辑 ID 访问 `.nres`，不暴露开发期 assets 路径；
 - Save 保存可持久化 State、Story 时间线及游戏兼容元数据；
 - Event 发布已发生的结构化事实，不保存领域状态。
 
-I18n 已完成文本目录、NMSG／字典 JSON、`.nlang` 导入导出、自动 fallback、Runtime 替换和稳定 Diagnostic。Save 已能捕获 `$variables` 与 Story 时间线、编码 JSON 并原子恢复。ModLoader 已移出 Core，独立 `narrava-loom-modloader` 当前只保留单向依赖边界；Story／Resource 模组合成属于该附属项目，不计入 Core 完成度。详细边界见 [/docs/reference/i18n.md](/docs/reference/i18n.md)、[/docs/reference/save.md](/docs/reference/save.md) 与 [/docs/architecture/modloader.md](/docs/architecture/modloader.md)。
+### Resource 契约
+
+Core 只拥有 Resource 的逻辑路径、字节、媒体类型、完整性和生命周期；URL、Blob、解码、DOM 与缓存属于 Host。逻辑路径使用 `/`，拒绝绝对路径、空段、`.`、`..`、反斜杠和重复路径；Core 不按扩展名拒绝资源，媒体类型由显式值或受控扩展表推断，未知时为 `application/octet-stream`。`ResourceCatalog::discover()` 只读取路径、媒体类型和文件大小；`read()`/UTF-8 `text()` 首次访问单个磁盘文件时才读取并缓存成功结果，I/O 错误不会伪装成“资源不存在”。`.nar`/`.nres` 的内存 backing 使用共享不可变字节，跨 Host adapter clone 不复制整份内容；返回字节不允许调用者修改目录内部数据。`.nar` 对清单、源码、Bytecode 和每个资源分别校验哈希。基础 Core 只有 `game` 来源；模组来源与覆盖顺序由 ModLoader 组合。
+
+### Event 契约
+
+Event 使用稳定序号、名称和拥有型 `Value` 载荷。`emit` 先保存事实，再投递给当时存在且匹配的订阅；`subscribe` 返回进程内稳定 ID；`take` 一次性取走待处理事件；`unsubscribe` 释放订阅及队列；`clear` 清空历史与队列但不重置序号。ScriptCallable 等不可拥有平台函数的数据不得作为跨边界事件载荷。Tauri Host 把五阶段 Passage 生命周期发布为保留事件 `passage:init/start/render/display/end`，统一载荷为 Passage 名和 tags，作者不能伪造保留名。
+
+I18n 已完成文本目录、NMSG／字典 JSON、`.nlang` 导入导出、自动 fallback、Runtime 替换和稳定 Diagnostic。Save 已能捕获 `$variables` 与 Story 时间线、编码 JSON 并原子恢复。ModLoader 已移出 Core，独立 `narrava-loom-modloader` 当前只保留单向依赖边界；Story／Resource 模组合成属于该附属项目，不计入 Core 完成度。详细边界见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md)、[/docs/architecture/save.md](/docs/architecture/save.md) 与 [/docs/architecture/modloader.md](/docs/architecture/modloader.md)。
 
 有效构建顺序固定为先 I18n、后 `.nmod`：模组清单和依赖可以预先验证，但模组内容修改只作用于当前语言已经修正后的候选内容。
 

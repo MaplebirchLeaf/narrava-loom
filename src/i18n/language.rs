@@ -15,14 +15,17 @@ pub struct I18nLanguageLayer {
 }
 
 impl I18nLanguageLayer {
+    /// 该层的语言标签。
     pub fn locale(&self) -> &str {
         self.translation.language()
     }
 
+    /// 该层对应的已验证语言包。
     pub fn package(&self) -> &NlangValidatedPackage {
         &self.package
     }
 
+    /// 该层已绑定目录的译文。
     pub fn translation(&self) -> &I18nValidatedTemplate {
         &self.translation
     }
@@ -68,6 +71,7 @@ impl I18nRuntimeLanguage {
             .map(Some)
     }
 
+    /// 首选（最优先）语言标签。
     pub fn primary_language(&self) -> &str {
         match self {
             Self::Translation(translation) => translation.language(),
@@ -75,6 +79,7 @@ impl I18nRuntimeLanguage {
         }
     }
 
+    /// 当前语言选择是否由该目录构建校验；仅 crate 内部使用。
     pub(crate) fn is_for(&self, catalog: &I18nCatalog) -> bool {
         match self {
             Self::Translation(translation) => catalog.accepts(translation),
@@ -82,6 +87,7 @@ impl I18nRuntimeLanguage {
         }
     }
 
+    /// 按当前选择解析一条消息；仅 crate 内部使用。
     pub(crate) fn resolve(
         &self,
         catalog: &I18nCatalog,
@@ -142,6 +148,7 @@ impl I18nLanguageChain {
         Self::validate(catalog, default_language, selected)
     }
 
+    /// 按调用方给定的顺序把包建成回退链，并校验 fallback 顺序。
     pub fn validate(
         catalog: &I18nCatalog,
         default_language: &str,
@@ -183,14 +190,17 @@ impl I18nLanguageChain {
         })
     }
 
+    /// 链的首选（最优先）语言。
     pub fn primary_language(&self) -> &str {
         self.layers[0].locale()
     }
 
+    /// 链的默认语言；回退终点。
     pub fn default_language(&self) -> &str {
         &self.default_language
     }
 
+    /// 从首选到默认的按序回退层。
     pub fn layers(&self) -> &[I18nLanguageLayer] {
         &self.layers
     }
@@ -202,6 +212,7 @@ impl I18nLanguageChain {
             .all(|layer: &I18nLanguageLayer| catalog.accepts(layer.translation()))
     }
 
+    /// 按层解析；命中译文即返回，全部缺失时回退默认原文。
     pub fn resolve(
         &self,
         catalog: &I18nCatalog,
@@ -217,6 +228,7 @@ impl I18nLanguageChain {
         catalog.resolve_default(id, values)
     }
 
+    /// VM 保留原始 Value 类型时使用的按层解析；仅 crate 内部使用。
     pub(crate) fn resolve_runtime(
         &self,
         catalog: &I18nCatalog,
@@ -235,6 +247,7 @@ impl I18nLanguageChain {
     }
 }
 
+/// 校验相邻层的 fallback 声明一致，且最末层落回默认语言。
 fn validate_fallback_order(
     layers: &[I18nLanguageLayer],
     default_language: &str,
@@ -269,6 +282,7 @@ fn validate_fallback_order(
     Ok(())
 }
 
+/// 语言回退链建立或校验阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum I18nLanguageChainError {
     InvalidDefaultLanguage {

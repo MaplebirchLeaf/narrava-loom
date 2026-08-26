@@ -65,6 +65,7 @@ pub fn build_directory(project: &Path, output: &Path, host_binary: &Path) -> Res
     Ok(())
 }
 
+/// 把 `languages/` 下每个语言目录打包为 `<locale>.nlang`，并在打包前完成安装校验。
 fn build_languages(
     project: &Path,
     config: &ProjectConfig,
@@ -112,6 +113,7 @@ fn build_languages(
     Ok(packages)
 }
 
+/// 把 `styles/` 下的作者 CSS 作为 `__narrava/styles/` 资源并入目录。
 fn embed_author_styles(
     project: &Path,
     resources: ResourceCatalog,
@@ -125,6 +127,7 @@ fn embed_author_styles(
     ResourceCatalog::new(inputs).map_err(|error| error.to_string())
 }
 
+/// 递归收集 `styles/` 下的 CSS 文件为逻辑路径资源。
 fn collect_author_styles(
     root: &Path,
     directory: &Path,
@@ -161,6 +164,7 @@ fn collect_author_styles(
     Ok(())
 }
 
+/// 从作者配置的 `[host.tauri] icon` 字段读取可选图标路径。
 fn tauri_icon(config: &str) -> Result<Option<String>, String> {
     let value: toml::Value = toml::from_str(config).map_err(|error| error.to_string())?;
     Ok(value
@@ -171,6 +175,7 @@ fn tauri_icon(config: &str) -> Result<Option<String>, String> {
         .map(str::to_owned))
 }
 
+/// 复制源目录中指定扩展名的文件到目标目录（不递归）。
 fn copy_packages(source: &Path, target: &Path, extension: &str) -> Result<(), String> {
     if !source.exists() {
         return Ok(());
@@ -189,6 +194,7 @@ fn copy_packages(source: &Path, target: &Path, extension: &str) -> Result<(), St
     Ok(())
 }
 
+/// 当前平台下 Host 可执行文件名。
 fn host_name() -> &'static str {
     if cfg!(windows) {
         "narrava.exe"
@@ -197,6 +203,7 @@ fn host_name() -> &'static str {
     }
 }
 
+/// Unix 下为 Host 可执行文件添加可执行权限。
 #[cfg(unix)]
 fn make_executable(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
@@ -210,6 +217,7 @@ fn make_executable(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 把 I/O 错误转换为发行构建的错误文本。
 fn io_error(error: std::io::Error) -> String {
     error.to_string()
 }

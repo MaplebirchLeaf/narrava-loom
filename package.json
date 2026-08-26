@@ -10,7 +10,8 @@
     "lint": "oxlint --deny-warnings bindings editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts",
     "format": "oxfmt --write package.json .oxfmtrc.json .oxlintrc.json bindings/typescript editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts",
     "format:check": "oxfmt --check package.json .oxfmtrc.json .oxlintrc.json bindings/typescript editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts",
-    "test": "bun run test:vscode",
+    "test": "bun run test:frontend && bun run test:vscode",
+    "test:frontend": "node hosts/narrava-loom-tauri/frontend/main.test.mjs",
     "test:vscode": "bun run --cwd editors/vscode-narrava-loom test"
   },
   "devDependencies": {

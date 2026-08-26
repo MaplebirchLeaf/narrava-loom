@@ -10,7 +10,7 @@ Twee 编译器只负责叙事源码，不处理 State、Macro 注册表、JavaSc
 
 编译器保留普通全局名称及 `$`、`_`、`@`、`setup` 等引用形式；运行时再分别交给 `State.global`、`State.variables`、`State.temporary`、Macro 局部域和 `State.setup` 解析。编译器不会读取脚本模块的 `export` 或 `import` 来推断 Twee 环境。
 
-Macro 结构与 Expression 细节分别见 [/docs/reference/macro.md](/docs/reference/macro.md) 和 [/docs/reference/expression.md](/docs/reference/expression.md)。
+Macro 结构与 Expression 细节分别见 [/docs/architecture/macro.md](/docs/architecture/macro.md) 和 [/docs/architecture/expression.md](/docs/architecture/expression.md)。
 
 ```text
 Twee Source
@@ -26,11 +26,12 @@ Twee Source
        └→ I18n Text Catalog Metadata
 ```
 
-## 当前实现
+## 实现
 
 - Lexer 产生 `PassageDeclaration` 与原样保留的 `Text`。
-- Native Twee 正文是宿主无关文本；HTML 标签没有内置表现语义。HTML 兼容能力留给以后单独设计。
-- `/% ... %/` 是作者注释，可单行或跨行；Parser 在 Macro 组合与 HIR lowering 前移除它，未闭合时返回 `twee.unclosed_comment`。HTML `<!-- ... -->` 不是 Narrava 作者注释。
+- 正文是宿主无关文本。源码换行会在 `HostUpdate` 折叠为空格，显式 `<br>` 转为硬换行；
+  其他标签没有内置表现语义。
+- `/% ... %/` 是作者注释，可单行或跨行；Parser 在 Macro 组合与 HIR lowering 前移除它，未闭合时返回 `twee.unclosed_comment`。
 - Passage 名称保留大小写，标签按空白分隔。
 - Parser 拒绝声明前游离文本和空名称。
 - Passage 正文使用带 Span 的 `BodyNode`，Native Parser 当前只从正文产生 Text 与 Macro。
@@ -116,4 +117,5 @@ Twee Source
 
 ## 输出边界
 
-Twee Compiler 把 Native 正文完整保存为 HIR Text，并为 I18n 保留稳定身份；`${expression}` 在正文中没有特殊含义。已实现的 `print` 作为显式求值边界，将动态结果转换为额外的 Presentation Text。Compiler 不识别 DOM 标签或 CSS 语义，形似 HTML 的内容也没有 Native 表现特权。
+Compiler 把正文保存为 HIR Text，并为 I18n 保留稳定身份；`${expression}` 在正文中没有特殊
+含义，动态内容必须使用 `print`。最终文本的换行规则见“当前实现”，不由具体 Host 重新解释。

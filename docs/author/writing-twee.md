@@ -1,6 +1,6 @@
 # Twee、选择、变量、条件和循环
 
-## 7. Passage、标签和文件拆分
+## Passage、标签和文件拆分
 
 一个文件可以写多个 Passage：
 
@@ -15,7 +15,7 @@
 - Passage 名称区分大小写；
 - 名称在整个游戏中必须唯一，即使位于不同 `.twee` 文件；
 - 方括号内是以空白分隔的标签；
-- 空行属于正文排版；
+- 源文件换行和空行只用于整理源码，不会直接控制游戏内排版；
 - `/% 注释 %/` 不会显示给玩家；
 - `StoryInit` 是初始化 Passage，不能当普通导航目标；
 - `Start`、`StoryInit`、`Header`、`Footer`、`Bar`、`BarStowed` 是特殊 Passage，均不能带 Tag；
@@ -23,7 +23,7 @@
 
 推荐按章节拆文件，但不要依赖文件名决定执行顺序。故事顺序应由导航和明确生命周期决定。
 
-## 8. 添加可点击选择
+## 添加可点击选择
 
 ```twee
 :: Start
@@ -42,10 +42,20 @@
 - 两边区分明确，不要把顺序写反；
 - 目标必须存在且大小写一致。
 
-当前 Tauri Renderer 会按 Core 输出顺序把导航显示成行内 `.choice`。Core 不生成 HTML，
-不允许正文直接注入 DOM。
+当前 Tauri Renderer 会按 Core 输出顺序把导航显示成行内选择。
 
-## 9. 变量：什么时候用 `$`、`_`、`@`、`setup`
+游戏内需要换行时显式写 `<br>`：
+
+```twee
+你站在一扇门前。<br>
+<<link [[推门进入|Hall]]>><</link>><br>
+<<link [[转身离开|Outside]]>><</link>>
+```
+
+普通源码换行会折叠为空格，`<br>` 才是游戏内硬换行。文字样式使用
+`<<print value tone style...>>` 或脚本侧 `Presentation.text()`；其他标签会按普通文字显示。
+
+## 变量：什么时候用 `$`、`_`、`@`、`setup`
 
 | 写法 | 生命周期 | 是否进存档 | 典型用途 |
 |---|---|---:|---|
@@ -81,7 +91,7 @@
 <<unset $hero>>
 ```
 
-## 10. 条件、计算与布尔值
+## 条件、计算与布尔值
 
 ```twee
 <<if $coins >= 2>>
@@ -106,9 +116,9 @@
 
 常用值：字符串写成 `"文字"`，布尔值为 `true`/`false`，空值为 `null`，未定义值为
 `undefined`。不要用正文猜测表达式语法，完整运算符以
-[/docs/reference/expression.md](/docs/reference/expression.md)为准。
+[/docs/architecture/expression.md](/docs/architecture/expression.md)为准。
 
-## 11. 循环、包含和直接跳转
+## 循环、包含和直接跳转
 
 包含另一个 Passage 的内容但不进行普通导航：
 
@@ -136,9 +146,9 @@
 
 可用控制包括 `for`、`while`、`break`、`continue`、`switch`、`include`、`goto`、`run`、
 `silently`、`exit`、Widget 和 `capture`。精确参数与作用域见
-[/docs/reference/macro.md](/docs/reference/macro.md)。
+[/docs/architecture/macro.md](/docs/architecture/macro.md)。
 
-## 12. `silently` 到底做什么
+## `silently` 到底做什么
 
 ```twee
 <<silently>>

@@ -1,10 +1,10 @@
 use super::*;
 
 #[test]
-fn text_builtin_builds_styled_text_from_flat_twee_arguments() {
-    let execution: BodyExecution = text(&[
+fn print_builtin_builds_styled_text_from_flat_twee_arguments() {
+    let execution: BodyExecution = print(&[
         Value::string("关键道具"),
-        Value::string("positive"),
+        Value::Number(32.0),
         Value::string("strong"),
     ])
     .expect("短写参数应产生语义文字");
@@ -14,9 +14,107 @@ fn text_builtin_builds_styled_text_from_flat_twee_arguments() {
         [PresentationNode::StyledText {
             text: TextValue::from("关键道具"),
             styles: vec![TextStyle::Strong],
-            tone: TextTone::Positive,
+            tone: TextTone::GREEN,
+            delay: None,
+            heading: None,
         }]
     );
+}
+
+#[test]
+fn print_builtin_without_options_emits_plain_text() {
+    let execution: BodyExecution =
+        print(&[Value::string("普通文本")]).expect("单参数 print 应输出纯文本");
+
+    assert_eq!(
+        execution.output.nodes(),
+        [PresentationNode::Text(TextValue::from("普通文本"))]
+    );
+}
+
+#[test]
+fn print_builtin_tone_error_names_the_current_macro() {
+    let error: Diagnostic =
+        print(&[Value::string("x"), Value::Number(64.0)]).expect_err("超出色阶范围的 tone 应报错");
+
+    assert_eq!(error.code, "macro.print.invalid_arguments");
+    assert!(error.message.contains("`print` tone"));
+    assert!(!error.message.contains("`text`"));
+}
+
+#[test]
+fn print_builtin_object_form_parses_delay_and_validates_range() {
+    let execution: BodyExecution = print(&[
+        Value::string("延迟文本"),
+        Value::object(vec![
+            (String::from("tone"), Value::Number(24.0)),
+            (
+                String::from("styles"),
+                Value::array(vec![Value::string("strong")]),
+            ),
+            (String::from("delay"), Value::Number(800.0)),
+        ]),
+    ])
+    .expect("对象形式应产生带延迟的语义文字");
+
+    assert_eq!(
+        execution.output.nodes(),
+        [PresentationNode::StyledText {
+            text: TextValue::from("延迟文本"),
+            styles: vec![TextStyle::Strong],
+            tone: TextTone::YELLOW,
+            delay: Some(800),
+            heading: None,
+        }]
+    );
+
+    for invalid in [
+        Value::object(vec![(String::from("delay"), Value::string("800"))]),
+        Value::object(vec![(String::from("delay"), Value::Number(-1.0))]),
+        Value::object(vec![(String::from("delay"), Value::Number(86_400_001.0))]),
+        Value::object(vec![(String::from("delay"), Value::Number(800.5))]),
+    ] {
+        let error: Diagnostic =
+            print(&[Value::string("x"), invalid]).expect_err("非法 delay 应报错");
+        assert_eq!(error.code, "macro.print.invalid_arguments");
+    }
+}
+
+#[test]
+fn print_builtin_object_form_parses_heading_and_validates_level() {
+    let execution: BodyExecution = print(&[
+        Value::string("第一页"),
+        Value::object(vec![
+            (String::from("heading"), Value::Number(2.0)),
+            (
+                String::from("styles"),
+                Value::array(vec![Value::string("strong")]),
+            ),
+        ]),
+    ])
+    .expect("对象形式应解析结构性标题级别");
+
+    assert_eq!(
+        execution.output.nodes(),
+        [PresentationNode::StyledText {
+            text: TextValue::from("第一页"),
+            styles: vec![TextStyle::Strong],
+            tone: TextTone::DEFAULT,
+            delay: None,
+            heading: Some(crate::presentation::HeadingLevel::H2),
+        }]
+    );
+
+    for invalid in [
+        Value::object(vec![(String::from("heading"), Value::string("h2"))]),
+        Value::object(vec![(String::from("heading"), Value::Number(0.0))]),
+        Value::object(vec![(String::from("heading"), Value::Number(3.0))]),
+        Value::object(vec![(String::from("heading"), Value::Number(1.5))]),
+    ] {
+        let error: Diagnostic =
+            print(&[Value::string("x"), invalid]).expect_err("非法 heading 应报错");
+        assert_eq!(error.code, "macro.print.invalid_arguments");
+    }
 }
 
 #[test]

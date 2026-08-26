@@ -8,6 +8,7 @@ mod structured;
 use inline::{macro_arguments_span, parse_body_nodes, relative_span};
 use structured::{parse_macro_closing_line, parse_multiline_macro};
 
+/// 解析全部 Token 为 Passage 列表；解析前先剥离 Twee 注释（`/% ... %/`）。
 pub fn parse<'source>(
     tokens: &[Token<'source>],
 ) -> Result<Vec<Passage<'source>>, ParseError<'source>> {

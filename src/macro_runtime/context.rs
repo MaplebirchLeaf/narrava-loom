@@ -154,6 +154,7 @@ impl<Value: Clone> MacroLocalScopes<Value> {
 }
 
 impl<Value> CapturedMacroLocals<Value> {
+    /// 建立不捕获任何局部绑定的空捕获集。
     pub fn empty() -> Self {
         Self {
             locals: HashMap::new(),
@@ -198,6 +199,7 @@ pub struct MacroEvaluationContext<'a> {
 }
 
 impl<'a> MacroEvaluationContext<'a> {
+    /// 组合基础上下文与调用帧；当前 `@args` 会快照为只读数组。
     pub fn new(base: &'a dyn EvaluationContext, locals: &'a MacroLocalScopes<Value>) -> Self {
         let args: Option<Value> = locals
             .args()

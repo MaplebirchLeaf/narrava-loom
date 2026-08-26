@@ -43,10 +43,15 @@ pub trait ScriptCallDispatcher {
 
 /// Binding 为作者侧 `Engine` 单例实现的事务控制契约。
 pub trait ScriptEngineHost {
+    /// Engine 是否已经启动。
     fn started(&self) -> bool;
+    /// 导航到指定 Passage。
     fn goto(&mut self, target: &str) -> Result<(), Diagnostic>;
+    /// 回退到历史中的前一个 Passage。
     fn back(&mut self) -> Result<(), Diagnostic>;
+    /// 前进到历史中的后一个 Passage。
     fn forward(&mut self) -> Result<(), Diagnostic>;
+    /// 重新开始当前游戏。
     fn restart(&mut self) -> Result<(), Diagnostic>;
 }
 
@@ -59,9 +64,13 @@ pub struct ScriptPassageInfo {
 
 /// Binding 为作者侧只读 `Story` 单例实现的查询契约。
 pub trait ScriptStoryHost {
+    /// Passage 是否存在。
     fn has(&self, name: &str) -> bool;
+    /// 当前已确认的 Passage。
     fn current(&self) -> Option<ScriptPassageInfo>;
+    /// 精确查询 Passage 元数据。
     fn get(&self, name: &str) -> Option<ScriptPassageInfo>;
+    /// 该 Passage 的历史访问次数。
     fn visits(&self, name: &str) -> usize;
 }
 
@@ -71,10 +80,12 @@ pub struct ScriptStoryApi<'story, 'hir, 'source> {
 }
 
 impl<'story, 'hir, 'source> ScriptStoryApi<'story, 'hir, 'source> {
+    /// 借用 Story 建立只读门面。
     pub fn new(story: &'story Story<'hir, 'source>) -> Self {
         Self { story }
     }
 
+    /// 把 HIR Passage 字段转换为脚本可见的快照。
     fn passage_info(name: &str, tags: &[&str]) -> ScriptPassageInfo {
         ScriptPassageInfo {
             name: name.to_owned(),
@@ -107,9 +118,13 @@ impl ScriptStoryHost for ScriptStoryApi<'_, '_, '_> {
 
 /// Save 文档由 Core 生成和恢复；实际文件选择与写入仍由 Binding 拥有。
 pub trait ScriptSaveHost {
+    /// 生成当前 Save 文档的 JSON。
     fn capture_json(&mut self) -> Result<String, Diagnostic>;
+    /// 从 JSON 恢复 Save 文档。
     fn restore_json(&mut self, json: &str) -> Result<(), Diagnostic>;
+    /// 向 Host 请求一次导出。
     fn request_export(&mut self) -> Result<(), Diagnostic>;
+    /// 向 Host 请求一次导入。
     fn request_import(&mut self) -> Result<(), Diagnostic>;
 }
 
@@ -132,14 +147,17 @@ pub struct ScriptRuntimeContext<'runtime, Host> {
 }
 
 impl<'runtime, Host> ScriptRuntimeContext<'runtime, Host> {
+    /// 组合 State 与 Binding 函数宿主。
     pub fn new(state: &'runtime mut State, host: &'runtime mut Host) -> Self {
         Self { state, host }
     }
 
+    /// 只读访问 State。
     pub fn state(&self) -> &State {
         self.state
     }
 
+    /// 可变访问 State。
     pub fn state_mut(&mut self) -> &mut State {
         self.state
     }
@@ -216,6 +234,7 @@ pub struct ScriptLoadContext<'core> {
 }
 
 impl<'core> ScriptLoadContext<'core> {
+    /// 建立只带 State 的最小加载上下文。
     pub fn new(state: &'core mut State) -> Self {
         Self {
             state,
@@ -245,16 +264,19 @@ impl<'core> ScriptLoadContext<'core> {
         self
     }
 
+    /// 为本次加载显式开放结构化事件总线。
     pub fn with_events(mut self, events: &'core mut Event) -> Self {
         self.events = Some(events);
         self
     }
 
+    /// 为本次加载显式开放资源目录。
     pub fn with_resources(mut self, resources: &'core ResourceCatalog) -> Self {
         self.resources = Some(resources);
         self
     }
 
+    /// 为本次加载显式开放 I18n 只读 API。
     pub fn with_i18n(
         mut self,
         catalog: &'core I18nCatalog,
@@ -265,28 +287,34 @@ impl<'core> ScriptLoadContext<'core> {
         self
     }
 
+    /// 可变访问 State。
     pub fn state(&mut self) -> &mut State {
         self.state
     }
 
+    /// 取 Macro 控制面；未用 `with_macro` 开放时返回 `None`。
     pub fn macro_api(&mut self) -> Option<ScriptMacroApi<'_>> {
         let definitions: &mut ScriptMacroDefinitions = self.macro_definitions.as_deref_mut()?;
         let hooks: &mut ScriptMacroHooks = self.macro_hooks.as_deref_mut()?;
         Some(ScriptMacroApi::new(definitions, hooks))
     }
 
+    /// 取结构化 Logger；未开放时返回 `None`。
     pub fn logger(&mut self) -> Option<&mut Logger> {
         self.logger.as_deref_mut()
     }
 
+    /// 取事件总线；未开放时返回 `None`。
     pub fn events(&mut self) -> Option<&mut Event> {
         self.events.as_deref_mut()
     }
 
+    /// 取资源目录；未开放时返回 `None`。
     pub fn resources(&self) -> Option<&ResourceCatalog> {
         self.resources
     }
 
+    /// 取 I18n 只读 API；未开放时返回 `None`。
     pub fn i18n(&self) -> Option<ScriptI18nApi<'_>> {
         self.i18n
     }
@@ -319,6 +347,7 @@ pub struct ScriptI18nApi<'core> {
 }
 
 impl<'core> ScriptI18nApi<'core> {
+    /// 绑定目录与默认／当前语言。
     pub fn new(
         catalog: &'core I18nCatalog,
         default_locale: &'core str,
@@ -331,14 +360,17 @@ impl<'core> ScriptI18nApi<'core> {
         }
     }
 
+    /// 当前编译目录。
     pub fn catalog(&self) -> &'core I18nCatalog {
         self.catalog
     }
 
+    /// 游戏默认语言标签。
     pub fn default_locale(&self) -> &'core str {
         self.default_locale
     }
 
+    /// 当前生效语言标签。
     pub fn locale(&self) -> &'core str {
         self.locale
     }

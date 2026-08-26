@@ -3,6 +3,7 @@
 use narrava_loom_core::resource::ResourceCatalog;
 use tauri::http::{Response, StatusCode, header};
 
+/// 按 WebView 请求的逻辑路径返回单个 Resource；错误映射为对应 HTTP 状态码。
 pub(crate) fn respond(resources: &ResourceCatalog, encoded_path: &str) -> Response<Vec<u8>> {
     let Some(path) = decode_path(encoded_path.trim_start_matches('/')) else {
         return failure(StatusCode::BAD_REQUEST, "Resource URL 编码无效");
@@ -23,6 +24,7 @@ pub(crate) fn respond(resources: &ResourceCatalog, encoded_path: &str) -> Respon
         .expect("固定 Resource response 必须有效")
 }
 
+/// 构造纯文本错误响应。
 fn failure(status: StatusCode, message: &str) -> Response<Vec<u8>> {
     Response::builder()
         .status(status)
@@ -31,6 +33,7 @@ fn failure(status: StatusCode, message: &str) -> Response<Vec<u8>> {
         .expect("固定错误 response 必须有效")
 }
 
+/// 解码 URL 百分号编码；编码非法或结果非 UTF-8 时返回 `None`。
 fn decode_path(path: &str) -> Option<String> {
     let bytes = path.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
@@ -49,6 +52,7 @@ fn decode_path(path: &str) -> Option<String> {
     String::from_utf8(decoded).ok()
 }
 
+/// 单个十六进制字符转数值。
 fn hex(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte - b'0'),
@@ -65,6 +69,7 @@ mod tests {
 
     use super::respond;
 
+    /// 协议只按请求的已验证路径读取对应 Resource。
     #[test]
     fn protocol_reads_only_the_requested_validated_resource() {
         let resources = ResourceCatalog::new([
@@ -80,6 +85,7 @@ mod tests {
         assert_eq!(response.body(), &[1, 2, 3]);
     }
 
+    /// 非法编码与未知路径分别映射为 400/404。
     #[test]
     fn protocol_rejects_invalid_encoding_and_unknown_paths() {
         let resources = ResourceCatalog::default();

@@ -1,6 +1,6 @@
 # TypeScript/JavaScript、Macro 与 Resource
 
-## 13. TypeScript/JavaScript：什么时候才需要
+## TypeScript/JavaScript：什么时候才需要
 
 简单故事不需要脚本。遇到重复计算、复杂数据处理、自定义 Macro 或资源读取时再使用。
 
@@ -27,14 +27,12 @@ State.global.set("greeting", greeting)
 - 脚本内声明的函数不会自动进入 Twee；必须用 `State.global.set/extend` 显式导入；
 - `.ts` 不需要作者预编译；
 - Script Bundle 按发现后的稳定路径顺序执行；不要用隐含文件顺序表达复杂依赖；
-- 当前执行环境不是浏览器，没有 `window`、DOM 或任意 Tauri 权限；
-- WebView 不执行游戏脚本；
+- 当前执行环境是 Rust Worker，不提供浏览器或 Tauri API；
 - 可保存数据只能是 Narrava 数据，函数句柄不能进入存档变量图。
 
 ### 13.1 为什么游戏脚本直接使用顶层单例
 
-游戏脚本在 **Rust 内的 ECMAScript Runtime** 中执行，不在 Tauri WebView 中执行。因此
-`typeof window` 和 `typeof document` 都是 `"undefined"`。
+游戏脚本在 Rust 内的 ECMAScript Runtime 中执行。
 
 Script Binding 直接提供职责明确的顶层单例，不再套一层 `narrava` 命名空间：
 
@@ -46,7 +44,7 @@ Event.emit("game:ready", { coins: 10 })
 
 `Engine`、`State`、`Macro`、`Story`、`Logger`、`Event`、`Host`、`Save`、`Resource`、`I18n`
 和 `Presentation` 是彼此独立的公开契约。Worker 中不存在 `narrava.Save` 或聚合对象
-`globalThis.narrava`，也始终没有 `window`、Renderer、DOM 或 Tauri API。
+`globalThis.narrava`。
 
 开发模式 DevTools 的 `window.narrava` 只属于 WebView 调试桥，提供 `state/set/del` 等开发工具；
 它不是游戏脚本 API，发布模式也不会注入。
@@ -55,7 +53,7 @@ Event.emit("game:ready", { coins: 10 })
 修改；如果把游戏移到仓库外，编辑器可能找不到声明文件，但这不影响 Host 运行。可把
 `narrava.d.ts` 复制到自己的类型目录，并调整 reference 路径。
 
-## 14. State 脚本 API
+## State 脚本 API
 
 四个入口：
 
@@ -74,7 +72,7 @@ State.setup.set({ difficulty: "normal" })
 `set` 返回旧值；`del` 删除并返回旧值；`extend` 返回插入和替换的数量。`global` 可存放导出的
 脚本函数；`variables`、`temporary` 和 `setup` 应保持为可转换的 Narrava 数据。
 
-## 15. 自定义 Macro
+## 自定义 Macro
 
 最小同步 Macro：
 
@@ -118,9 +116,9 @@ Tauri 调用。文件选择与网络也尚未成为公开能力，因为它们�
 当前 Host 自定义 Macro 可以返回可显示标量，也可以返回下节介绍的 `Presentation` 语义片段。
 容器正文、编译器 Expression 参数、完整 before/after 生命周期还不是可依赖的 Tauri 作者功能。
 
-## 16. Presentation 语义渲染
+## Presentation 语义渲染
 
-不要从游戏脚本返回 HTML。用冻结的 `Presentation` builder 描述含义：
+结构化输出使用冻结的 `Presentation` builder：
 
 ```ts
 Macro.add("statusCard", {
@@ -131,8 +129,9 @@ Macro.add("statusCard", {
     Presentation.text("体力不足", {
       key: "stamina-warning",
       styles: ["strong"],
-      tone: "warning",
+      tone: 40,
     }),
+    Presentation.text("第一页", { key: "page-one", heading: 2 }),
     Presentation.image("images/hero.png", {
       key: "hero",
       alt: "站在森林入口的主角",
@@ -142,9 +141,11 @@ Macro.add("statusCard", {
 })
 ```
 
-可组合的文本结构为 `emphasis`、`strong`、`code`、`deleted`、`inserted`、`marked`、
-`small`、`subscript`、`superscript`、`quote`、`heading1` 到 `heading6`。语气为 `default`、
-`muted`、`accent`、`informational`、`positive`、`warning`、`negative`、`critical`。
+可组合的文本结构为 `emphasis`、`strong`、`code`、`quote`、`marked`、`small`、
+`inserted`、`deleted` 共 8 个。语气是 0..=63 的色阶（对齐二进制边界：灰阶 0-7（白`1`→亮灰`2`→浅灰`3`→灰`4`→深灰`5`→暗灰`6`→黑`7`），光谱 8-63（红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`，每色相 8 级））。
+`Presentation.text()` 与 Twee 的 `<<print>>` 还可携带 `delay`（毫秒，0..=86400000）与
+结构性 `heading`（1 或 2，用于弹窗页签等页面划分，不属于字形样式）。delay 让渲染器在此之前
+保持文字隐藏、到时淡入浮现。
 
 `Presentation.region()` 可写入 `header`、`main`、`footer`、`bar`、`dialog`。Region 的 children
 只能是普通字符串或 Presentation 节点。`dialog` 中可以使用
@@ -166,7 +167,7 @@ Tauri 原生支持 `meter@1`。其他 Host 或未知版本显示 fallback。`pro
 不能放函数、DOM、Tauri 对象或循环引用。稳定 `key` 应描述同一逻辑节点；同一输出内重复 key
 会报错。完整可运行示例见 `examples` 的 `PresentationGallery` Passage。
 
-## 17. Resource 资源
+## Resource 资源
 
 所有资源放进 `resources/`。例如：
 
@@ -196,7 +197,7 @@ Resource.pick(["data/guide.zh-CN.txt", "data/guide.txt"])
 - 未知扩展名仍可作为二进制资源；
 - 路径拒绝绝对路径、空段、`.`、`..` 和反斜杠。
 
-## 18. CSS 和 `resource("path")`
+## CSS 和 `resource("path")`
 
 CSS 完全可选。没有 `styles/` 时，Tauri Host 使用内置的完整默认样式。
 

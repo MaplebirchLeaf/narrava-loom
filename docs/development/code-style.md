@@ -51,12 +51,5 @@
 
 ## 每步验证
 
-```text
-cargo fmt --all
-cargo check --all-targets
-cargo clippy --all-targets -- -D warnings
-cargo test
-git diff --check
-```
-
-CLI 边界变更还需运行 `cargo run --quiet -- examples`。工作区包含用户未提交改动时，不自动暂存、提交或创建分支。
+按改动范围使用[仓库命令](commands.md)中的窄测试，完成前运行全工作区门禁。CLI 边界变更还需
+编译示例。工作区包含用户未提交改动时，不自动暂存、提交或创建分支。

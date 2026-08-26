@@ -1,4 +1,6 @@
 <!doctype html>
+<!-- Narrava Tauri WebView 的宿主页面骨架。main.js 依赖这里的稳定 id/类名把 Core
+     Presentation 渲染到对应插槽；作者 CSS 通过 nv-story 上的 --narrava-* token 定制主题。 -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -9,6 +11,7 @@
   </head>
   <body>
     <nv-story aria-busy="true">
+      <!-- 侧栏外壳：ui-bar-toggle 控制收起/展开，bar-presentation 承载 Presentation bar 区域。 -->
       <nv-ui-bar id="ui-bar" slot="bar">
         <nav id="ui-bar-tray" aria-label="阅读控制">
           <button
@@ -62,6 +65,7 @@
           <div id="bar-presentation"></div>
         </div>
       </nv-ui-bar>
+      <!-- 正文插槽：header/main/footer 分别承载对应 Presentation 区域。 -->
       <nv-passage tabindex="-1" aria-label="正在启动">
         <header class="passage-header" slot="passage-header"></header>
         <main id="passage-main" class="passage-main" slot="passage-main" aria-live="polite"></main>
@@ -70,6 +74,7 @@
           <span id="status" role="status" aria-live="polite">正在连接 Runtime…</span>
         </footer>
       </nv-passage>
+      <!-- 语义 Dialog：页签由 Presentation 的顶层标题生成，普通消息走 dialog-message。 -->
       <dialog id="nv-dialog" slot="dialog" aria-label="弹窗">
         <div id="dialog-titlebar">
           <div id="dialog-tabs" role="tablist" aria-label="弹窗页面"></div>

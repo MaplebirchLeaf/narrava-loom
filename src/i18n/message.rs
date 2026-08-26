@@ -4,10 +4,14 @@ use std::{collections::BTreeMap, fmt};
 
 use super::{I18nTemplate, I18nTemplateMessage};
 
+/// NMSG section 标记：默认语言原文。
 const SOURCE: &str = "[source]";
+/// NMSG section 标记：目标语言译文。
 const TRANSLATION: &str = "[translation]";
+/// NMSG section 标记：动态值绑定列表。
 const VALUES: &str = "[values]";
 
+/// NMSG 编码、解码或合并阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum I18nMessageError {
     InvalidSyntax { line: usize, message: String },
@@ -17,6 +21,7 @@ pub enum I18nMessageError {
     DuplicateValue { id: String, name: String },
 }
 
+/// 把模板编码为 `.nlang` 使用的紧凑 NMSG 块文本。
 pub(super) fn encode(template: &I18nTemplate) -> String {
     let mut output: String = String::new();
     for (index, (id, message)) in template.passages().iter().enumerate() {
@@ -46,6 +51,7 @@ pub(super) fn encode(template: &I18nTemplate) -> String {
     output
 }
 
+/// 从 NMSG 文本解码模板；`dictionary` 由调用方另行提供。
 pub(super) fn decode(
     language: &str,
     input: &str,
@@ -55,6 +61,7 @@ pub(super) fn decode(
     Ok(I18nTemplate::new(language, dictionary, passages))
 }
 
+/// 把 NMSG 中的译文合回模板；未知消息或原文被修改时整体失败。
 pub(super) fn apply(
     template: &I18nTemplate,
     input: &str,
@@ -77,6 +84,7 @@ pub(super) fn apply(
     ))
 }
 
+/// 逐条解析 NMSG 文本；只接受 LF 换行，消息之间必须保留一个空行。
 fn parse(input: &str) -> Result<BTreeMap<String, I18nTemplateMessage>, I18nMessageError> {
     if input.contains('\r') {
         return Err(syntax(1, "只接受 LF 换行"));
@@ -117,6 +125,7 @@ fn parse(input: &str) -> Result<BTreeMap<String, I18nTemplateMessage>, I18nMessa
     Ok(messages)
 }
 
+/// 写出一个 section 标记及其内容，并保证以换行结尾。
 fn write_section(output: &mut String, marker: &str, text: &str) {
     output.push_str(marker);
     output.push('\n');
@@ -126,6 +135,7 @@ fn write_section(output: &mut String, marker: &str, text: &str) {
     }
 }
 
+/// 校验下一行是否为期望的 section 标记。
 fn expect_line(lines: &[&str], index: &mut usize, expected: &str) -> Result<(), I18nMessageError> {
     if lines.get(*index) != Some(&expected) {
         return Err(syntax(*index + 1, format!("缺少 `{expected}`")));
@@ -159,6 +169,7 @@ fn collect_text(
     Ok(lines[start..end].join("\n"))
 }
 
+/// 读取 `[values]` 下的 `name = dictionary` 绑定行。
 fn collect_values(
     lines: &[&str],
     index: &mut usize,
@@ -196,6 +207,7 @@ fn collect_values(
     Ok(values)
 }
 
+/// 判断一行是否命中某个停止标记（含 `:: ` 前缀的消息头）。
 fn is_stop(line: &str, stops: &[&str]) -> bool {
     stops
         .iter()
@@ -218,6 +230,7 @@ fn validate_message_separator(lines: &[&str], index: usize) -> Result<(), I18nMe
     Ok(())
 }
 
+/// 构造 `InvalidSyntax` 错误的简写。
 fn syntax(line: usize, message: impl Into<String>) -> I18nMessageError {
     I18nMessageError::InvalidSyntax {
         line,

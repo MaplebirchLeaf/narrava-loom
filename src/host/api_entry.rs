@@ -418,6 +418,7 @@ impl HostApi {
     }
 
     // 内部入口沿用公开边界的独立生命周期回调，避免仅为计数增加一次性包装类型。
+    /// 共享的 MIR 入口：建立 Engine 请求，并把初始边界驱动到 Ready 或 Pending。
     #[allow(clippy::too_many_arguments)]
     pub(super) fn begin_mir_entry<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,

@@ -1,4 +1,7 @@
 //! Narrava Core 与 Tauri IPC 之间的最小 Host Binding。
+//!
+//! `TauriHost` 把 Core 的 Engine 事务（start/activate/input/save/语言/开发者能力）
+//! 投递给常驻 Runtime Worker 线程，并把语义 Presentation 转换为 WebView 的 JSON DTO。
 
 mod assets;
 mod config;
@@ -44,7 +47,7 @@ use narrava_loom_core::{
         MacroDefinition, MacroDefinitions, MacroHandlerOutcome, MacroInteractions,
         MacroLocalScopes, MacroLogicContext, MacroResumeOutcome, MacroSuspension,
         RuntimeMacroHandler, button_with_body, checkbox, link_with_body, parse_argument_list,
-        prepare_argument_values, radiobutton, replace, slot, text, textbox,
+        prepare_argument_values, print, radiobutton, replace, slot, textbox,
     },
     mir::MirStory,
     presentation::{
@@ -83,21 +86,26 @@ type DeveloperResult<T> = Result<T, HostErrorDto>;
 type InputResult = Result<(), HostErrorDto>;
 type CommandResult = Result<(), HostErrorDto>;
 
-/// One bounded diagnostic line exposed by the Host management panel.
+/// Host 管理面板展示的一条有界日志（只含级别与可显示消息）。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct HostLogDto {
+    /// 日志级别（如 `info`/`error`）。
     pub level: String,
+    /// 人类可读的日志消息。
     pub message: String,
 }
 
 /// IPC 边界只暴露稳定代码与可显示消息，不泄漏 Rust 错误对象。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct HostErrorDto {
+    /// 稳定的错误码（IPC 前端可据此分流）。
     pub code: String,
+    /// 可显示的中文错误消息。
     pub message: String,
 }
 
 impl HostErrorDto {
+    /// 构造带稳定错误码的 Host 错误。
     fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
             code: code.to_owned(),
@@ -105,6 +113,7 @@ impl HostErrorDto {
         }
     }
 
+    /// 从 Core 诊断构造 Host 错误。
     fn diagnostic(diagnostic: Diagnostic) -> Self {
         Self {
             code: diagnostic.code,
@@ -119,35 +128,46 @@ impl fmt::Display for HostErrorDto {
     }
 }
 
+/// Worker 线程收到的请求；除日志/语言查询外都通过一次性 channel 回传结果。
 enum WorkerRequest {
+    /// 启动游戏并渲染起始 Passage。
     Start(WorkerReply),
+    /// 按交互身份推进一次导航。
     Activate {
         interaction: String,
         reply: WorkerReply,
     },
+    /// 把输入控件值写回 State 并落盘。
     Input {
         interaction: String,
         value: serde_json::Value,
         reply: Sender<InputResult>,
     },
+    /// 执行一次存档操作（export/import）。
     Save {
         operation: String,
         target: String,
         reply: Sender<CommandResult>,
     },
+    /// 拉取当前日志快照。
     Logs(Sender<Vec<HostLogDto>>),
+    /// 拉取可用语言列表。
     Languages(Sender<Vec<String>>),
+    /// 切换运行时语言（下一次渲染生效）。
     SelectLanguage {
         locale: String,
         reply: Sender<CommandResult>,
     },
+    /// 拉取开发者模式 State 快照。
     DeveloperState(Sender<DeveloperResult<Vec<DeveloperValueDto>>>),
+    /// 按 namespace 写入一个开发者值。
     DeveloperSet {
         namespace: String,
         name: String,
         value: serde_json::Value,
         reply: Sender<DeveloperResult<()>>,
     },
+    /// 按 namespace 删除一个开发者条目。
     DeveloperDelete {
         namespace: String,
         name: String,
@@ -167,11 +187,13 @@ pub struct TauriHost {
 }
 
 impl TauriHost {
+    /// 读取配置并启动 Runtime Worker；游戏目录同时是开发目录或含 `game.nar` 的发行目录。
     pub fn spawn(game_path: &str) -> Result<Self, HostErrorDto> {
         let config = load_tauri_config(Path::new(game_path))?;
         Self::spawn_configured(game_path, config.developer())
     }
 
+    /// 按显式 developer 开关启动 Worker（供 `spawn` 与 `run` 复用）。
     fn spawn_configured(game_path: &str, developer: bool) -> Result<Self, HostErrorDto> {
         let (sender, receiver): (Sender<WorkerRequest>, Receiver<WorkerRequest>) = mpsc::channel();
         let root = Path::new(game_path);
@@ -200,6 +222,7 @@ impl TauriHost {
         })
     }
 
+    /// 启动游戏并返回起始 Passage 的语义更新。
     pub fn start(&self) -> Result<HostUpdateDto, HostErrorDto> {
         let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
         self.requests
@@ -208,6 +231,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 按交互身份推进（导航/按钮/返回等），返回渲染后的语义更新。
     pub fn activate(&self, interaction: &str) -> Result<HostUpdateDto, HostErrorDto> {
         let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
         self.requests
@@ -219,6 +243,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 把输入控件的新值写回 Worker State 并落盘。
     pub fn input(&self, interaction: String, value: serde_json::Value) -> InputResult {
         let (reply, result) = mpsc::channel();
         self.requests
@@ -231,10 +256,12 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 返回 Host 启动资产（标题、样式表、Resource 元数据）。
     pub fn assets(&self) -> HostAssetsDto {
         (*self.assets).clone()
     }
 
+    /// 执行存档操作（`export`/`import`）。
     pub fn save(&self, operation: String, target: String) -> CommandResult {
         let (reply, result) = mpsc::channel();
         self.requests
@@ -247,6 +274,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 拉取 Worker 当前日志快照。
     pub fn logs(&self) -> Result<Vec<HostLogDto>, HostErrorDto> {
         let (reply, result) = mpsc::channel();
         self.requests
@@ -255,6 +283,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())
     }
 
+    /// 拉取可用语言 locale 列表。
     pub fn languages(&self) -> Result<Vec<String>, HostErrorDto> {
         let (reply, result) = mpsc::channel();
         self.requests
@@ -263,6 +292,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())
     }
 
+    /// 切换运行时语言（下一次渲染生效）。
     pub fn select_language(&self, locale: String) -> CommandResult {
         let (reply, result) = mpsc::channel();
         self.requests
@@ -271,10 +301,12 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 当前是否启用开发者模式。
     pub fn developer(&self) -> bool {
         self.developer
     }
 
+    /// 拉取开发者模式 State 快照（需已启用开发者模式）。
     pub fn developer_state(&self) -> DeveloperResult<Vec<DeveloperValueDto>> {
         self.require_developer()?;
         let (reply, result) = mpsc::channel();
@@ -284,6 +316,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 按 namespace 写入一个开发者值（需已启用开发者模式）。
     pub fn developer_set(
         &self,
         namespace: String,
@@ -303,6 +336,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 按 namespace 删除一个开发者条目（需已启用开发者模式）。
     pub fn developer_delete(&self, namespace: String, name: String) -> DeveloperResult<()> {
         self.require_developer()?;
         let (reply, result) = mpsc::channel();
@@ -316,6 +350,7 @@ impl TauriHost {
         result.recv().map_err(|_| worker_stopped())?
     }
 
+    /// 校验开发者模式已启用；未启用时给出配置指引错误。
     fn require_developer(&self) -> DeveloperResult<()> {
         if self.developer {
             Ok(())
@@ -342,7 +377,7 @@ pub fn game_path_from_args(args: impl IntoIterator<Item = String>) -> String {
     })
 }
 
-/// 启动桌面 Host。平台窗口与 WebView 只存在于这个 crate 中。
+/// 启动共享 Tauri Host；当前仓库的可运行调用方是桌面入口。
 pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     let project_config = load_tauri_config(Path::new(game_path))?;
     let release_package = load_release_package(Path::new(game_path))?;
@@ -385,6 +420,16 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         .map_err(|error: tauri::Error| HostErrorDto::new("tauri_host.app", error.to_string()))
 }
 
+/// 供后续 Android/iOS 平台工程调用的入口；共享实现不等同于已完成移动打包。
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run_mobile() {
+    let game_path: String = game_path_from_args(std::env::args());
+    if let Err(error) = run(game_path.as_str()) {
+        panic!("{error}");
+    }
+}
+
+/// 按平台配置构建主 WebView 窗口（标题、尺寸、图标）。
 fn build_main_window(
     app: &mut tauri::App,
     game_path: &Path,
@@ -425,11 +470,13 @@ pub mod commands {
         DeveloperValueDto, HostAssetsDto, HostErrorDto, HostLogDto, HostUpdateDto, TauriHost,
     };
 
+    /// 启动游戏并返回起始 Passage 更新。
     #[tauri::command]
     pub fn start_game(host: State<'_, TauriHost>) -> Result<HostUpdateDto, HostErrorDto> {
         host.start()
     }
 
+    /// 按交互身份推进导航并返回更新。
     #[tauri::command]
     pub fn activate(
         interaction: String,
@@ -438,6 +485,7 @@ pub mod commands {
         host.activate(interaction.as_str())
     }
 
+    /// 写回输入控件值。
     #[tauri::command]
     pub fn input(
         interaction: String,
@@ -447,11 +495,13 @@ pub mod commands {
         host.input(interaction, value)
     }
 
+    /// 返回 Host 启动资产。
     #[tauri::command]
     pub fn host_assets(host: State<'_, TauriHost>) -> HostAssetsDto {
         host.assets()
     }
 
+    /// 执行存档操作（export/import）。
     #[tauri::command]
     pub fn save_game(
         operation: String,
@@ -461,26 +511,31 @@ pub mod commands {
         host.save(operation, target)
     }
 
+    /// 拉取 Worker 日志快照。
     #[tauri::command]
     pub fn host_logs(host: State<'_, TauriHost>) -> Result<Vec<HostLogDto>, HostErrorDto> {
         host.logs()
     }
 
+    /// 拉取可用语言列表。
     #[tauri::command]
     pub fn available_languages(host: State<'_, TauriHost>) -> Result<Vec<String>, HostErrorDto> {
         host.languages()
     }
 
+    /// 切换运行时语言。
     #[tauri::command]
     pub fn select_language(locale: String, host: State<'_, TauriHost>) -> Result<(), HostErrorDto> {
         host.select_language(locale)
     }
 
+    /// 查询开发者模式是否启用。
     #[tauri::command]
     pub fn developer_enabled(host: State<'_, TauriHost>) -> bool {
         host.developer()
     }
 
+    /// 拉取开发者模式 State 快照。
     #[tauri::command]
     pub fn developer_state(
         host: State<'_, TauriHost>,
@@ -488,6 +543,7 @@ pub mod commands {
         host.developer_state()
     }
 
+    /// 按 namespace 写入开发者值。
     #[tauri::command]
     pub fn developer_set(
         namespace: String,
@@ -498,6 +554,7 @@ pub mod commands {
         host.developer_set(namespace, name, value)
     }
 
+    /// 按 namespace 删除开发者条目。
     #[tauri::command]
     pub fn developer_delete(
         namespace: String,
@@ -507,6 +564,7 @@ pub mod commands {
         host.developer_delete(namespace, name)
     }
 
+    /// 开发者模式下切换 WebView 调试工具开关。
     #[tauri::command]
     pub fn toggle_devtools(
         window: tauri::WebviewWindow,
@@ -522,6 +580,7 @@ pub mod commands {
     }
 }
 
+/// Runtime Worker 主循环：装载发行包/开发源码并编译，然后逐条处理请求。
 fn run_worker(
     game_path: String,
     requests: Receiver<WorkerRequest>,
@@ -709,6 +768,8 @@ fn run_worker(
                 if let Ok(update) = &result {
                     presented = Some(update.clone());
                 }
+                // save 失败不撤销已渲染的 Presentation：把错误记入日志，保持
+                // presented 与 WebView 一致，避免后续点击报 host.unknown_interaction。
                 if result.is_ok()
                     && let Err(error) = process_save(
                         Path::new(&game_path),
@@ -718,7 +779,10 @@ fn run_worker(
                         &mut story,
                     )
                 {
-                    result = Err(error);
+                    logs.push(HostLogDto {
+                        level: String::from("error"),
+                        message: format!("{}：{}", error.code, error.message),
+                    });
                 }
                 let _sent: Result<(), _> = reply.send(result.map(|update| convert(&update)));
             }
@@ -845,6 +909,8 @@ fn run_worker(
                 if let Ok(update) = &result {
                     presented = Some(update.clone());
                 }
+                // save 失败不撤销已渲染的 Presentation：把错误记入日志，保持
+                // presented 与 WebView 一致，避免后续点击报 host.unknown_interaction。
                 if result.is_ok()
                     && let Err(error) = process_save(
                         Path::new(&game_path),
@@ -854,7 +920,10 @@ fn run_worker(
                         &mut story,
                     )
                 {
-                    result = Err(error);
+                    logs.push(HostLogDto {
+                        level: String::from("error"),
+                        message: format!("{}：{}", error.code, error.message),
+                    });
                 }
                 let _sent: Result<(), _> = reply.send(result.map(|update| convert(&update)));
             }
@@ -953,15 +1022,20 @@ fn run_worker(
                 let _sent = reply.send(available_languages.clone());
             }
             WorkerRequest::SelectLanguage { locale, reply } => {
-                let result = I18nRuntimeLanguage::select(
-                    mir.i18n(),
-                    &config.game.default_locale,
-                    &locale,
-                    language_packages.clone(),
-                )
-                .map(|selected| runtime_language = selected)
-                .map_err(|error| {
-                    HostErrorDto::new("tauri_host.language_select", error.to_string())
+                let selected: Result<Option<I18nRuntimeLanguage>, HostErrorDto> =
+                    I18nRuntimeLanguage::select(
+                        mir.i18n(),
+                        &config.game.default_locale,
+                        &locale,
+                        language_packages.clone(),
+                    )
+                    .map_err(|error| {
+                        HostErrorDto::new("tauri_host.language_select", error.to_string())
+                    });
+                let result: CommandResult = selected.and_then(|selected| {
+                    script.select_locale(&locale)?;
+                    runtime_language = selected;
+                    Ok(())
                 });
                 if result.is_ok() {
                     logs.push(HostLogDto {
@@ -1110,8 +1184,11 @@ fn append_sidebar_regions<'hir, 'source>(
     Ok(())
 }
 
-// 这些参数分别由 Engine、脚本 Worker 与当前事务持有；合并为长期上下文会扩大
-// 可变借用范围，并让 start/activate 两条路径更难复用。
+/// 驱动 Engine 直到产出 Ready 更新；遇到 Pending 时执行挂起的脚本操作
+/// （如 `Host.delay`）后再恢复，循环直到拿到可展示的更新。
+///
+/// 这些参数分别由 Engine、脚本 Worker 与当前事务持有；合并为长期上下文会扩大
+/// 可变借用范围，并让 start/activate 两条路径更难复用。
 #[allow(clippy::too_many_arguments)]
 fn finish_drive<'hir, 'source>(
     mut result: Result<HostDriveResult, HostErrorDto>,
@@ -1191,6 +1268,7 @@ fn finish_drive<'hir, 'source>(
     }
 }
 
+/// Worker 初始化失败后对所有请求统一回错误，避免请求方在 channel 上永久阻塞。
 fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message: String) {
     for request in requests {
         let reply: WorkerReply = match request {
@@ -1226,10 +1304,12 @@ fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message: String) {
     }
 }
 
+/// 构造统一的“Worker 已停止”错误（channel 发送失败时使用）。
 fn worker_stopped() -> HostErrorDto {
     HostErrorDto::new("tauri_host.worker_stopped", "Narrava Runtime Worker 已停止")
 }
 
+/// 把 Input 的 JSON 值转换为 Core PresentationValue（非有限数拒绝）。
 fn json_to_presentation_value(
     value: &serde_json::Value,
 ) -> Result<PresentationValue, HostErrorDto> {
@@ -1255,6 +1335,7 @@ fn json_to_presentation_value(
     }
 }
 
+/// 单次 Engine 事务的执行上限（passages 与 includes 嵌套深度）。
 fn limits() -> EngineExecutionLimits {
     EngineExecutionLimits {
         passages: 8,
@@ -1262,8 +1343,11 @@ fn limits() -> EngineExecutionLimits {
     }
 }
 
-// Macro 回调是 Core 与 Host 的窄适配边界。参数刻意保持显式，避免把短生命周期的
-// State、Story 请求和局部作用域藏进可跨暂停点保存的对象。
+/// 把 Engine 的 Macro 调用分发给内置宏（print/replace/slot/checkbox/radiobutton/textbox/
+/// link/button）与脚本宏；脚本宏可能返回 Pending 挂起点等待 Host 操作。
+///
+/// Macro 回调是 Core 与 Host 的窄适配边界。参数刻意保持显式，避免把短生命周期的
+/// State、Story 请求和局部作用域藏进可跨暂停点保存的对象。
 #[allow(clippy::too_many_arguments)]
 fn dispatch_macro<'hir, 'source>(
     script: &script_runtime::EcmaBinding,
@@ -1289,9 +1373,9 @@ fn dispatch_macro<'hir, 'source>(
             });
         }
     };
-    if call.name == "text" {
+    if call.name == "print" {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("text 参数无效：{error:?}"),
+            error: format!("print 参数无效：{error:?}"),
             scopes: scopes.clone(),
         })?;
         let arguments: Vec<Value> = {
@@ -1300,11 +1384,11 @@ fn dispatch_macro<'hir, 'source>(
                 evaluate_with_mut(expression, &mut context)
             })
             .map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("text 参数无法求值：{error:?}"),
+                error: format!("print 参数无法求值：{error:?}"),
                 scopes: scopes.clone(),
             })?
         };
-        let execution = text(&arguments).map_err(|error| EngineMirMacroCallbackFailure {
+        let execution = print(&arguments).map_err(|error| EngineMirMacroCallbackFailure {
             error: error.to_string(),
             scopes: scopes.clone(),
         })?;
@@ -1599,6 +1683,7 @@ fn dispatch_macro<'hir, 'source>(
     })
 }
 
+/// 从 HIR 找回与运行期调用等价的宏定义（其容器正文用于 replace/slot/link/button）。
 fn find_hir_macro<'hir, 'source>(
     story: &'hir HirStory<'source>,
     owned: &OwnedHirMacro,
@@ -1609,6 +1694,7 @@ fn find_hir_macro<'hir, 'source>(
         .find_map(|passage| find_hir_macro_in_body(&passage.body, owned))
 }
 
+/// 在正文树中递归按身份匹配宏定义。
 fn find_hir_macro_in_body<'hir, 'source>(
     body: &'hir [HirBodyNode<'source>],
     owned: &OwnedHirMacro,
@@ -1645,6 +1731,7 @@ fn find_hir_macro_in_body<'hir, 'source>(
     })
 }
 
+/// 把脚本宏返回的 Core 值转成 Presentation 输出执行；无 Presentation 时退化为纯文本。
 fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
     let output: PresentationOutput = match presentation_bridge::output(value)? {
         Some(output) => output,
@@ -1676,6 +1763,7 @@ mod release_tests {
     use super::{HostNodeDto, HostUpdateDto, TauriHost};
     use crate::save_io::save_file_name;
 
+    /// 脚本宏 `Host.delay` 会挂起 Engine 事务，Host 睡满后恢复并继续渲染。
     #[test]
     fn host_delay_suspends_and_resumes_the_engine_transaction() {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -1712,6 +1800,7 @@ mod release_tests {
         fs::remove_dir_all(root_path).unwrap();
     }
 
+    /// 示例项目经 Host 全流程后，语义节点（region/image/component/replace/表单）到达 DTO。
     #[test]
     fn example_presentation_builder_reaches_tauri_semantic_dtos() {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -1897,6 +1986,271 @@ mod release_tests {
         fs::remove_dir_all(root_path).unwrap();
     }
 
+    /// 作者能力（存档/读档/日志/语言）与 print Macro 的 tone/style/delay 语义到达 DTO。
+    #[test]
+    fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = format!(
+            "target/test-projects/author-tools-example-{}",
+            std::process::id()
+        );
+        let root_path = Path::new(&root);
+        if root_path.exists() {
+            fs::remove_dir_all(root_path).unwrap();
+        }
+        for directory in [
+            "contents/scripts",
+            "contents/story",
+            "languages/en",
+            "resources/data",
+            "resources/images",
+            "save",
+        ] {
+            fs::create_dir_all(root_path.join(directory)).unwrap();
+        }
+        for file in [
+            "config.toml",
+            "contents/scripts/main.ts",
+            "contents/story/main.twee",
+            "contents/story/widgets.twee",
+            "languages/en/dictionary.json",
+            "languages/en/manifest.json",
+            "languages/en/translations.nmsg",
+            "resources/data/guide.txt",
+            "resources/images/loom.svg",
+        ] {
+            fs::copy(repository.join("examples").join(file), root_path.join(file)).unwrap();
+        }
+        let host = TauriHost::spawn(&root).unwrap();
+        assert!(
+            host.languages().unwrap().contains(&String::from("en")),
+            "开发目录中的解包语言应作为可导入语言加载"
+        );
+        host.select_language(String::from("en"))
+            .expect("示例解包语言应能被实际选择");
+        let start = host.start().unwrap();
+        assert!(start.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("Welcome")
+        )));
+        let hall_id = start
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+                _ => None,
+            })
+            .unwrap();
+        let hall = host.activate(hall_id).unwrap();
+
+        // 作者能力演示页：存档/读档/日志/语言，随后返回大厅
+        let author_tools_id = hall
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "AuthorToolsGallery" => {
+                    Some(id)
+                }
+                _ => None,
+            })
+            .expect("大厅应提供作者能力演示入口");
+        let author_tools = host.activate(author_tools_id).unwrap();
+        assert!(author_tools.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("已请求导出存档")
+        )));
+        assert!(author_tools.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("当前生效：en")
+        )));
+        assert!(author_tools.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("I18n 模板已导出")
+        )));
+        // 两个返回大厅的按钮：正文执行 loadGame 后导航，存档槽位来自本次进入时的导出
+        let buttons: Vec<String> = author_tools
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                HostNodeDto::Button { id, target, .. } if target == "Hall" => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(buttons.len(), 2, "作者能力演示页应有读档与幽灵槽两个按钮");
+        let hall = host.activate(buttons[0].as_str()).unwrap();
+        assert_eq!(hall.current, "Hall");
+        // 再次进入，点击“读取不存在的槽位”：save 失败只记日志，导航与 presented 不受影响
+        let author_tools_again = hall
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "AuthorToolsGallery" => {
+                    Some(id)
+                }
+                _ => None,
+            })
+            .expect("大厅应再次提供作者能力演示入口");
+        let author_tools = host.activate(author_tools_again).unwrap();
+        let hall = host
+            .activate(
+                author_tools
+                    .nodes
+                    .iter()
+                    .filter_map(|node| match node {
+                        HostNodeDto::Button { id, target, .. } if target == "Hall" => Some(id),
+                        _ => None,
+                    })
+                    .nth(1)
+                    .expect("作者能力演示页应提供读取不存在槽位的按钮"),
+            )
+            .expect("save 失败不应阻塞导航");
+        assert_eq!(hall.current, "Hall");
+
+        // Twee 内 Presentation：print Macro 的 tone/style 组合与对象形式
+        let text_gallery_id = hall
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "TextGallery" => Some(id),
+                _ => None,
+            })
+            .expect("大厅应提供 print 演示入口");
+        let text_gallery = host.activate(text_gallery_id).unwrap();
+        assert!(text_gallery.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::StyledText { text, tone, styles, .. }
+                if text.contains("正面加粗") && *tone == 32 && styles.contains(&"strong")
+        )));
+        assert!(text_gallery.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::StyledText { text, tone, styles, .. }
+                if text.contains("警告对象形式") && *tone == 24 && styles.contains(&"code")
+        )));
+        assert!(text_gallery.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::StyledText { text, delay: Some(2000), .. } if text.contains("两秒后出现的文字")
+        )));
+        assert!(text_gallery.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::StyledText { text, tone, .. } if text.contains("63") && *tone == 63
+        )));
+
+        // 弹窗页签：dialog 区域按结构性标题（heading: 2）划分页面
+        let back_to_hall: String = text_gallery
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id.clone()),
+                _ => None,
+            })
+            .expect("TextGallery 应能返回大厅");
+        let hall = host.activate(back_to_hall.as_str()).unwrap();
+        let dialog_gallery_id = hall
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "DialogGallery" => Some(id),
+                _ => None,
+            })
+            .expect("大厅应提供弹窗演示入口");
+        let dialog_gallery = host.activate(dialog_gallery_id).unwrap();
+        fn collect_styled<'a>(nodes: &'a [HostNodeDto], out: &mut Vec<&'a HostNodeDto>) {
+            for node in nodes {
+                if matches!(node, HostNodeDto::StyledText { .. }) {
+                    out.push(node);
+                }
+                match node {
+                    HostNodeDto::Region {
+                        nodes: children, ..
+                    }
+                    | HostNodeDto::Container {
+                        nodes: children, ..
+                    }
+                    | HostNodeDto::Replace {
+                        nodes: children, ..
+                    } => collect_styled(children, out),
+                    HostNodeDto::Component { fallback, .. } => collect_styled(fallback, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut styled: Vec<&HostNodeDto> = Vec::new();
+        collect_styled(&dialog_gallery.nodes, &mut styled);
+        let headings: Vec<&HostNodeDto> = styled
+            .iter()
+            .copied()
+            .filter(|node| {
+                matches!(
+                    node,
+                    HostNodeDto::StyledText {
+                        heading: Some(2),
+                        ..
+                    }
+                )
+            })
+            .collect();
+        assert_eq!(headings.len(), 2, "Dialog 应由两个结构性标题划分两页");
+        assert!(headings.iter().any(|node| matches!(
+            node,
+            HostNodeDto::StyledText { text, .. } if text.contains("第一页")
+        )));
+        assert!(headings.iter().any(|node| matches!(
+            node,
+            HostNodeDto::StyledText { text, .. } if text.contains("第二页")
+        )));
+        let hall = host
+            .activate(
+                dialog_gallery
+                    .nodes
+                    .iter()
+                    .find_map(|node| match node {
+                        HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+                        _ => None,
+                    })
+                    .expect("DialogGallery 应能返回大厅"),
+            )
+            .unwrap();
+
+        // 控制流范本：switch / for / while 的真实运行时输出（返回大厅后进入）
+        let macro_gallery_id = hall
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation { id, target, .. } if target == "MacroGallery" => Some(id),
+                _ => None,
+            })
+            .expect("大厅应提供控制流范本入口");
+        let macro_gallery = host.activate(macro_gallery_id).unwrap();
+        let rendered: String = macro_gallery
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                HostNodeDto::Text { text, .. } | HostNodeDto::StyledText { text, .. } => {
+                    Some(text.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        assert!(rendered.contains("下雨"), "switch 应命中 rain 分支");
+        assert!(rendered.contains("钥匙"), "for-of 应遍历集合值");
+        assert!(rendered.contains("火把"), "for-of 应遍历集合值");
+        assert!(rendered.contains("地图"), "for-of 应遍历集合值");
+        assert!(rendered.contains("1"), "while 应输出 1");
+        assert!(
+            rendered.contains("3"),
+            "while 应输出 3（2 被 continue 跳过）"
+        );
+        assert!(!rendered.contains("4"), "while 应在 4 前 break");
+        assert!(
+            rendered.contains("被 include 的提示正文"),
+            "include 应原地执行另一 Passage 并渲染其正文"
+        );
+        assert!(rendered.contains("false"), "unset 后 defined() 应为 false");
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    /// 仅凭 `game.nar` 发行包即可启动，且不注入开发期 Host 面板。
     #[test]
     fn packaged_game_starts_without_development_sources() {
         let root = format!("target/test-projects/packaged-host-{}", std::process::id());
@@ -1961,6 +2315,7 @@ mod release_tests {
         fs::remove_dir_all(project_path).unwrap();
     }
 
+    /// 存档槽位名被限制为安全文件名，不能逃逸存档目录。
     #[test]
     fn save_slot_name_cannot_escape_save_directory() {
         assert_eq!(save_file_name("quick-1").unwrap(), "quick-1.nsave");
@@ -1968,6 +2323,7 @@ mod release_tests {
         assert!(save_file_name("").is_err());
     }
 
+    /// 活动弹窗页签的焦点提示只在左/上/右描边，避免底部重画分隔线。
     #[test]
     fn active_dialog_tab_focus_does_not_draw_a_bottom_separator() {
         let css: &str = include_str!("../frontend/main.css");
@@ -1989,6 +2345,7 @@ mod release_tests {
         );
     }
 
+    /// 弹窗在侧栏之外的剩余空间水平居中，且 Bar 收起状态由作者控制。
     #[test]
     fn dialog_centers_in_the_space_outside_the_sidebar() {
         let css: &str = include_str!("../frontend/main.css");
@@ -2001,6 +2358,7 @@ mod release_tests {
         assert!(javascript.contains("story.classList.toggle(\"bar-stowed\", stowed)"));
     }
 
+    /// 弹窗内容不含 Host 自有的存档/语言/日志面板。
     #[test]
     fn dialog_content_has_no_host_owned_save_language_or_log_panels() {
         let html: &str = include_str!("../frontend/index.html");
@@ -2013,6 +2371,7 @@ mod release_tests {
         assert!(!javascript.contains("buildLogsPanel"));
     }
 
+    /// Bar 与弹窗内容全部由作者定义，Host 不注入自己的面板。
     #[test]
     fn bar_and_dialog_content_are_entirely_author_owned() {
         let html: &str = include_str!("../frontend/index.html");
@@ -2026,6 +2385,7 @@ mod release_tests {
         assert!(!script.contains("narrava.host-tools"));
     }
 
+    /// 侧栏身份与 Bar/BarStowed 两种内容状态均由作者定义。
     #[test]
     fn sidebar_identity_and_both_content_states_belong_to_the_author() {
         let html: &str = include_str!("../frontend/index.html");
@@ -2044,6 +2404,7 @@ mod release_tests {
         assert!(story.contains(":: BarStowed\n<<barStowedDemo>>"));
     }
 
+    /// 运行时状态放在 Passage Footer 而非侧栏。
     #[test]
     fn runtime_status_is_in_the_passage_footer_instead_of_the_sidebar() {
         let html: &str = include_str!("../frontend/index.html");
@@ -2067,6 +2428,30 @@ mod release_tests {
         assert!(footer.contains("正在连接 Runtime…"));
     }
 
+    /// 表单控件提交是局部交互，不应冻结整个 Story 或显示全局保存提示。
+    #[test]
+    fn form_changes_do_not_show_a_global_saving_state() {
+        let javascript: &str = include_str!("../frontend/main.js");
+
+        assert!(!javascript.contains("正在保存输入…"));
+        assert!(!javascript.contains("setBusy(true, \"正在保存输入"));
+    }
+
+    /// 共享实现保留移动入口和触屏布局，平台工程与真机验收另行完成。
+    #[test]
+    fn tauri_host_keeps_mobile_entry_and_touch_layout() {
+        let source: &str = include_str!("lib.rs")
+            .split_once("#[cfg(test)]")
+            .expect("测试模块前应是生产源码")
+            .0;
+        let css: &str = include_str!("../frontend/main.css");
+
+        assert!(source.contains("cfg_attr(mobile, tauri::mobile_entry_point)"));
+        assert!(css.contains("@media (pointer: coarse)"));
+        assert!(css.contains("env(safe-area-inset-top)"));
+    }
+
+    /// 键盘焦点使用细中性描边而非粗蓝框。
     #[test]
     fn keyboard_focus_is_thin_and_neutral_instead_of_a_thick_blue_frame() {
         let css: &str = include_str!("../frontend/main.css");
@@ -2074,5 +2459,22 @@ mod release_tests {
         assert!(css.contains("--narrava-focus: rgb(221 221 221 / 60%);"));
         assert!(css.contains("box-shadow: inset 0 0 0 1px var(--narrava-focus);"));
         assert!(!css.contains("0 0 0 0.25rem var(--narrava-focus)"));
+    }
+
+    /// Host 默认主题覆盖全部语义字形，作者无需为基本可读性另写 CSS。
+    #[test]
+    fn host_theme_styles_every_presentation_text_semantic() {
+        let css: &str = include_str!("../frontend/main.css");
+
+        for style in [
+            "emphasis", "strong", "code", "quote", "marked", "small", "inserted", "deleted",
+        ] {
+            assert!(
+                css.contains(&format!(".presentation-text.text-{style}")),
+                "默认主题缺少 {style} 语义字形"
+            );
+        }
+        assert!(css.contains("color: var(--narrava-tone, var(--narrava-positive));"));
+        assert!(css.contains("color: var(--narrava-tone, var(--narrava-negative));"));
     }
 }

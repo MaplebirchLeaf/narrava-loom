@@ -2,9 +2,9 @@
 
 ## 测试边界
 
-Tauri Host 分为两层：Rust Worker 编译并执行游戏，WebView 只把 DTO 渲染为 DOM 并回传交互。
-因此开发测试也分为三类：不打开窗口的 Rust 测试、前端静态检查，以及真实 Tauri 窗口验收。
-只有三类都通过，才能说明桌面 Host 的修改已经闭合。
+Tauri Host 分为 Rust Worker 与 Renderer。自动测试覆盖共享实现，真实桌面窗口负责视觉和系统
+交互验收。Android/iOS 平台工程尚未初始化，因此本页的运行与发行步骤都是桌面命令；移动端
+只能复用已测试的共享层，不能据此宣称完成。
 
 `tauri.conf.json` 中出现的 `ipc.localhost` 与 `narrava-resource.localhost` 是 Tauri 内部 IPC／自定义
 协议的 CSP 来源，不是需要作者启动的开发服务器，也不会把游戏暴露到外部网络。
@@ -30,27 +30,21 @@ cargo test --locked -p narrava-loom-tauri protocol_reads_only_the_requested_vali
 这些测试分别覆盖 Pending／Resume、Script Presentation 到 DTO、发行包启动、打包 CSS 恢复和
 Resource 自定义协议。它们不会验证 WebKit 实际像素布局。
 
-Rust 静态检查：
-
-```bash
-cargo clippy --locked -p narrava-loom-tauri --all-targets -- -D warnings
-cargo fmt --all -- --check
-```
+Rust 静态检查和全仓库门禁见[仓库命令](commands.md)。
 
 ## 2. WebView Renderer 静态检查
 
-前端没有独立打包器，源码直接位于 `hosts/narrava-loom-tauri/frontend/`。修改 `main.js` 后至少运行：
+前端源码位于 `hosts/narrava-loom-tauri/frontend/`。修改后运行：
 
 ```bash
-node --check hosts/narrava-loom-tauri/frontend/main.js
+bun run check
 ```
 
-同时检查以下安全边界：
+重点检查：
 
-- 游戏文本只通过 `textContent` 写入，不使用游戏数据拼接 `innerHTML`；
 - 交互只回传 DTO 中的不透明 ID；
 - Resource URL 只由已验证清单生成；
-- 作者 CSS 在 Host 默认 CSS 后加载，但不能执行脚本；
+- 作者 CSS 在 Host 默认 CSS 后加载；
 - `window.narrava` 只在 `developer = true` 时公开。
 
 ## 3. 真实窗口开发验收
@@ -70,11 +64,9 @@ cargo run --locked -p narrava-loom-tauri -- examples
 4. Checkbox 可切换，同组 Radio 互斥，Textbox 修改后能写回 State；
 5. `replace` 能更新固定区域，页面中不出现原始控制节点；“查看内容替换”还应只显示
    `status-panel` 的替换后内容；
-6. `:: Bar` 中的 `<<barDemo>>` 显示完整侧栏和管理入口，`:: BarStowed` 显示窄栏摘要；“存档”能在 `examples/save/` 写入并读取命名
-   `.nsave`；删除该 Bar 内容后，Host 不得自行注入存档、语言或日志按钮；
-7. “语言”列出已安装 `.nlang`，切换后在下一次渲染生效；
-8. “日志”能显示 Host 成功或错误记录；
-9. 作者主题与 `resource("images/loom.svg")` 在开发目录中正常解析。
+6. `:: Bar` 与 `:: BarStowed` 分别提供展开和收起内容，Host 不注入管理面板；
+7. 作者能力页能导出／导入 Save，导出 I18n 模板，并加载 `languages/en/`；
+8. Resource 图片、默认主题和窄屏布局正常。
 
 示例启用了开发者模式。按 F12 后可用：
 
@@ -85,7 +77,7 @@ window.narrava.current()
 window.narrava.help()
 ```
 
-F12 与 `window.narrava` 只是调试入口；游戏脚本仍在 Rust Worker 中，不能访问 `window` 或 DOM。
+F12 与 `window.narrava` 只是 Renderer 调试入口，不属于游戏脚本 API。
 
 ## 4. 发行目录回归
 
@@ -102,15 +94,7 @@ cargo run --release --locked -p narrava-loom-core -- \
 
 ## 5. 提交前总门禁
 
-Host 改动最终仍需通过整个工作区：
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --all-targets --locked
-cargo doc --workspace --no-deps --locked
-node --check hosts/narrava-loom-tauri/frontend/main.js
-```
+按[仓库命令](commands.md)运行 Rust 全工作区门禁和 `bun run check`。
 
 自动测试通过但没有启动真实窗口时，应明确写“自动测试通过，桌面视觉尚未验收”，不能把它描述
 成完整 Tauri UI 验证。

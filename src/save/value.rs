@@ -8,6 +8,7 @@ use crate::expression::value::{ArrayValue, ObjectValue, TextValue, Value};
 
 use super::SaveError;
 
+/// 序列化形态的 Value 图：根变量表加上共享节点表，节点间以数字 ID 引用，保留运行期的共享结构。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SaveValueGraph {
@@ -15,6 +16,7 @@ pub(super) struct SaveValueGraph {
     nodes: BTreeMap<u64, SaveNode>,
 }
 
+/// 单个可保存值的标签化序列化形态。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 enum SaveValue {
@@ -27,6 +29,7 @@ enum SaveValue {
     Object(u64),
 }
 
+/// 共享 Array/Object 节点在序列化形态中的内容。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 enum SaveNode {
@@ -34,12 +37,14 @@ enum SaveNode {
     Object(Vec<(String, SaveValue)>),
 }
 
+/// 运行期 Array/Object 身份，编码时用来识别共享引用。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum RuntimeIdentity {
     Array(usize),
     Object(usize),
 }
 
+/// 单趟编码器：为每个首次遇到的共享容器分配节点 ID。
 struct Encoder {
     next_id: u64,
     identities: HashMap<RuntimeIdentity, u64>,
@@ -47,6 +52,7 @@ struct Encoder {
 }
 
 impl SaveValueGraph {
+    /// 把 `$variables` 根表编码为可序列化图；遇到不可保存值返回 `UnsupportedValue`。
     pub(super) fn encode(roots: &BTreeMap<String, Value>) -> Result<Self, SaveError> {
         let mut encoder: Encoder = Encoder {
             next_id: 1,
@@ -64,6 +70,7 @@ impl SaveValueGraph {
         })
     }
 
+    /// 解码回运行期 Value 图；引用悬空、类型不一致或 ID 为 0 时返回 `InvalidValueGraph`。
     pub(super) fn decode(&self) -> Result<BTreeMap<String, Value>, SaveError> {
         let mut runtime_nodes: BTreeMap<u64, Value> = BTreeMap::new();
         for (id, node) in &self.nodes {
@@ -115,6 +122,7 @@ impl SaveValueGraph {
 }
 
 impl Encoder {
+    /// 编码单个值；`path` 只用于错误报告。
     fn encode_value(&mut self, value: &Value, path: &str) -> Result<SaveValue, SaveError> {
         match value {
             Value::Undefined => Ok(SaveValue::Undefined),
@@ -132,6 +140,7 @@ impl Encoder {
         }
     }
 
+    /// 编码共享数组：首次遇到时分配节点，之后复用节点引用。
     fn encode_array(&mut self, array: &ArrayValue, path: &str) -> Result<SaveValue, SaveError> {
         let identity: RuntimeIdentity = RuntimeIdentity::Array(array.identity());
         if let Some(id) = self.identities.get(&identity) {
@@ -150,6 +159,7 @@ impl Encoder {
         Ok(SaveValue::Array(id))
     }
 
+    /// 编码共享对象：首次遇到时分配节点，之后复用节点引用。
     fn encode_object(&mut self, object: &ObjectValue, path: &str) -> Result<SaveValue, SaveError> {
         let identity: RuntimeIdentity = RuntimeIdentity::Object(object.identity());
         if let Some(id) = self.identities.get(&identity) {
@@ -170,6 +180,7 @@ impl Encoder {
         Ok(SaveValue::Object(id))
     }
 
+    /// 为首次遇到的容器分配节点 ID，并登记身份映射。
     fn allocate(&mut self, identity: RuntimeIdentity) -> Result<u64, SaveError> {
         let id: u64 = self.next_id;
         self.next_id = self
@@ -181,6 +192,7 @@ impl Encoder {
     }
 }
 
+/// 把单个 SaveValue 解码回运行期值；容器引用从已构建的节点表解析。
 fn decode_value(value: &SaveValue, nodes: &BTreeMap<u64, Value>) -> Result<Value, SaveError> {
     match value {
         SaveValue::Undefined => Ok(Value::Undefined),
@@ -201,6 +213,7 @@ fn decode_value(value: &SaveValue, nodes: &BTreeMap<u64, Value>) -> Result<Value
     }
 }
 
+/// 构造 `InvalidValueGraph` 错误的简写。
 fn invalid(message: &str) -> SaveError {
     SaveError::InvalidValueGraph {
         message: message.to_owned(),

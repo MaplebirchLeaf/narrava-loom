@@ -16,7 +16,7 @@ use super::{
     UpdatePosition, lex,
 };
 
-/// 最小 Parser 的错误；结构化解析将在后续逐项扩展。
+/// Parser 层的错误集合；除空表达式外都携带出错位置，供嵌入方映射到 Source。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Lex(LexError),

@@ -9,8 +9,11 @@ use super::{
     NlangManifestError, NlangValidatedManifest, message,
 };
 
+/// `.nlang` 内的 manifest 文件名。
 const MANIFEST_PATH: &str = "manifest.json";
+/// `.nlang` 内的译文文件名。
 const TRANSLATIONS_PATH: &str = "translations.nmsg";
+/// `.nlang` 内的动态字典文件名。
 const DICTIONARY_PATH: &str = "dictionary.json";
 
 /// 已由 Binding 解压、但尚未信任的单个文件。
@@ -21,6 +24,7 @@ pub struct NlangPackageEntry {
 }
 
 impl NlangPackageEntry {
+    /// 用包内路径与原始字节直接构造条目。
     pub fn new(path: impl Into<String>, bytes: impl Into<Vec<u8>>) -> Self {
         Self {
             path: path.into(),
@@ -28,10 +32,12 @@ impl NlangPackageEntry {
         }
     }
 
+    /// 包内相对路径。
     pub fn path(&self) -> &str {
         &self.path
     }
 
+    /// 文件的原始内容。
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
@@ -51,6 +57,7 @@ pub struct NlangPackageOutput {
 }
 
 impl NlangPackageOutput {
+    /// 由 manifest 与译文生成确定性的 `.nlang` 文件清单。
     pub fn build(
         manifest: &NlangManifest,
         translation: &I18nTemplate,
@@ -92,19 +99,23 @@ impl NlangPackageOutput {
         })
     }
 
+    /// 建议的落盘文件名，如 `zh-Hans.nlang`。
     pub fn file_name(&self) -> String {
         format!("{}.nlang", self.locale)
     }
 
+    /// 只读访问生成的文件清单。
     pub fn entries(&self) -> &[NlangPackageEntry] {
         &self.entries
     }
 
+    /// 消耗输出，取得生成的文件清单。
     pub fn into_entries(self) -> Vec<NlangPackageEntry> {
         self.entries
     }
 }
 
+/// `.nlang` 输出生成阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NlangPackageOutputError {
     LocaleMismatch {
@@ -132,6 +143,7 @@ impl fmt::Display for NlangPackageOutputError {
 impl std::error::Error for NlangPackageOutputError {}
 
 impl NlangPackageInput {
+    /// 用解压得到的文件清单建立输入。
     pub fn new(entries: Vec<NlangPackageEntry>) -> Self {
         Self { entries }
     }
@@ -203,19 +215,23 @@ pub struct NlangValidatedPackage {
 }
 
 impl NlangValidatedPackage {
+    /// 已通过安装校验的 manifest。
     pub fn manifest(&self) -> &NlangValidatedManifest {
         &self.manifest
     }
 
+    /// 包内携带的译文模板。
     pub fn translation(&self) -> &I18nTemplate {
         &self.translation
     }
 
+    /// 按路径读取包内任意原始文件。
     pub fn file(&self, path: &str) -> Option<&[u8]> {
         self.files.get(path).map(Vec::as_slice)
     }
 }
 
+/// 语言包验证阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NlangPackageError {
     InvalidPath { path: String },
@@ -229,6 +245,7 @@ pub enum NlangPackageError {
     Install(NlangInstallError),
 }
 
+/// 读取必需文件；缺失时返回 `MissingFile`。
 fn required_file<'a>(
     files: &'a BTreeMap<String, Vec<u8>>,
     path: &str,
@@ -241,6 +258,7 @@ fn required_file<'a>(
         })
 }
 
+/// 路径必须为规范化相对路径：无前缀斜杠、无空段、无 `..` 与平台分隔符。
 fn is_normalized_package_path(path: &str) -> bool {
     !path.is_empty()
         && !path.starts_with('/')
@@ -252,6 +270,7 @@ fn is_normalized_package_path(path: &str) -> bool {
             .all(|segment: &str| !segment.is_empty() && segment != "." && segment != "..")
 }
 
+/// 只允许三个固定文件与 `resources/*.nres`。
 fn is_allowed_package_path(path: &str) -> bool {
     matches!(path, MANIFEST_PATH | TRANSLATIONS_PATH | DICTIONARY_PATH)
         || (path.starts_with("resources/") && path.ends_with(".nres"))

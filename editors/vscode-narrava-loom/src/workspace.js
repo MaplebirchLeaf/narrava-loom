@@ -1,5 +1,8 @@
 "use strict"
 
+// 工作区索引：扫描 *.twee / *.ts / *.js 收集宏、Passage 与函数定义，
+// 并为 Twee 文档产出诊断（未定义宏、缺失 Passage、特殊 Passage 带 Tag、闭合不匹配）。
+
 const vscode = require("vscode")
 const {
   BUILTIN_MACROS,
@@ -12,6 +15,7 @@ const {
   taggedSpecialPassages,
 } = require("./catalog")
 
+/** 工作区级目录：持有全部定义索引与诊断集合，供各 Provider 共享。 */
 class MacroWorkspace {
   constructor() {
     this.definitions = []
@@ -23,6 +27,7 @@ class MacroWorkspace {
     this.diagnostics = vscode.languages.createDiagnosticCollection("narrava-twee")
   }
 
+  /** 重新扫描整个工作区：重建定义索引与 known/kinds，并重新校验已打开的文档。 */
   async refresh() {
     const files = await vscode.workspace.findFiles(
       "**/*.{twee,ts,js}",
@@ -52,6 +57,7 @@ class MacroWorkspace {
     this.emitter.fire()
   }
 
+  /** 校验单个 Twee 文档：未定义宏、缺失 Passage、特殊 Passage 带 Tag、宏闭合不匹配。 */
   validate(document) {
     if (document.languageId !== "narrava-twee") return
     const twee = scanTwee(document.getText())
@@ -146,6 +152,7 @@ class MacroWorkspace {
     this.diagnostics.set(document.uri, errors)
   }
 
+  /** 按调用位置构造一条带稳定 code/source 的诊断。 */
   bodyDiagnostic(document, call, message, code) {
     const range = new vscode.Range(
       document.positionAt(call.start),
@@ -157,6 +164,7 @@ class MacroWorkspace {
     return diagnostic
   }
 
+  /** 释放诊断集合与事件发射器。 */
   dispose() {
     this.diagnostics.dispose()
     this.emitter.dispose()

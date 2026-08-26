@@ -95,12 +95,14 @@ impl SaveDocument {
         })
     }
 
+    /// 序列化为带缩进的 JSON 字符串。
     pub fn to_json(&self) -> Result<String, SaveError> {
         serde_json::to_string_pretty(self).map_err(|error: serde_json::Error| SaveError::Encode {
             message: error.to_string(),
         })
     }
 
+    /// 从 JSON 字符串解码；结构或内容无效时返回 `SaveError::Decode`。
     pub fn from_json(json: &str) -> Result<Self, SaveError> {
         serde_json::from_str(json).map_err(|error: serde_json::Error| SaveError::Decode {
             message: error.to_string(),
@@ -131,6 +133,7 @@ impl SaveDocument {
         Ok(())
     }
 
+    /// 校验存档的游戏标识（id 与版本）与当前启动环境一致。
     fn validate_game(&self, game: &GameIdentity) -> Result<(), SaveError> {
         let actual: String = format!("{}@{}", game.id(), game.version());
         let expected: String = format!("{}@{}", self.game.id, self.game.version);
@@ -140,6 +143,7 @@ impl SaveDocument {
         Ok(())
     }
 
+    /// 校验 history 与 position 一致，且所有历史 Passage 当前仍存在。
     fn validate_story(&self, story: &Story<'_, '_>) -> Result<(), SaveError> {
         match (self.story.history.is_empty(), self.story.position) {
             (true, None) => {}
@@ -162,6 +166,7 @@ impl SaveDocument {
         Ok(())
     }
 
+    /// 用存档历史重建 Story 时间线，并把游标移回存档时的位置。
     fn restore_story(&self, story: &mut Story<'_, '_>) -> Result<(), SaveError> {
         let _removed: usize = story.reset();
         for entry in &self.story.history {

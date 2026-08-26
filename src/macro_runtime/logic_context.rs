@@ -17,8 +17,11 @@ use super::{
 pub trait MacroStoryAccess {
     type Error;
 
+    /// 判断指定名称的 Passage 是否存在。
     fn has(&self, name: &str) -> bool;
+    /// 请求在当前执行位置包含目标 Passage 正文。
     fn include(&mut self, name: &str) -> Result<(), Self::Error>;
+    /// 请求导航到目标 Passage 并停止当前正文。
     fn goto(&mut self, name: &str) -> Result<(), Self::Error>;
 }
 
@@ -37,6 +40,7 @@ impl<'a, Story> MacroLogicContext<'a, Story>
 where
     Story: MacroStoryAccess + ?Sized,
 {
+    /// 组合借用 State、Story 与当前 Macro Local 链，不取得任何所有权。
     pub fn new(
         state: &'a mut dyn WritableEvaluationContext,
         story: &'a mut Story,
@@ -53,22 +57,27 @@ where
         }
     }
 
+    /// 只读访问 State。
     pub fn state(&self) -> &dyn WritableEvaluationContext {
         self.state
     }
 
+    /// 可写访问 State。
     pub fn state_mut(&mut self) -> &mut dyn WritableEvaluationContext {
         self.state
     }
 
+    /// 只读访问 Story。
     pub fn story(&self) -> &Story {
         self.story
     }
 
+    /// 可写访问 Story。
     pub fn story_mut(&mut self) -> &mut Story {
         self.story
     }
 
+    /// 读取 `@` 局部变量；`args` 返回当前调用帧的只读快照。
     pub fn local(&self, name: &str) -> Option<&Value> {
         match name {
             "args" => self.args.as_ref(),
@@ -145,6 +154,14 @@ where
 
     fn authorize_reference_write(&mut self) -> Result<(), ContextWriteError> {
         self.state.authorize_reference_write()
+    }
+
+    fn call_script(
+        &mut self,
+        callable: &crate::expression::value::ScriptCallable,
+        arguments: Vec<Value>,
+    ) -> Result<Value, crate::expression::evaluator::ScriptCallError> {
+        self.state.call_script(callable, arguments)
     }
 }
 

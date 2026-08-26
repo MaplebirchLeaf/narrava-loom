@@ -1,3 +1,21 @@
+## 0.2.0 - 2026-08-27
+
+### 已包含
+
+- 64 级状态色阶（灰阶 0-7 ＋ 光谱 8-63，二进制对齐）与 8 个语义字形（emphasis／strong／code／quote／marked／small／inserted／deleted）；
+- StyledText 新增可选 `delay` 延迟浮现与结构性 `heading`（1/2，弹窗页签等页面划分），WebView 与 TUI 同步支持；
+- Twee `text` Macro 并入 `print`：`<<print value [tone] [style...]>>` 或对象形式 `{tone, styles, delay, heading}`，单参数仍输出纯文本；
+- 脚本侧 `Presentation.text()` 支持 `heading`，Dialog 按结构性标题恢复页签切换；
+- 综合示例扩至 19 个 Passage：控制流范本（switch／for／while＋break/continue／unset/include）、作者工具、Twee 内 Presentation 等；
+- 修复 `if`／`switch` 默认分支与后续文本合并导致的 I18n placeholder 错位；
+- 文档按读者收束：`reference/` 只保留契约速查，设计说明移入 `architecture/`，作者手册去编号并统一入口，清除遗留合并冲突标记。
+
+### 当前限制
+
+- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
+- TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
+- `0.2.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
+
 # 变更记录
 
 本文件只记录使用者能够观察到的版本变化，不复制提交日志。

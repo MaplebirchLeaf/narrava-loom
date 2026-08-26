@@ -23,6 +23,19 @@ examples/
 
 `story/widgets.twee` 定义 `crossFileCard`，`story/main.twee` 调用它，作为
 “一个 Twee 文件定义、另一个 Twee 文件使用”的可编译回归示例。
+示例中的游戏内换行都显式写成 `<br>`；`.twee` 文件本身的换行只用于整理源码，
+不会被不同 Host 各自猜测成段落或 HTML。
+
+`AuthorToolsGallery` 会实际调用 `Save.export/import`，并调用 `I18n.export()` 把译者模板写入
+Host 日志。开发模式直接校验并导入 `languages/en/`，发行构建则生成 `languages/en.nlang`；
+`save/manual-1.nsave` 与 `save/quick.nsave` 是可直接导入的示例存档。
+
+演示页入口都在 `Hall`：`PresentationGallery`/`DialogGallery` 展示脚本侧结构化
+Presentation；`TextGallery` 展示 Twee 内 `print` Macro 的 tone/style 输出；
+`AuthorToolsGallery` 展示存档、读档、日志与语言如何经 `State.global` 暴露的脚本函数
+在 `.twee` 中调用；`MacroGallery` 展示控制流 Macro 的真实运行时输出：`switch` 严格
+匹配、`for` 的值／键／范围三种遍历、`while` 配合 `break`/`continue`、`unset`
+与 `defined()`、以及 `include` 原地执行另一 Passage（不发生导航）。
 
 正常游玩路径还提供两个专用 UI 验收页：
 

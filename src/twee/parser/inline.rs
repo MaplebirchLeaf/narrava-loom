@@ -154,6 +154,7 @@ pub(super) fn parse_body_nodes<'source, 'source_path>(
     Ok(nodes)
 }
 
+/// 把允许同行书写的固有容器 Macro 名称归一化为规范名；其他名称返回 None。
 fn inline_container_name(name: &str) -> Option<&'static str> {
     match name {
         "silently" => Some("silently"),

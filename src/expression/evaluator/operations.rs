@@ -1,4 +1,4 @@
-//! Expression 的单元、二元、比较与成员运算。
+//! Expression 的一元、二元、比较与成员运算。
 
 use super::{
     EvalError, EvaluationSession, evaluate_in, string_to_number, to_int32, to_number, to_string,
@@ -10,6 +10,7 @@ use crate::expression::{
     value::{TextValue, Value},
 };
 
+/// 二元运算入口：先做支持性检查，再分派短路、成员、相等、三向、关系与算术路径。
 pub(super) fn evaluate_binary(
     operator: BinaryOperator,
     left: &Expression<'_>,

@@ -17,8 +17,8 @@ use crate::macro_runtime::{
     enter_argument_call, execute_prepared_logic_macro, execute_prepared_macro,
     execute_prepared_sync_macro_with_lifecycle, goto, include, link, link_with_body,
     parse_argument_list, parse_interaction_target, prepare_argument_values, prepare_macro_call,
-    radiobutton, register_story_widgets, register_widget, replace, resume_macro_suspension, run,
-    set, text, textbox, unset,
+    print, radiobutton, register_story_widgets, register_widget, replace, resume_macro_suspension,
+    run, set, textbox, unset,
 };
 use crate::{
     hir::{

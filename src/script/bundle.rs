@@ -30,14 +30,17 @@ pub struct ScriptModule<'source> {
 }
 
 impl ScriptModule<'_> {
+    /// 模块的保存路径。
     pub fn path(&self) -> &str {
         self.source.path.as_str()
     }
 
+    /// 模块源码语言。
     pub fn language(&self) -> ScriptLanguage {
         self.language
     }
 
+    /// 模块源码文本。
     pub fn source(&self) -> &str {
         &self.source.content
     }
@@ -67,10 +70,12 @@ impl<'source> ScriptBundle<'source> {
         Self { modules }
     }
 
+    /// 按 Source 顺序的模块集合。
     pub fn modules(&self) -> &[ScriptModule<'source>] {
         &self.modules
     }
 
+    /// 是否不含任何脚本模块。
     pub fn is_empty(&self) -> bool {
         self.modules.is_empty()
     }

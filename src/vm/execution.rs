@@ -6,6 +6,7 @@
 use super::*;
 
 impl MirExecutionFrame {
+    /// 以可选运行语言执行一条指令；语言不属于当前程序目录时返回错误。
     pub(super) fn step_with_language(
         &mut self,
         story: &BytecodeProgram,
@@ -106,6 +107,7 @@ impl MirExecutionFrame {
         Ok(MirStep::Running)
     }
 
+    /// 解释单条 Bytecode 指令并推进帧；`story` 为 None 时禁止 include 请求。
     pub(super) fn execute_instruction(
         &mut self,
         story: Option<&BytecodeProgram>,

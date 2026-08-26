@@ -22,14 +22,22 @@ use crate::{
     twee,
 };
 
+/// 当前 `.nar` 容器格式版本；校验时与 manifest 中的版本比较。
 pub const NAR_FORMAT_VERSION: u16 = 1;
+/// `.nar` manifest 声明的包类型。
 const NAR_PACKAGE_TYPE: &str = "narrava-game";
+/// `.nar` 内 manifest 文件名。
 const MANIFEST_PATH: &str = "manifest.json";
+/// `.nar` 内源码归档文件名。
 const SOURCES_PATH: &str = "sources.json";
+/// `.nar` 内编译产物文件名。
 const BYTECODE_PATH: &str = "bytecode.json";
+/// 发行 NAR 内的作者配置文件名。
 const CONFIG_PATH: &str = "config.toml";
+/// `.nar` 内资源数据文件的前缀。
 const RESOURCES_PREFIX: &str = "resources/";
 
+/// 源码在 `.nar` 中的小写标签类型。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum NarSourceKind {
@@ -48,6 +56,7 @@ impl From<SourceKind> for NarSourceKind {
     }
 }
 
+/// 归档中的一条源码记录：路径、类型与完整内容。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct NarSourceRecord {
     path: String,
@@ -61,6 +70,7 @@ pub struct NarSourceArchive {
     sources: Vec<NarSourceRecord>,
 }
 
+/// 源码归档序列化或还原阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NarSourceError {
     InvalidJson(String),
@@ -70,6 +80,7 @@ pub enum NarSourceError {
 }
 
 impl NarSourceArchive {
+    /// 从源码列表生成归档。
     pub fn from_sources(sources: &SourceList) -> Self {
         Self {
             sources: sources
@@ -84,14 +95,17 @@ impl NarSourceArchive {
         }
     }
 
+    /// 序列化为 JSON 字符串。
     pub fn to_json(&self) -> Result<String, NarSourceError> {
         serde_json::to_string(self).map_err(|error| NarSourceError::InvalidJson(error.to_string()))
     }
 
+    /// 从 JSON 字符串解码归档。
     pub fn from_json(input: &str) -> Result<Self, NarSourceError> {
         serde_json::from_str(input).map_err(|error| NarSourceError::InvalidJson(error.to_string()))
     }
 
+    /// 还原为源码列表；路径非法、重复或类型与路径不一致时失败。
     pub fn into_sources(self) -> Result<SourceList, NarSourceError> {
         let mut paths = BTreeSet::new();
         let mut items = Vec::with_capacity(self.sources.len());
@@ -123,6 +137,7 @@ impl fmt::Display for NarSourceError {
 
 impl Error for NarSourceError {}
 
+/// `.nar` manifest 的直接 JSON 映射；哈希字段保护对应文件内容。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct NarManifest {
     package_type: String,
@@ -137,6 +152,7 @@ struct NarManifest {
     resources: BTreeMap<String, NarResourceRecord>,
 }
 
+/// manifest 中单个资源的媒体类型与 SHA-256 摘要。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct NarResourceRecord {
     media_type: String,
@@ -149,6 +165,7 @@ pub struct NarPackage {
     files: Vec<(String, Vec<u8>)>,
 }
 
+/// 通过全部校验、可交给 Engine 启动的 `.nar` 内容。
 #[derive(Debug)]
 pub struct ValidatedNarPackage {
     game: GameIdentity,
@@ -157,6 +174,7 @@ pub struct ValidatedNarPackage {
     resources: ResourceCatalog,
 }
 
+/// `.nar` 构建或校验阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NarPackageError {
     InvalidPath(String),
@@ -178,6 +196,7 @@ pub enum NarPackageError {
     HashMismatch,
 }
 
+/// 从源码编译 Bytecode 过程中某一阶段的失败。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NarCompileError {
     stage: &'static str,
@@ -219,10 +238,12 @@ impl NarPackage {
         Ok(Self { files: collected })
     }
 
+    /// 构建不携带资源、不可独立启动的开发 NAR。
     pub fn build(config: &ProjectConfig, sources: &SourceList) -> Result<Self, NarPackageError> {
         Self::build_with_resources(config, sources, &ResourceCatalog::default())
     }
 
+    /// 构建携带资源的开发 NAR。
     pub fn build_with_resources(
         config: &ProjectConfig,
         sources: &SourceList,
@@ -241,6 +262,7 @@ impl NarPackage {
         Self::build_files(config, sources, resources, Some(config_toml))
     }
 
+    /// 共享的构建流程：编译源码、归档源码与资源、生成带哈希的 manifest。
     fn build_files(
         config: &ProjectConfig,
         sources: &SourceList,
@@ -299,6 +321,7 @@ impl NarPackage {
         Ok(Self { files })
     }
 
+    /// 按路径取得可变字节引用；供构建工具写入自定义文件。
     pub fn file_mut(&mut self, path: &str) -> Option<&mut Vec<u8>> {
         self.files
             .iter_mut()
@@ -312,10 +335,12 @@ impl NarPackage {
             .map(|(path, data)| (path.as_str(), data.as_slice()))
     }
 
+    /// 消耗包，取得全部（路径，字节）文件。
     pub fn into_files(self) -> Vec<(String, Vec<u8>)> {
         self.files
     }
 
+    /// 校验格式、哈希、游戏身份与资源，成功时返回可启动的包内容。
     pub fn validate(&self) -> Result<ValidatedNarPackage, NarPackageError> {
         let manifest = self
             .file(MANIFEST_PATH)
@@ -389,30 +414,36 @@ impl NarPackage {
         })
     }
 
+    /// 按文件名读取原始内容。
     fn file(&self, path: &str) -> Option<&[u8]> {
         self.files
             .iter()
             .find_map(|(name, data)| (name == path).then_some(data.as_slice()))
     }
 
+    /// 读取发行 NAR 内嵌的作者配置文本。
     pub fn config_toml(&self) -> Option<&str> {
         std::str::from_utf8(self.file(CONFIG_PATH)?).ok()
     }
 }
 
 impl ValidatedNarPackage {
+    /// 包声明的游戏身份。
     pub fn game(&self) -> &GameIdentity {
         &self.game
     }
 
+    /// 包内源码列表。
     pub fn sources(&self) -> &SourceList {
         &self.sources
     }
 
+    /// 包内编译产物。
     pub fn bytecode(&self) -> &BytecodeProgram {
         &self.bytecode
     }
 
+    /// 包内资源目录。
     pub fn resources(&self) -> &ResourceCatalog {
         &self.resources
     }
@@ -428,14 +459,17 @@ impl ValidatedNarPackage {
 }
 
 impl NarCompileError {
+    /// 失败阶段（twee/hir/mir/lir）。
     pub fn stage(&self) -> &'static str {
         self.stage
     }
 
+    /// 阶段内错误说明。
     pub fn message(&self) -> &str {
         &self.message
     }
 
+    /// 构造带阶段的编译错误。
     fn new(stage: &'static str, message: impl Into<String>) -> Self {
         Self {
             stage,
@@ -460,6 +494,7 @@ impl fmt::Display for NarCompileError {
 
 impl Error for NarCompileError {}
 
+/// 计算内容 SHA-256 摘要的十六进制字符串。
 fn sha256_hex(data: &[u8]) -> String {
     Sha256::digest(data)
         .iter()
@@ -467,6 +502,7 @@ fn sha256_hex(data: &[u8]) -> String {
         .collect()
 }
 
+/// 沿 twee → HIR → MIR → LIR 管线编译源码到 Bytecode。
 fn compile_sources(sources: &SourceList) -> Result<BytecodeProgram, NarCompileError> {
     let ast = twee::Story::build(&sources.items)
         .map_err(|error| NarCompileError::new("twee", error.to_string()))?;

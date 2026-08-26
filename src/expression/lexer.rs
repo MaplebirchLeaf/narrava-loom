@@ -360,6 +360,7 @@ fn scan_number(bytes: &[u8], start: usize) -> usize {
     end
 }
 
+/// 从标识符起始字符开始，扫描到 ASCII 标识符的结束位置。
 fn scan_identifier(bytes: &[u8], start: usize) -> usize {
     let mut end: usize = start + 1;
     while end < bytes.len() && is_identifier_continue(bytes[end]) {
@@ -368,6 +369,7 @@ fn scan_identifier(bytes: &[u8], start: usize) -> usize {
     end
 }
 
+/// 单字符标点到 TokenKind 的映射；不在映射内的字符返回 `None`。
 fn punctuation_kind(byte: u8) -> Option<TokenKind<'static>> {
     match byte {
         b'&' => Some(TokenKind::Ampersand),

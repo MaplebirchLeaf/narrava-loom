@@ -46,6 +46,7 @@ pub struct GameCompatibility {
     versions: semver::VersionReq,
 }
 
+/// 建立游戏兼容约束时可由调用者稳定分类的错误。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GameCompatibilityError {
     InvalidId,
@@ -53,6 +54,7 @@ pub enum GameCompatibilityError {
 }
 
 impl GameIdentity {
+    /// 用非空 ID 与可解析的语义化版本建立身份。
     pub fn new(id: impl Into<String>, version: &str) -> Result<Self, GameIdentityError> {
         let id: String = id.into();
         if !is_valid_game_id(&id) {
@@ -68,16 +70,19 @@ impl GameIdentity {
         Ok(Self { id, version })
     }
 
+    /// 游戏 ID。
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// 已解析的游戏版本。
     pub fn version(&self) -> &semver::Version {
         &self.version
     }
 }
 
 impl GameCompatibility {
+    /// 用非空 ID 与可解析的语义化版本约束建立兼容声明。
     pub fn new(id: impl Into<String>, versions: &str) -> Result<Self, GameCompatibilityError> {
         let id: String = id.into();
         if !is_valid_game_id(&id) {
@@ -93,14 +98,17 @@ impl GameCompatibility {
         Ok(Self { id, versions })
     }
 
+    /// 声明的目标游戏 ID。
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// 声明的版本约束。
     pub fn versions(&self) -> &semver::VersionReq {
         &self.versions
     }
 
+    /// 判断给定游戏身份是否满足本约束。
     pub fn matches(&self, identity: &GameIdentity) -> bool {
         self.id == identity.id && self.versions.matches(&identity.version)
     }
@@ -130,6 +138,7 @@ impl fmt::Display for GameCompatibilityError {
 
 impl Error for GameCompatibilityError {}
 
+/// 游戏 ID 不能为空或包含空白。
 fn is_valid_game_id(id: &str) -> bool {
     !id.is_empty() && !id.chars().any(char::is_whitespace)
 }
@@ -201,6 +210,7 @@ impl ProjectConfig {
         GameIdentity::new(self.game.id.clone(), &self.game.version)
     }
 
+    /// 校验游戏 ID、版本、名称与默认语言字段。
     fn validate(&self, path: &Path) -> Result<(), ConfigError> {
         match self.identity() {
             Ok(_) => {}

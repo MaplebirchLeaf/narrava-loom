@@ -12,6 +12,7 @@ use super::{
     syntax::{find_top_level_assignment, find_top_level_keyword, trimmed_slice},
 };
 
+/// 校验 unset 目标可删除，返回目标 Expression。
 pub(super) fn lower_unset<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -30,6 +31,7 @@ pub(super) fn lower_unset<'source>(
     Ok(target)
 }
 
+/// 把动作类 Macro（run/include/goto/set 值）的参数解析为单个 Expression。
 pub(super) fn lower_action_expression<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -39,6 +41,7 @@ pub(super) fn lower_action_expression<'source>(
     })
 }
 
+/// 解析 `target = value` 或 `target to value` 参数并构造赋值 Expression。
 pub(super) fn lower_set<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,

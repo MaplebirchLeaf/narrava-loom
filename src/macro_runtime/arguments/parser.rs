@@ -112,6 +112,7 @@ pub fn parse_argument_list<'source>(
     Ok(arguments)
 }
 
+/// 按字符边界跳过连续空白，返回第一个非空白字符位置。
 fn skip_whitespace(source: &str, mut cursor: usize) -> usize {
     while let Some(character) = source[cursor..].chars().next() {
         if !character.is_whitespace() {

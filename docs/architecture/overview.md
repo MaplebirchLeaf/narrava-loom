@@ -196,7 +196,7 @@ Twine 是所属生态，Twee 是文件格式。识别 SourceKind 只表示完成
 
 ## 6. Twee 编译边界
 
-Twee 编译器当前负责从 Source 到 MIR 的叙事管线，不负责运行时控制器或渲染。详细设计与当前进度见 [/docs/reference/twee.md](/docs/reference/twee.md)。
+Twee 编译器当前负责从 Source 到 MIR 的叙事管线，不负责运行时控制器或渲染。详细设计与当前进度见 [/docs/architecture/twee.md](/docs/architecture/twee.md)。
 
 ```text
 Story

@@ -33,10 +33,9 @@ pub enum MacroArgument<'source> {
 /// Argument List 在边界解析阶段产生的错误。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MacroArgumentListError {
-    Expression {
-        error: ParseError,
-        offset: usize,
-    },
+    /// 普通 Expression 参数解析失败。
+    Expression { error: ParseError, offset: usize },
+    /// `[[显示文本|目标]]` 参数结构或分隔失败。
     InteractionTarget {
         error: InteractionTargetError,
         offset: usize,
@@ -46,10 +45,15 @@ pub enum MacroArgumentListError {
 /// Expression 参数求值失败时，保留它在宏参数原文中的起点。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MacroArgumentValueError<Error> {
+    /// 普通 Expression 参数求值失败。
     Expression { error: Error, offset: usize },
+    /// 交互目标内嵌的 Expression 解析失败。
     InteractionParse { error: ParseError, offset: usize },
+    /// 交互目标内嵌的 Expression 求值失败。
     InteractionEvaluation { error: Error, offset: usize },
+    /// 交互目标动态内容不能转换为文本。
     InvalidInteractionText { offset: usize },
+    /// 交互目标插值缺少闭合花括号。
     UnclosedInteraction { offset: usize },
 }
 
@@ -73,6 +77,7 @@ impl MacroArgumentIssue {
 }
 
 impl MacroArgumentListError {
+    /// 把解析错误映射为携带片段内 Span 的 Issue。
     pub fn issue(self, source_len: usize) -> MacroArgumentIssue {
         match self {
             Self::Expression { error, offset } => MacroArgumentIssue {
@@ -88,6 +93,7 @@ impl MacroArgumentListError {
 }
 
 impl MacroArgumentValueError<EvalError> {
+    /// 把求值错误映射为携带片段内 Span 的 Issue。
     pub fn issue(self, source_len: usize) -> MacroArgumentIssue {
         match self {
             Self::Expression { error, offset } | Self::InteractionEvaluation { error, offset } => {
@@ -143,7 +149,9 @@ fn point_span(offset: usize, source_len: usize) -> Span {
 /// 尚未求值的共享交互目标参数。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InteractionTarget<'source> {
+    /// 玩家看到的显示文本（可含 `${...}` 插值）。
     pub label: &'source str,
+    /// 激活后导航的 Passage 目标（可含 `${...}` 插值）。
     pub target: &'source str,
 }
 
@@ -157,6 +165,7 @@ pub enum InteractionTargetError {
 }
 
 impl InteractionTargetError {
+    /// 转换为不附加虚构源码位置的稳定 Diagnostic。
     pub fn diagnostic(self) -> Diagnostic {
         let message: &str = match self {
             Self::InvalidWrapper => "交互目标参数必须使用 `[[显示文本|目标]]`",

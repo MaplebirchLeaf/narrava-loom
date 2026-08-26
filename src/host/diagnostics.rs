@@ -83,6 +83,7 @@ pub(super) fn mir_resume_failure<'hir, 'source>(
     }
 }
 
+/// 把 MIR 启动失败映射为稳定诊断；`Continue` 分支先回滚失败事务。
 pub(super) fn mir_begin_diagnostic<'hir, 'source>(
     error: EngineMirBeginError<'hir, 'source, Diagnostic>,
     state: &mut State,
@@ -141,6 +142,7 @@ pub(super) fn mir_begin_diagnostic<'hir, 'source>(
     }
 }
 
+/// 把 Story 导航错误映射为稳定诊断。
 pub(super) fn story_navigation_diagnostic(error: StoryNavigationError) -> Diagnostic {
     let code: &str = match &error {
         StoryNavigationError::MissingPassage(_) => "story.navigation.missing_passage",
@@ -151,6 +153,7 @@ pub(super) fn story_navigation_diagnostic(error: StoryNavigationError) -> Diagno
     host_error(code, &error.to_string())
 }
 
+/// 把请求执行错误映射为稳定诊断。
 pub(super) fn execution_diagnostic(error: EngineRequestedExecutionError<Diagnostic>) -> Diagnostic {
     match error {
         EngineRequestedExecutionError::Runtime(error)
@@ -183,6 +186,7 @@ pub(super) fn execution_diagnostic(error: EngineRequestedExecutionError<Diagnost
     }
 }
 
+/// 把导航错误映射为稳定诊断，包含回滚失败分支。
 pub(super) fn navigation_diagnostic(
     error: EngineNavigationError<EngineRequestedExecutionError<Diagnostic>>,
 ) -> Diagnostic {
@@ -196,6 +200,7 @@ pub(super) fn navigation_diagnostic(
     }
 }
 
+/// 把 Engine 启动失败映射为稳定诊断。
 pub(super) fn start_diagnostic(error: EngineStartError<Diagnostic>) -> Diagnostic {
     match error {
         EngineStartError::AlreadyStarted { current } => host_error(

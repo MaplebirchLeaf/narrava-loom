@@ -10,6 +10,7 @@ mod text;
 
 pub use text::TextValue;
 
+/// 存档检查与深度克隆中，按身份去重集合引用的键，区分 Array 与 Object。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ValueReferenceKey {
     Array(usize),
@@ -25,24 +26,29 @@ pub(crate) struct ValueReference<T> {
 }
 
 impl<T> ValueReference<T> {
+    /// 把值包装进共享引用句柄。
     pub(crate) fn new(value: T) -> Self {
         Self {
             inner: Rc::new(RefCell::new(value)),
         }
     }
 
+    /// 两个句柄是否指向同一内部值。
     pub(crate) fn same_identity(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
     }
 
+    /// 内部指针值，用于存档去重等身份判断。
     pub(crate) fn identity(&self) -> usize {
         Rc::as_ptr(&self.inner) as usize
     }
 
+    /// 受控只读访问内部值。
     pub(crate) fn with<R>(&self, read: impl FnOnce(&T) -> R) -> R {
         read(&self.inner.borrow())
     }
 
+    /// 受控可变访问内部值。
     pub(crate) fn with_mut<R>(&self, write: impl FnOnce(&mut T) -> R) -> R {
         write(&mut self.inner.borrow_mut())
     }
@@ -57,36 +63,44 @@ pub struct ArrayValue {
 }
 
 impl ArrayValue {
+    /// 从元素列表创建共享数组值。
     pub fn new(values: Vec<Value>) -> Self {
         Self {
             reference: ValueReference::new(values),
         }
     }
 
+    /// 返回元素数量。
     pub fn len(&self) -> usize {
         self.reference.with(Vec::len)
     }
 
+    /// 是否不含任何元素。
     pub fn is_empty(&self) -> bool {
         self.reference.with(Vec::is_empty)
     }
 
+    /// 克隆全部元素；结果与共享引用脱离关系。
     pub fn snapshot(&self) -> Vec<Value> {
         self.reference.with(Clone::clone)
     }
 
+    /// 两个句柄是否指向同一共享数组。
     pub fn same_identity(&self, other: &Self) -> bool {
         self.reference.same_identity(&other.reference)
     }
 
+    /// 内部身份指针，用于存档去重等内部判断。
     pub(crate) fn identity(&self) -> usize {
         self.reference.identity()
     }
 
+    /// 受控只读访问共享元素。
     pub(super) fn with<R>(&self, read: impl FnOnce(&Vec<Value>) -> R) -> R {
         self.reference.with(read)
     }
 
+    /// 受控可变访问共享元素，修改会跨克隆保留。
     pub(crate) fn with_mut<R>(&self, write: impl FnOnce(&mut Vec<Value>) -> R) -> R {
         self.reference.with_mut(write)
     }
@@ -106,36 +120,44 @@ pub struct ObjectValue {
 }
 
 impl ObjectValue {
+    /// 从有序属性列表创建共享对象值，顺序与源码和插入顺序一致。
     pub fn new(properties: Vec<(String, Value)>) -> Self {
         Self {
             reference: ValueReference::new(properties),
         }
     }
 
+    /// 返回属性数量。
     pub fn len(&self) -> usize {
         self.reference.with(Vec::len)
     }
 
+    /// 是否不含任何属性。
     pub fn is_empty(&self) -> bool {
         self.reference.with(Vec::is_empty)
     }
 
+    /// 克隆全部属性；结果与共享引用脱离关系。
     pub fn snapshot(&self) -> Vec<(String, Value)> {
         self.reference.with(Clone::clone)
     }
 
+    /// 两个句柄是否指向同一共享对象。
     pub fn same_identity(&self, other: &Self) -> bool {
         self.reference.same_identity(&other.reference)
     }
 
+    /// 内部身份指针，用于存档去重等内部判断。
     pub(crate) fn identity(&self) -> usize {
         self.reference.identity()
     }
 
+    /// 受控只读访问共享属性。
     pub(super) fn with<R>(&self, read: impl FnOnce(&Vec<(String, Value)>) -> R) -> R {
         self.reference.with(read)
     }
 
+    /// 受控可变访问共享属性，修改会跨克隆保留。
     pub(crate) fn with_mut<R>(&self, write: impl FnOnce(&mut Vec<(String, Value)>) -> R) -> R {
         self.reference.with_mut(write)
     }
@@ -178,6 +200,7 @@ pub struct ScriptCallable {
 }
 
 impl ScriptCallable {
+    /// 以 Binding 登记的稳定 ID 与诊断名创建句柄。
     pub fn new(id: u64, name: impl Into<String>) -> Self {
         Self {
             id,
@@ -185,10 +208,12 @@ impl ScriptCallable {
         }
     }
 
+    /// 返回 Binding 侧找回真实函数对象的 ID。
     pub fn id(&self) -> u64 {
         self.id
     }
 
+    /// 返回仅供诊断与调试使用的函数名。
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
@@ -241,6 +266,7 @@ pub(super) enum NativeFunction {
 }
 
 impl NativeFunction {
+    /// 每个函数的固定参数数量或范围，作为调用前的检查依据。
     pub(super) fn argument_range(self) -> std::ops::RangeInclusive<usize> {
         match self {
             Self::Clamp => 3..=3,
@@ -315,6 +341,7 @@ impl NativeMethod {
 }
 
 impl NativeCallable {
+    /// 把接收者与方法绑定为可调用值。
     pub(crate) fn bind(receiver: Value, method: NativeMethod) -> Self {
         Self {
             kind: NativeCallableKind::Method {
@@ -324,16 +351,19 @@ impl NativeCallable {
         }
     }
 
+    /// 由全局函数身份创建可调用值。
     pub(super) fn function(function: NativeFunction) -> Self {
         Self {
             kind: NativeCallableKind::Function(function),
         }
     }
 
+    /// 解包为全局函数或绑定方法。
     pub(super) fn into_kind(self) -> NativeCallableKind {
         self.kind
     }
 
+    /// 函数按身份比较；绑定方法只比较方法名，不比较接收者。
     pub(super) fn same_identity(&self, other: &Self) -> bool {
         match (&self.kind, &other.kind) {
             (NativeCallableKind::Function(left), NativeCallableKind::Function(right)) => {
@@ -347,6 +377,7 @@ impl NativeCallable {
         }
     }
 
+    /// 使用共享图映射克隆自身；调用方维护去重表，保留根之间的共享引用。
     fn detached_clone_with(&self, cloned: &mut HashMap<ValueReferenceKey, Value>) -> Self {
         let kind: NativeCallableKind = match &self.kind {
             NativeCallableKind::Function(function) => NativeCallableKind::Function(*function),
@@ -366,14 +397,17 @@ impl PartialEq for NativeCallable {
 }
 
 impl Value {
+    /// 创建共享数组值。
     pub fn array(values: Vec<Value>) -> Self {
         Self::Array(ArrayValue::new(values))
     }
 
+    /// 创建共享对象值。
     pub fn object(properties: Vec<(String, Value)>) -> Self {
         Self::Object(ObjectValue::new(properties))
     }
 
+    /// 创建字符串值；接受 `&str`、`String` 或现成的 `TextValue`。
     pub fn string(value: impl Into<TextValue>) -> Self {
         Self::String(value.into())
     }
@@ -385,6 +419,7 @@ impl Value {
         self.is_saveable_with(&mut HashSet::new())
     }
 
+    /// 带访问集合的存档检查；已访问过的共享引用直接视为可保存，避免循环递归。
     fn is_saveable_with(&self, visited: &mut HashSet<ValueReferenceKey>) -> bool {
         match self {
             Self::Callable(_) | Self::ScriptCallable(_) | Self::Namespace(_) => false,
@@ -431,6 +466,7 @@ impl Value {
             .collect()
     }
 
+    /// 使用共享图映射克隆自身；共享引用在图中只克隆一次。
     fn detached_clone_with(&self, cloned: &mut HashMap<ValueReferenceKey, Value>) -> Self {
         match self {
             Self::Array(array) => {

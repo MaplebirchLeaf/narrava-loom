@@ -48,6 +48,7 @@ pub enum NlangInstallError {
     },
 }
 
+/// manifest.json 的直接 JSON 映射。
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct RawNlangManifest {
@@ -58,6 +59,7 @@ struct RawNlangManifest {
     game: RawNlangGame,
 }
 
+/// manifest 中 `game` 字段的直接 JSON 映射。
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct RawNlangGame {
@@ -116,18 +118,22 @@ impl NlangManifest {
         serde_json::to_string_pretty(&raw).map_err(I18nJsonError::encode)
     }
 
+    /// 语言包的主语言标签。
     pub fn locale(&self) -> &str {
         &self.locale
     }
 
+    /// 可选的回退语言标签。
     pub fn fallback(&self) -> Option<&str> {
         self.fallback.as_deref()
     }
 
+    /// 语言包版本。
     pub fn version(&self) -> &semver::Version {
         &self.version
     }
 
+    /// 目标游戏兼容性声明。
     pub fn game(&self) -> &GameCompatibility {
         &self.game
     }
@@ -160,6 +166,7 @@ impl NlangManifest {
 }
 
 impl NlangValidatedManifest {
+    /// 已通过安装校验的 manifest。
     pub fn manifest(&self) -> &NlangManifest {
         &self.manifest
     }

@@ -16,6 +16,7 @@ pub enum SaveOperation {
 pub struct SaveRequestId(u64);
 
 impl SaveRequestId {
+    /// 原始编号，供 Host 关联自己的句柄。
     pub fn as_u64(self) -> u64 {
         self.0
     }
@@ -30,10 +31,12 @@ pub struct SaveRequest {
 }
 
 impl SaveRequest {
+    /// 请求的稳定身份。
     pub fn id(&self) -> SaveRequestId {
         self.id
     }
 
+    /// 请求的存档操作。
     pub fn operation(&self) -> SaveOperation {
         self.operation
     }
@@ -59,10 +62,12 @@ pub struct SaveCompletion {
 }
 
 impl SaveCompletion {
+    /// 已完成的原始请求。
     pub fn request(&self) -> &SaveRequest {
         &self.request
     }
 
+    /// Host 报告的完成结果。
     pub fn outcome(&self) -> &SaveOutcome {
         &self.outcome
     }
@@ -87,6 +92,7 @@ pub struct SaveLifecycleController<'subscriptions, Hook, Before, After> {
 impl<'subscriptions, Hook, Before, After>
     SaveLifecycleController<'subscriptions, Hook, Before, After>
 {
+    /// 把有序订阅表与两个调用闭包组装为生命周期控制器。
     pub fn new(
         subscriptions: &'subscriptions SaveLifecycleSubscriptions<Hook>,
         invoke_before: Before,
@@ -126,11 +132,13 @@ where
 pub struct SaveLifecycleSubscriptionId(u64);
 
 impl SaveLifecycleSubscriptionId {
+    /// 原始编号，供 Host 关联自己的订阅句柄。
     pub fn as_u64(self) -> u64 {
         self.0
     }
 }
 
+/// 订阅编号分配失败。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveLifecycleSubscriptionError {
     IdExhausted,
@@ -149,6 +157,7 @@ pub struct SaveLifecycleSubscriptions<Hook> {
 }
 
 impl<Hook> SaveLifecycleSubscriptions<Hook> {
+    /// 建立空订阅表。
     pub fn new() -> Self {
         Self {
             next_id: 1,
@@ -157,6 +166,7 @@ impl<Hook> SaveLifecycleSubscriptions<Hook> {
         }
     }
 
+    /// 订阅指定操作的 before 阶段；返回可用于退订的身份。
     pub fn before(
         &mut self,
         operation: SaveOperation,
@@ -165,6 +175,7 @@ impl<Hook> SaveLifecycleSubscriptions<Hook> {
         Self::register(&mut self.next_id, &mut self.before, operation, hook)
     }
 
+    /// 订阅指定操作的 after 阶段；返回可用于退订的身份。
     pub fn after(
         &mut self,
         operation: SaveOperation,
@@ -173,10 +184,12 @@ impl<Hook> SaveLifecycleSubscriptions<Hook> {
         Self::register(&mut self.next_id, &mut self.after, operation, hook)
     }
 
+    /// 按身份退订，返回被移除的 Hook；未找到时返回 `None`。
     pub fn off(&mut self, id: SaveLifecycleSubscriptionId) -> Option<Hook> {
         Self::remove_from(&mut self.before, id).or_else(|| Self::remove_from(&mut self.after, id))
     }
 
+    /// 按注册顺序遍历指定操作的 before Hook。
     pub fn before_hooks(&self, operation: SaveOperation) -> impl Iterator<Item = &Hook> {
         self.before
             .get(&operation)
@@ -185,6 +198,7 @@ impl<Hook> SaveLifecycleSubscriptions<Hook> {
             .map(|subscription: &SaveLifecycleSubscription<Hook>| &subscription.hook)
     }
 
+    /// 按注册顺序遍历指定操作的 after Hook。
     pub fn after_hooks(&self, operation: SaveOperation) -> impl Iterator<Item = &Hook> {
         self.after
             .get(&operation)
@@ -193,6 +207,7 @@ impl<Hook> SaveLifecycleSubscriptions<Hook> {
             .map(|subscription: &SaveLifecycleSubscription<Hook>| &subscription.hook)
     }
 
+    /// 分配编号并把 Hook 追加到对应阶段表。
     fn register(
         next_id: &mut u64,
         subscriptions: &mut HashMap<SaveOperation, Vec<SaveLifecycleSubscription<Hook>>>,
@@ -210,6 +225,7 @@ impl<Hook> SaveLifecycleSubscriptions<Hook> {
         Ok(id)
     }
 
+    /// 在给定阶段表中按身份查找并移除 Hook。
     fn remove_from(
         subscriptions: &mut HashMap<SaveOperation, Vec<SaveLifecycleSubscription<Hook>>>,
         id: SaveLifecycleSubscriptionId,
@@ -241,6 +257,7 @@ pub enum SaveControllerError {
 }
 
 impl SaveControllerError {
+    /// 转换为 Host、Logger 与调试器共用的稳定 Diagnostic。
     pub fn diagnostic(&self) -> Diagnostic {
         match self {
             Self::EmptyTarget => Diagnostic::new(
@@ -273,6 +290,7 @@ pub struct SaveController {
 }
 
 impl SaveController {
+    /// 建立空请求队列。
     pub fn new() -> Self {
         Self {
             next_id: 1,
@@ -280,6 +298,7 @@ impl SaveController {
         }
     }
 
+    /// 入队一次导出请求；先运行 before，目标为空时拒绝。
     pub fn export(
         &mut self,
         target: &str,
@@ -288,6 +307,7 @@ impl SaveController {
         self.request(SaveOperation::Export, target, lifecycle)
     }
 
+    /// 入队一次导入请求；先运行 before，目标为空时拒绝。
     pub fn import(
         &mut self,
         target: &str,
@@ -315,6 +335,7 @@ impl SaveController {
         Ok(completion)
     }
 
+    /// 共享的入队流程：before → 空目标检查 → 分配编号 → 入队。
     fn request(
         &mut self,
         operation: SaveOperation,

@@ -11,9 +11,13 @@ use super::PreparedMacroCall;
 /// 同步生命周期中能够确定归属的失败阶段。
 #[derive(Debug, PartialEq)]
 pub enum MacroLifecycleError<HandlerError, Pending> {
+    /// 定义是 Async，不能走不保存 continuation 的同步入口。
     AsyncDefinition,
+    /// before Hook 失败。
     Before(HandlerError),
+    /// Definition 校验或主 Handler 失败。
     Handler(MacroDispatchError<HandlerError, Pending>),
+    /// after Hook 失败。
     After(HandlerError),
 }
 
@@ -24,6 +28,7 @@ pub struct MacroLifecycleHookSequence<BeforeHooks, AfterHooks> {
 }
 
 impl<BeforeHooks, AfterHooks> MacroLifecycleHookSequence<BeforeHooks, AfterHooks> {
+    /// 组合指定 Macro 的有序 before 与 after Hook 迭代器。
     pub fn new(before: BeforeHooks, after: AfterHooks) -> Self {
         Self { before, after }
     }
@@ -36,6 +41,7 @@ pub struct MacroLifecycleExecutionContext<'runtime, Context> {
 }
 
 impl<'runtime, Context> MacroLifecycleExecutionContext<'runtime, Context> {
+    /// 组合生命周期执行期间的外部 Context 与当前 Macro Local 链。
     pub fn new(
         context: &'runtime mut Context,
         locals: &'runtime mut MacroLocalScopes<Value>,

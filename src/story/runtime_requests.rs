@@ -60,26 +60,31 @@ pub trait RuntimeStoryAccess<'hir, 'source>: MacroStoryAccess {
 }
 
 impl<'hir, 'source> StoryIncludeRequest<'hir, 'source> {
+    /// 读取等待 include 的目标 Passage。
     pub fn passage(&self) -> &'hir HirPassage<'source> {
         self.passage
     }
 }
 
 impl<'hir, 'source> StoryNavigationRequest<'hir, 'source> {
+    /// 读取等待确认的导航目标 Passage。
     pub fn passage(&self) -> &'hir HirPassage<'source> {
         self.passage
     }
 }
 
 impl<'hir, 'source> StoryHistoryEntry<'hir, 'source> {
+    /// 该条导航记录的稳定历史编号。
     pub fn id(&self) -> StoryHistoryId {
         self.id
     }
 
+    /// 该条导航记录指向的 Passage。
     pub fn passage(&self) -> &'hir HirPassage<'source> {
         self.passage
     }
 
+    /// 本次执行输出是否包含作者导航动作。
     pub fn had_navigation(&self) -> bool {
         self.had_navigation
     }
@@ -108,6 +113,7 @@ pub struct StoryRuntimePending<'hir, 'source> {
 }
 
 impl<'story, 'hir, 'source> StoryRuntimeRequests<'story, 'hir, 'source> {
+    /// 建立空请求簿；只借用 Story，不修改其导航状态。
     pub fn new(story: &'story Story<'hir, 'source>) -> Self {
         Self {
             story,
@@ -116,22 +122,27 @@ impl<'story, 'hir, 'source> StoryRuntimeRequests<'story, 'hir, 'source> {
         }
     }
 
+    /// 队首待消费的 include 请求。
     pub fn pending_include(&self) -> Option<&StoryIncludeRequest<'hir, 'source>> {
         self.pending_includes.front()
     }
 
+    /// 待消费的 include 请求数量。
     pub fn pending_include_count(&self) -> usize {
         self.pending_includes.len()
     }
 
+    /// 取出队首 include 请求；空队列返回 `None`。
     pub fn take_include(&mut self) -> Option<StoryIncludeRequest<'hir, 'source>> {
         self.pending_includes.pop_front()
     }
 
+    /// 当前待确认的 goto 请求。
     pub fn pending_goto(&self) -> Option<&StoryNavigationRequest<'hir, 'source>> {
         self.pending_goto.as_ref()
     }
 
+    /// 取出待确认的 goto 请求；没有待处理请求时返回 `None`。
     pub fn take_goto(&mut self) -> Option<StoryNavigationRequest<'hir, 'source>> {
         self.pending_goto.take()
     }
@@ -162,10 +173,12 @@ impl<'story, 'hir, 'source> StoryRuntimeRequests<'story, 'hir, 'source> {
 }
 
 impl StoryRuntimePending<'_, '_> {
+    /// 等待恢复的 include 请求数量。
     pub fn pending_include_count(&self) -> usize {
         self.pending_includes.len()
     }
 
+    /// 是否还持有未消费的 goto 请求。
     pub fn has_goto(&self) -> bool {
         self.pending_goto.is_some()
     }

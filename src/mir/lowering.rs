@@ -9,6 +9,7 @@ use crate::{
     i18n::I18nMessage,
 };
 
+/// 把 HIR 正文降低为 MIR 指令序列，末尾自动附加 `Halt`。
 pub fn lower_body<'hir, 'source>(
     body: &'hir [HirBodyNode<'source>],
 ) -> Result<MirBody<'hir, 'source>, MirLowerError> {
@@ -29,6 +30,7 @@ pub fn lower_body<'hir, 'source>(
     })
 }
 
+/// 按默认语言目录，为同一 Passage 的可见文本组附着翻译消息身份与占位符。
 pub(super) fn attach_i18n(
     body: &mut MirBody<'_, '_>,
     source: &str,
@@ -68,6 +70,7 @@ pub(super) fn attach_i18n(
     }
 }
 
+/// 把连续的可见输出指令聚成组；只有包含非空白静态文本的组才对应翻译消息。
 fn visible_text_groups(instructions: &[MirInstruction<'_, '_>]) -> Vec<Vec<usize>> {
     let mut groups: Vec<Vec<usize>> = Vec::new();
     let mut current: Vec<usize> = Vec::new();
@@ -102,6 +105,7 @@ fn visible_text_groups(instructions: &[MirInstruction<'_, '_>]) -> Vec<Vec<usize
     groups
 }
 
+/// 当前组包含静态文本时提交该组，否则丢弃；随后重置组状态。
 fn push_visible_group(
     groups: &mut Vec<Vec<usize>>,
     current: &mut Vec<usize>,
@@ -115,6 +119,7 @@ fn push_visible_group(
     *has_static_text = false;
 }
 
+/// lowering 过程的累积状态：指令缓冲、槽位计数、循环帧、静默深度与捕获变量栈。
 struct MirLoweringContext<'hir, 'source> {
     instructions: Vec<MirInstruction<'hir, 'source>>,
     value_slot_count: usize,
@@ -124,6 +129,7 @@ struct MirLoweringContext<'hir, 'source> {
     captures: Vec<&'source str>,
 }
 
+/// 一个进行中循环的 continue 目标与待回填的 break 跳转位置。
 struct MirLoopFrame {
     continue_target: MirInstructionPointer,
     break_jumps: Vec<usize>,
@@ -157,6 +163,7 @@ impl MirLoweringContext<'_, '_> {
     }
 }
 
+/// 按顺序降低一组 HIR 节点；无 MIR 语义的节点返回 MirLowerError。
 fn lower_nodes<'hir, 'source>(
     body: &'hir [HirBodyNode<'source>],
     context: &mut MirLoweringContext<'hir, 'source>,
@@ -232,6 +239,7 @@ fn lower_nodes<'hir, 'source>(
     Ok(())
 }
 
+/// 提升静默深度后降低正文，使其中所有输出指令标记为 Suppressed。
 fn lower_silently<'hir, 'source>(
     body: &'hir [HirBodyNode<'source>],
     context: &mut MirLoweringContext<'hir, 'source>,
@@ -270,6 +278,9 @@ fn lower_if<'hir, 'source>(
 
     if let Some(fallback) = &conditional.fallback {
         lower_nodes(fallback, context)?;
+        // 收尾分支也补一跳转到结构末尾：作为不可见分隔，避免其文本与后续正文
+        // 在可见文本分组里合并，导致 I18n 消息对齐漂移（catalog 按分支拆分）。
+        push_end_jump(context, &mut end_jumps);
     }
 
     patch_end_jumps(context, end_jumps);
@@ -311,6 +322,8 @@ fn lower_switch<'hir, 'source>(
 
     if let Some(default) = &switch.default {
         lower_nodes(default, context)?;
+        // 同 lower_if：default 也补跳转到结构末尾，保持可见文本分组与 catalog 对齐。
+        push_end_jump(context, &mut end_jumps);
     }
 
     patch_end_jumps(context, end_jumps);
@@ -422,6 +435,7 @@ fn lower_for<'hir, 'source>(
     Ok(())
 }
 
+/// 为当前循环帧写入 break 跳转；没有活动循环时返回 MirLowerError。
 fn lower_break(span: Span, context: &mut MirLoweringContext<'_, '_>) -> Result<(), MirLowerError> {
     let Some(frame) = context.loops.last_mut() else {
         return Err(MirLowerError {
@@ -436,6 +450,7 @@ fn lower_break(span: Span, context: &mut MirLoweringContext<'_, '_>) -> Result<(
     Ok(())
 }
 
+/// 为当前循环帧写入跳转到 continue 目标的指令；没有活动循环时返回 MirLowerError。
 fn lower_continue(
     span: Span,
     context: &mut MirLoweringContext<'_, '_>,
@@ -452,6 +467,7 @@ fn lower_continue(
     Ok(())
 }
 
+/// 写入一条指向序列末尾的占位跳转，并记录其位置供稍后回填。
 fn push_end_jump(context: &mut MirLoweringContext<'_, '_>, end_jumps: &mut Vec<usize>) {
     end_jumps.push(context.instructions.len());
     context.instructions.push(MirInstruction::Jump {
@@ -459,11 +475,13 @@ fn push_end_jump(context: &mut MirLoweringContext<'_, '_>, end_jumps: &mut Vec<u
     });
 }
 
+/// 把所有分支结束跳转的目标统一回填为当前指令位置。
 fn patch_end_jumps(context: &mut MirLoweringContext<'_, '_>, end_jumps: Vec<usize>) {
     let end: MirInstructionPointer = MirInstructionPointer(context.instructions.len());
     patch_jumps(context, end_jumps, end);
 }
 
+/// 把记录位置上的跳转指令目标回填为指定位置。
 fn patch_jumps(
     context: &mut MirLoweringContext<'_, '_>,
     jumps: Vec<usize>,

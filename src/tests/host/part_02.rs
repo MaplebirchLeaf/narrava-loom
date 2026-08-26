@@ -44,6 +44,25 @@ fn host_start_returns_only_current_identity_and_presentation() {
 }
 
 #[test]
+fn host_visible_text_requires_explicit_br_for_line_breaks() {
+    let update: HostUpdate = HostUpdate::new(
+        "Start",
+        PresentationOutput::from_nodes(vec![
+            PresentationNode::Text(TextValue::from("第一行\n第二行")),
+            PresentationNode::Text(TextValue::from("第三行<br>第四行")),
+        ]),
+    );
+
+    assert_eq!(
+        update.presentation().nodes(),
+        &[
+            PresentationNode::Text(TextValue::from("第一行 第二行")),
+            PresentationNode::Text(TextValue::from("第三行\n第四行")),
+        ]
+    );
+}
+
+#[test]
 fn host_navigation_input_is_validated_and_executed_by_engine() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),

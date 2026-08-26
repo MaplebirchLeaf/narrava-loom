@@ -8,18 +8,25 @@ use serde::Serialize;
 
 use crate::{HostErrorDto, script_runtime};
 
+/// 开发者管理面板中展示的一条 State 条目。
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeveloperValueDto {
+    /// 所属命名空间（`global`/`variables`/`temporary`）。
     pub namespace: String,
+    /// 条目名。
     pub name: String,
+    /// 值的类型标签（如 `string`/`number`/`array`）。
     pub kind: String,
+    /// 可 JSON 表达的当前值；数组/对象只给摘要。
     pub value: serde_json::Value,
 }
 
+/// developer 未开启时的统一错误。
 pub(crate) fn developer_disabled() -> HostErrorDto {
     HostErrorDto::new("tauri_host.developer_disabled", "开发者模式没有开启")
 }
 
+/// 导出全部命名空间条目供管理面板展示。
 pub(crate) fn developer_state(state: &State) -> Vec<DeveloperValueDto> {
     state
         .global_entries()
@@ -37,6 +44,7 @@ pub(crate) fn developer_state(state: &State) -> Vec<DeveloperValueDto> {
         .collect()
 }
 
+/// 单条 State 值转 DTO；数组/对象仅保留长度摘要。
 fn developer_value(namespace: &str, name: &str, value: &Value) -> DeveloperValueDto {
     let (kind, value) = match value {
         Value::Undefined => ("undefined", serde_json::Value::Null),
@@ -85,6 +93,7 @@ fn developer_value(namespace: &str, name: &str, value: &Value) -> DeveloperValue
     }
 }
 
+/// 按 namespace 把 JSON 值写回 State（仅 `global`/`variables`/`temporary`）。
 pub(crate) fn developer_set(
     _script: &script_runtime::EcmaBinding,
     state: &mut State,
@@ -107,6 +116,7 @@ pub(crate) fn developer_set(
     Ok(())
 }
 
+/// 按 namespace 删除 State 条目（仅 `global`/`variables`/`temporary`）。
 pub(crate) fn developer_delete(
     _script: &script_runtime::EcmaBinding,
     state: &mut State,

@@ -267,32 +267,6 @@ fn reports_unclosed_twee_comment() {
 }
 
 #[test]
-fn keeps_html_comments_as_visible_markup_text() {
-    let source: Source = Source::load(
-        Path::new("src/tests/fixtures/game"),
-        Path::new("story/main.twee"),
-    )
-    .expect("示例源码应可读取");
-    let text: &str = "<!-- HTML 注释不是 Narrava 作者注释 -->\n";
-    let tokens = vec![
-        token(
-            &source,
-            TokenKind::PassageDeclaration {
-                name: "Start",
-                tags: Vec::new(),
-            },
-            0,
-            8,
-            1,
-        ),
-        token(&source, TokenKind::Text(text), 8, 62, 2),
-    ];
-
-    let passages = parse(&tokens).expect("HTML 注释形式应作为普通文本保留");
-    assert_eq!(passages[0].body[0].kind, BodyNodeKind::Text(text));
-}
-
-#[test]
 fn keeps_expression_like_text_literal() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),

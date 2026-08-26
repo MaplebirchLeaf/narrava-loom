@@ -179,17 +179,21 @@ impl EvalError {
 
 /// Expression 只借用外部全局值，不拥有 State 或其生命周期。
 pub trait EvaluationContext {
+    /// 读取 State.global 中的全局值；不存在的名称返回 `None`。
     fn global(&self, name: &str) -> Option<&Value>;
 
+    /// 读取 setup 提供的 State；未提供时返回 `None`。
     fn setup(&self) -> Option<&Value> {
         None
     }
 
+    /// 读取指定作用域的变量绑定；未绑定返回 `None`。
     fn variable(&self, _scope: VariableScope, _name: &str) -> Option<&Value> {
         None
     }
 }
 
+/// 可写 Context 拒绝写入时返回的错误；目前只有统一的拒绝类别。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContextWriteError {
     Rejected,
@@ -204,8 +208,10 @@ pub enum ScriptCallError {
 
 /// 写入能力独立扩展只读查询接口，普通求值不需要提供它。
 pub trait WritableEvaluationContext: EvaluationContext {
+    /// 写入 State.global；被拒绝时返回错误。
     fn set_global(&mut self, name: &str, value: Value) -> Result<(), ContextWriteError>;
 
+    /// 写入指定作用域的变量绑定；被拒绝时返回错误。
     fn set_variable(
         &mut self,
         scope: VariableScope,
@@ -213,6 +219,7 @@ pub trait WritableEvaluationContext: EvaluationContext {
         value: Value,
     ) -> Result<(), ContextWriteError>;
 
+    /// 写入 setup State；默认实现拒绝写入。
     fn set_setup(&mut self, _value: Value) -> Result<(), ContextWriteError> {
         Err(ContextWriteError::Rejected)
     }
@@ -248,14 +255,16 @@ pub trait WritableEvaluationContext: EvaluationContext {
 
 /// Runtime 提供可重放的 `[0, 1)` 随机单位，Expression 不持有随机状态。
 pub trait RandomSource {
+    /// 返回下一个可重放的 `[0, 1)` 随机单位。
     fn next_unit(&mut self) -> f64;
 }
 
+/// 在空上下文中求值；仅用于确定不依赖任何外部状态的表达式。
 pub fn evaluate(expression: &Expression<'_>) -> Result<Value, EvalError> {
     evaluate_with(expression, &EmptyContext)
 }
 
-/// 使用显式只读上下文求值；首轮只开放普通全局名称。
+/// 使用显式只读上下文求值；全局名解析先查内置函数与命名空间，再落入 Context。
 pub fn evaluate_with(
     expression: &Expression<'_>,
     context: &dyn EvaluationContext,

@@ -26,14 +26,17 @@ pub struct LirLowerError {
 }
 
 impl LirLowerError {
+    /// 发生错误的 Passage 名称。
     pub fn passage(&self) -> &str {
         &self.passage
     }
 
+    /// 出错指令在 Passage 内的下标；结构级错误为 None。
     pub fn instruction(&self) -> Option<usize> {
         self.instruction
     }
 
+    /// 错误的具体类别。
     pub fn kind(&self) -> LirLowerErrorKind {
         self.kind
     }
@@ -49,6 +52,7 @@ pub struct LirProgram<'mir, 'hir, 'source> {
 }
 
 impl<'mir, 'hir, 'source> LirProgram<'mir, 'hir, 'source> {
+    /// 建立 Passage 名称索引并验证全部跳转目标；任一失败返回 LirLowerError。
     pub fn lower(mir: &'mir MirStory<'hir, 'source>) -> Result<Self, LirLowerError> {
         let mut passages: BTreeMap<&'source str, MirPassageId> = BTreeMap::new();
         for passage in mir.passages() {
@@ -69,14 +73,17 @@ impl<'mir, 'hir, 'source> LirProgram<'mir, 'hir, 'source> {
         self.passage_by_id(*self.passages.get(name)?)
     }
 
+    /// 按本次编译内的稳定 ID 查询 Passage。
     pub fn passage_by_id(&self, id: MirPassageId) -> Option<&'mir MirPassage<'hir, 'source>> {
         self.mir.passage_by_id(id)
     }
 
+    /// 按 HIR 顺序返回全部 Passage。
     pub fn passages(&self) -> &'mir [MirPassage<'hir, 'source>] {
         self.mir.passages()
     }
 
+    /// 返回与底层 MIR 同源的默认语言文本目录。
     pub fn i18n(&self) -> &I18nCatalog {
         self.mir.i18n()
     }

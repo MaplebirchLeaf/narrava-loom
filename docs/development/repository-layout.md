@@ -9,8 +9,8 @@
 Narrava Loom/
 ├── src/                            narrava-loom-core 源码与单元测试
 ├── hosts/
-│   ├── narrava-loom-tauri/         官方桌面 Host
-│   └── narrava-loom-tui/           Host-neutral Presentation 验证适配器
+│   ├── narrava-loom-tauri/         官方 Tauri Host；桌面可运行，移动共享层待平台工程
+│   └── narrava-loom-tui/           Host-neutral 终端 Renderer 与输入前端
 ├── crates/
 │   └── narrava-loom-modloader/     独立演进的可选附属，不属于 Core workspace
 ├── bindings/typescript/            游戏脚本 TypeScript 契约

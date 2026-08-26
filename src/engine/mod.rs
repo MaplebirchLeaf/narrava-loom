@@ -56,6 +56,7 @@ pub struct PassageLifecycleContext<'params, 'hir, 'source, 'output> {
 }
 
 impl<'params, 'hir, 'source, 'output> PassageLifecycleContext<'params, 'hir, 'source, 'output> {
+    /// 建立 Init／Start 阶段上下文，此时尚无可读语义输出。
     pub fn new(
         entry: StoryHistoryEntry<'hir, 'source>,
         params: &'params Value,
@@ -80,10 +81,12 @@ impl<'params, 'hir, 'source, 'output> PassageLifecycleContext<'params, 'hir, 'so
         }
     }
 
+    /// 当前 Passage 的历史条目（含 HIR 引用与来源）。
     pub fn entry(&self) -> StoryHistoryEntry<'hir, 'source> {
         self.entry
     }
 
+    /// 本次导航或启动传入的入口参数。
     pub fn params(&self) -> &'params Value {
         self.params
     }
@@ -97,14 +100,18 @@ impl<'params, 'hir, 'source, 'output> PassageLifecycleContext<'params, 'hir, 'so
 /// 一次成功导航确认的历史项与执行输出。
 #[derive(Debug, PartialEq)]
 pub struct EngineNavigation<'hir, 'source, Output> {
+    /// 已确认的导航目标历史条目。
     pub entry: StoryHistoryEntry<'hir, 'source>,
+    /// 目标 Passage 执行产生的输出。
     pub output: Output,
 }
 
 /// 一次 Passage 执行及其可选 goto 请求的确认结果。
 #[derive(Debug, PartialEq)]
 pub struct EngineRequestedNavigation<'hir, 'source> {
+    /// 本次实际进入并执行的 Passage。
     pub entered: StoryHistoryEntry<'hir, 'source>,
+    /// 执行停止后确认的至多一个 goto 目标；没有请求时为 `None`。
     pub requested: Option<StoryHistoryEntry<'hir, 'source>>,
     /// 本跳 Passage 执行产生的有序语义输出。
     pub output: PresentationOutput,
@@ -113,6 +120,7 @@ pub struct EngineRequestedNavigation<'hir, 'source> {
 /// 一条连续执行并确认完成的 Passage 历史链。
 #[derive(Debug, PartialEq)]
 pub struct EngineNavigationChain<'hir, 'source> {
+    /// 按执行顺序确认的 Passage 历史链。
     pub entries: Vec<StoryHistoryEntry<'hir, 'source>>,
     /// 整条链按执行顺序累积的有序语义输出。
     pub output: PresentationOutput,
@@ -121,7 +129,9 @@ pub struct EngineNavigationChain<'hir, 'source> {
 /// 单次 Engine 执行允许消耗的显式控制流预算。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EngineExecutionLimits {
+    /// 单条导航链允许执行的 Passage 数量上限。
     pub passages: usize,
+    /// 每条 Passage 允许展开的 include 数量上限。
     pub includes: usize,
 }
 
@@ -219,6 +229,7 @@ pub enum EngineNavigationError<ExecutionError> {
 pub struct Engine;
 
 impl Engine {
+    /// 新游戏失败时恢复 State 检查点与 Story 快照，并包装回滚结果。
     fn rollback_new_game<'hir, 'source, RuntimeError>(
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -233,6 +244,7 @@ impl Engine {
         }
     }
 
+    /// 导航失败时恢复 State 检查点与 Story 快照，并包装回滚结果。
     fn rollback<'hir, 'source, ExecutionError>(
         state: &mut State,
         story: &mut Story<'hir, 'source>,

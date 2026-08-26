@@ -46,22 +46,27 @@ pub struct GlobalImportReport {
 }
 
 impl StateSnapshot {
+    /// 由已分离的 `$variables` 表构造快照；仅 crate 内部使用。
     pub(crate) fn from_variables(variables: BTreeMap<String, Value>) -> Self {
         Self { variables }
     }
 
+    /// 借用内部 `$variables` 表；仅 crate 内部使用。
     pub(crate) fn variables(&self) -> &BTreeMap<String, Value> {
         &self.variables
     }
 
+    /// 读取快照中的 `$name` 持久变量值。
     pub fn variables_get(&self, name: &str) -> Option<&Value> {
         self.variables.get(name)
     }
 
+    /// 查询快照中的 `$name` 持久变量是否存在。
     pub fn variables_has(&self, name: &str) -> bool {
         self.variables.contains_key(name)
     }
 
+    /// 快照中的持久变量条目数。
     pub fn variables_len(&self) -> usize {
         self.variables.len()
     }
@@ -94,6 +99,7 @@ impl State {
         self.script_dispatcher = Some(dispatcher);
     }
 
+    /// 解除 Binding 的瞬时函数路由；之后脚本调用以 `Unavailable` 失败。
     pub fn detach_script_dispatcher(&mut self) {
         self.script_dispatcher = None;
     }
@@ -103,10 +109,12 @@ impl State {
         self.global.get(name)
     }
 
+    /// 查询普通全局名称是否存在。
     pub fn global_has(&self, name: &str) -> bool {
         self.global.contains_key(name)
     }
 
+    /// 按名称遍历普通全局表。
     pub fn global_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
         self.global
             .iter()
@@ -134,6 +142,7 @@ impl State {
         report
     }
 
+    /// 删除普通全局名称，并返回被移除的旧值。
     pub fn global_del(&mut self, name: &str) -> Option<Value> {
         self.global.remove(name)
     }
@@ -143,20 +152,24 @@ impl State {
         self.variables.get(name)
     }
 
+    /// 查询 `$name` 是否存在于持久游戏变量表。
     pub fn variables_has(&self, name: &str) -> bool {
         self.variables.contains_key(name)
     }
 
+    /// 按名称遍历持久游戏变量表。
     pub fn variables_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
         self.variables
             .iter()
             .map(|(name, value)| (name.as_str(), value))
     }
 
+    /// 写入 `$name`，并返回被替换的旧值。
     pub fn variables_set(&mut self, name: &str, value: Value) -> Option<Value> {
         self.variables.insert(name.to_owned(), value)
     }
 
+    /// 删除 `$name`，并返回被移除的旧值。
     pub fn variables_del(&mut self, name: &str) -> Option<Value> {
         self.variables.remove(name)
     }
@@ -166,20 +179,24 @@ impl State {
         self.temporary.get(name)
     }
 
+    /// 查询 `_name` 是否存在于临时游戏变量表。
     pub fn temporary_has(&self, name: &str) -> bool {
         self.temporary.contains_key(name)
     }
 
+    /// 按名称遍历临时游戏变量表。
     pub fn temporary_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
         self.temporary
             .iter()
             .map(|(name, value)| (name.as_str(), value))
     }
 
+    /// 写入 `_name`，并返回被替换的旧值。
     pub fn temporary_set(&mut self, name: &str, value: Value) -> Option<Value> {
         self.temporary.insert(name.to_owned(), value)
     }
 
+    /// 删除 `_name`，并返回被移除的旧值。
     pub fn temporary_del(&mut self, name: &str) -> Option<Value> {
         self.temporary.remove(name)
     }

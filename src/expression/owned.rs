@@ -7,18 +7,24 @@ use super::{
     ObjectProperty, Span, UnaryOperator, UpdateOperator, UpdatePosition, VariableScope,
 };
 
+/// 拥有所有权的 Expression；可序列化进发布产物，并可从借用 AST 转换而来。
+/// 拥有所有权的 Expression；可序列化进发布产物，并可从借用 AST 转换而来。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedExpression {
     pub kind: OwnedExpressionKind,
     pub span: Span,
 }
 
+/// 对象键的拥有型版本，对应借用 AST 的 ObjectKey。
+/// 对象键的拥有型版本，对应借用 AST 的 ObjectKey。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedObjectKey {
     Identifier(String),
     String(String),
 }
 
+/// 对象属性的拥有型版本，保留键与值各自的源码位置。
+/// 对象属性的拥有型版本，保留键与值各自的源码位置。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedObjectProperty {
     pub key: OwnedObjectKey,
@@ -26,6 +32,8 @@ pub struct OwnedObjectProperty {
     pub value: OwnedExpression,
 }
 
+/// 与借用型 ExpressionKind 同构的拥有型节点种类。
+/// 与借用型 ExpressionKind 同构的拥有型节点种类。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedExpressionKind {
     Array(Vec<OwnedExpression>),
@@ -233,6 +241,7 @@ impl From<&ObjectProperty<'_>> for OwnedObjectProperty {
 }
 
 impl OwnedExpression {
+    /// 借用自身重建临时 AST；返回值的生命周期与自身绑定。
     pub fn as_expression(&self) -> Expression<'_> {
         Expression {
             kind: self.kind.as_expression_kind(),
@@ -242,6 +251,7 @@ impl OwnedExpression {
 }
 
 impl OwnedExpressionKind {
+    /// 把拥有型节点重建为借用节点，字符串与名称直接借用内部存储。
     fn as_expression_kind(&self) -> ExpressionKind<'_> {
         match self {
             Self::Array(values) => ExpressionKind::Array(borrowed_list(values)),
@@ -353,6 +363,7 @@ impl OwnedExpressionKind {
 }
 
 impl OwnedObjectProperty {
+    /// 重建借用型对象属性。
     fn as_object_property(&self) -> ObjectProperty<'_> {
         ObjectProperty {
             key: match &self.key {
@@ -365,10 +376,12 @@ impl OwnedObjectProperty {
     }
 }
 
+/// 批量把借用节点列表转换为拥有型节点。
 fn owned_list(values: &[Expression<'_>]) -> Vec<OwnedExpression> {
     values.iter().map(OwnedExpression::from).collect()
 }
 
+/// 批量把拥有型节点重建为借用节点列表。
 fn borrowed_list(values: &[OwnedExpression]) -> Vec<Expression<'_>> {
     values.iter().map(OwnedExpression::as_expression).collect()
 }

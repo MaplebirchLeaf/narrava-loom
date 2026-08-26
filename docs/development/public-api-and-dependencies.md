@@ -29,10 +29,4 @@ microtask；`Host.delay(ms)` 则建立真实 Core suspension，由 Rust Worker �
 - 独立的 ModLoader 有自己的 lockfile，不属于根 workspace 验证。
 - 更新 lockfile 必须是有意的依赖更新，不应成为普通构建的副作用。
 
-仓库标准检查：
-
-```text
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --all-targets --locked
-```
+仓库标准检查见[仓库命令](commands.md)。

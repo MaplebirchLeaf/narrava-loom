@@ -21,26 +21,37 @@ use super::{
 };
 use crate::{state::StateCheckpoint, story::StorySnapshot};
 
+/// Engine 进入第一个 MIR Passage 前的准备错误。
 #[derive(Debug, PartialEq)]
 pub enum EngineMirBeginExecutionError<LifecycleError> {
+    /// 当前编译结果中没有对应名称的 Bytecode Passage。
     MissingMirPassage(String),
+    /// Init／Start 生命周期回调失败。
     Lifecycle(LifecycleError),
 }
 
+/// Engine 开始 MIR 链时的失败阶段：进入 Passage 的准备错误或 VM 驱动错误。
 pub enum EngineMirBeginError<'hir, 'source, LifecycleError> {
+    /// 进入入口 Passage、执行 Init／Start 前的准备失败。
     Preparation(
         EngineNavigationError<
             EngineRequestedExecutionError<EngineMirBeginExecutionError<LifecycleError>>,
         >,
     ),
+    /// 已进入后，驱动 VM 到首个稳定边界时失败。
     Continue(Box<EngineMirVmResumeError<'hir, 'source>>),
 }
 
+/// Engine 开始 MIR 链的入口请求参数。
 #[derive(Clone, Copy, Debug)]
 pub struct EngineMirBeginRequest<'params> {
+    /// 起始 Passage 名称。
     pub name: &'params str,
+    /// 交给入口 Passage 生命周期与正文的参数。
     pub params: &'params Value,
+    /// 本次执行链的运行时身份，随暂停与恢复校验。
     pub identity: RuntimeExecutionIdentity,
+    /// 本次开始事务的控制流预算。
     pub limits: EngineExecutionLimits,
     /// 目标语言必须先由当前编译结果的 I18n 目录校验。
     pub language: Option<&'params I18nRuntimeLanguage>,
@@ -54,20 +65,30 @@ pub(crate) struct EngineMirBeginCheckpointRequest<'hir, 'source, 'params> {
 }
 
 /// Engine 驱动 Bytecode Passage 时保留 VM、映射与 include 预算错误。
+/// Engine 驱动 Bytecode Passage 时保留 VM、映射与 include 预算错误。
 #[derive(Debug, PartialEq)]
 pub enum EngineMirExecutionError {
+    /// 当前编译结果中没有对应名称的 Bytecode Passage。
     MissingMirPassage(String),
+    /// VM 步进或 Macro 完成写入失败。
     Vm(MirExecutionError),
+    /// Story 导航请求失败。
     Story(StoryRuntimeRequestError),
+    /// 本条执行链展开的 include 超过预算。
     IncludeLimitExceeded { limit: usize },
+    /// 遇到动态 Macro，但当前执行入口没有安装 Macro 控制器。
     MacroPending,
 }
 
 /// Engine 接通 Macro 控制器后能够区分的 MIR、Macro 与边界错误。
+/// Engine 接通 Macro 控制器后能够区分的 MIR、Macro 与边界错误。
 #[derive(Debug, PartialEq)]
 pub enum EngineMirMacroExecutionError<MacroError> {
+    /// VM 或 Story 映射层的错误。
     Mir(EngineMirExecutionError),
+    /// Macro 控制器自身报告的错误。
     Macro(MacroError),
+    /// Macro 返回了 Engine 同步链不支持的停止信号。
     UnexpectedMacroControl(BodyControl),
 }
 
@@ -260,6 +281,7 @@ impl Engine {
     }
 }
 
+/// 在单个 Passage 内驱动 MIR，并逐个分派动态 Macro 直到 Halt 或导航请求。
 fn execute_mir_passage_with_macros<'hir, 'source, MacroError>(
     mir: &BytecodeProgram,
     passage: &HirPassage<'source>,
@@ -365,6 +387,7 @@ fn execute_mir_passage_with_macros<'hir, 'source, MacroError>(
     }
 }
 
+/// 未安装 Macro 控制器时执行单个 Passage；遇到动态 Macro 即报错。
 fn execute_mir_passage<'hir, 'source>(
     mir: &BytecodeProgram,
     passage: &HirPassage<'source>,

@@ -68,7 +68,7 @@
       ]
     },
     "builtin-macro": {
-      "match": "\\b(if|elseif|else|switch|case|default|for|while|break|continue|set|unset|run|include|goto|print|text|silently|return|capture|exit|widget|link)\\b",
+      "match": "\\b(if|elseif|else|switch|case|default|for|while|break|continue|set|unset|run|include|goto|print|silently|return|capture|exit|widget|link)\\b",
       "name": "support.function.builtin.macro.narrava-twee"
     },
     "expression": {

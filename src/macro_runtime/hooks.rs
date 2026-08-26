@@ -38,6 +38,7 @@ pub struct MacroLifecycleController<'subscriptions, Hook, Before, After> {
 impl<'subscriptions, Hook, Before, After>
     MacroLifecycleController<'subscriptions, Hook, Before, After>
 {
+    /// 组合订阅集合与 before／after 两个调用适配器。
     pub fn new(
         subscriptions: &'subscriptions MacroLifecycleSubscriptions<Hook>,
         invoke_before: Before,
@@ -179,6 +180,7 @@ impl<Hook> MacroLifecycleSubscriptions<Hook> {
             .map(|subscription: &MacroLifecycleSubscription<Hook>| &subscription.hook)
     }
 
+    /// 校验编译器固有名称并分配递增订阅编号后登记。
     fn register(
         next_id: &mut u64,
         subscriptions: &mut HashMap<String, Vec<MacroLifecycleSubscription<Hook>>>,
@@ -201,6 +203,7 @@ impl<Hook> MacroLifecycleSubscriptions<Hook> {
         Ok(id)
     }
 
+    /// 在指定阶段集合中按编号查找并移除一条订阅。
     fn remove_from(
         subscriptions: &mut HashMap<String, Vec<MacroLifecycleSubscription<Hook>>>,
         id: MacroLifecycleSubscriptionId,
@@ -223,6 +226,7 @@ impl<Hook> Default for MacroLifecycleSubscriptions<Hook> {
     }
 }
 
+/// 编译器固有语法 Macro 不允许注册生命周期 Hook。
 fn compiler_owns_macro(name: &str) -> bool {
     matches!(
         name,

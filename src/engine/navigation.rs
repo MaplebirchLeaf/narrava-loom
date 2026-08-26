@@ -1,6 +1,12 @@
+//! Engine 导航事务。
+//!
+//! 单 Passage 导航、带 Story 请求确认的导航与连续 goto 链都在本文件实现；
+//! 所有导航共享同一检查点与回滚路径。
+
 use super::*;
 
 impl Engine {
+    /// 导航到指定 Passage，并在事务内执行一次不携带请求的正文调用。
     pub fn navigate<'hir, 'source, Output, ExecutionError, Execute>(
         state: &mut State,
         story: &mut Story<'hir, 'source>,

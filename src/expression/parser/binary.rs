@@ -3,6 +3,7 @@
 use super::primary::parse_unary;
 use super::*;
 
+/// 解析一段完整 Token 序列；段内残留 Token 一律视为错误，供 parse_list 复用。
 pub(crate) fn parse_token_segment<'source>(
     tokens: &[Token<'source>],
 ) -> Result<Expression<'source>, ParseError> {
@@ -14,6 +15,7 @@ pub(crate) fn parse_token_segment<'source>(
     Ok(expression)
 }
 
+/// 按单个 Token 更新括号深度，供 parse_list 判断顶层切分点。
 pub(crate) fn delimiter_depth_after(depth: usize, token: TokenKind<'_>) -> usize {
     match token {
         TokenKind::LeftParen | TokenKind::LeftBracket | TokenKind::LeftBrace => depth + 1,
@@ -188,6 +190,7 @@ fn parse_logical_and<'source>(
 }
 
 /// 按位运算拆成三层，保持 `&` 高于 `^`、`^` 高于 `|`。
+/// 按位或层：`|` 左结合，优先级低于按位异或。
 fn parse_bitwise_or<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -201,6 +204,7 @@ fn parse_bitwise_or<'source>(
     )
 }
 
+/// 按位异或层：`^` 左结合，优先级高于按位或、低于按位与。
 fn parse_bitwise_xor<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -214,6 +218,7 @@ fn parse_bitwise_xor<'source>(
     )
 }
 
+/// 按位与层：`&` 左结合，优先级高于异或、低于相等层。
 fn parse_bitwise_and<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -339,6 +344,7 @@ fn parse_comparison<'source>(
     Ok(expression)
 }
 
+/// 读取 between 后紧跟的开闭括号组合；不匹配时返回 None，按普通比较继续。
 fn parse_between_bounds(tokens: &[Token<'_>], cursor: usize) -> Option<BetweenBounds> {
     let left: TokenKind<'_> = tokens.get(cursor)?.kind;
     let right: TokenKind<'_> = tokens.get(cursor + 1)?.kind;
@@ -352,6 +358,7 @@ fn parse_between_bounds(tokens: &[Token<'_>], cursor: usize) -> Option<BetweenBo
     }
 }
 
+/// 移位层：左移、右移与无符号右移均为左结合。
 fn parse_shift<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -373,6 +380,7 @@ fn parse_shift<'source>(
     Ok(expression)
 }
 
+/// 加减层：`+` 与 `-` 左结合。
 fn parse_additive<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,
@@ -393,6 +401,7 @@ fn parse_additive<'source>(
     Ok(expression)
 }
 
+/// 乘除层：`*`、`/`、`//`、`%` 左结合，优先级低于幂运算。
 fn parse_multiplicative<'source>(
     tokens: &[Token<'source>],
     cursor: &mut usize,

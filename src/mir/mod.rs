@@ -1,7 +1,8 @@
 //! HIR 结构到显式控制流之间的中层 IR 基础。
 //!
-//! 当前只降低没有控制流歧义的顺序节点。其他 HIR 节点必须等对应跳转结构
-//! 定义后再加入，不能被跳过或退回递归执行。
+//! MIR 把叙事正文编译为可暂停的顺序指令序列：控制流全部显式为跳转与迭代指令，
+//! 临时值保存在指令槽中。Widget 与 Return 等尚无指令语义的 HIR 节点在 lowering
+//! 时返回 `MirLowerError`，不允许退回递归执行。
 
 mod lowering;
 
@@ -100,7 +101,9 @@ pub enum MirInstruction<'hir, 'source> {
 /// 当前指令产生的 Presentation 是否进入执行链输出。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MirOutputMode {
+    /// 指令结果进入执行链输出。
     Visible,
+    /// 指令结果被静默丢弃（如 `silently` 内部）。
     Suppressed,
 }
 
@@ -112,16 +115,19 @@ pub struct MirI18nTextPart {
 }
 
 impl MirI18nTextPart {
+    /// 默认语言消息的稳定 ID。
     pub fn id(&self) -> &I18nTextId {
         &self.id
     }
 
+    /// 动态表达式片段对应的占位符名称；静态文本为 None。
     pub fn placeholder(&self) -> Option<&str> {
         self.placeholder.as_deref()
     }
 }
 
 impl MirInstruction<'_, '_> {
+    /// 返回输出指令（Text/PrintExpression/PrintLiteral）附着的翻译消息身份。
     pub fn i18n(&self) -> Option<&MirI18nTextPart> {
         match self {
             Self::Text { i18n, .. }
@@ -144,10 +150,12 @@ pub struct MirLowerError {
 pub struct MirInstructionPointer(usize);
 
 impl MirInstructionPointer {
+    /// 指向序列第一条指令。
     pub fn start() -> Self {
         Self(0)
     }
 
+    /// 以 usize 返回当前指令位置。
     pub fn index(self) -> usize {
         self.0
     }
@@ -164,6 +172,7 @@ impl MirInstructionPointer {
 pub struct MirValueSlot(usize);
 
 impl MirValueSlot {
+    /// 以 usize 返回值槽编号。
     pub fn index(self) -> usize {
         self.0
     }
@@ -172,7 +181,9 @@ impl MirValueSlot {
 /// for in 与 for of 对集合选择的迭代视图。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MirCollectionIterationKind {
+    /// 遍历集合的键。
     Keys,
+    /// 遍历集合的值。
     Values,
 }
 
@@ -181,6 +192,7 @@ pub enum MirCollectionIterationKind {
 pub struct MirIteratorSlot(usize);
 
 impl MirIteratorSlot {
+    /// 以 usize 返回迭代槽编号。
     pub fn index(self) -> usize {
         self.0
     }
@@ -196,14 +208,15 @@ pub struct MirBody<'hir, 'source> {
 
 /// 容器 Macro 延迟正文对应的独立 MIR 可执行单元。
 ///
-/// 它与 Passage 使用同一套指令语义，但尚不冒充 Story Passage。后续 VM 会为该
-/// 单元分配独立执行身份，使异步 Macro 能保存并恢复正文中的确切指令位置。
+/// 它与 Passage 使用同一套指令语义，但不属于 Story Passage。VM 为其分配独立
+/// 执行帧，使异步 Macro 能保存并恢复正文中的确切指令位置。
 #[derive(Debug, PartialEq, Eq)]
 pub struct MirMacroBody<'hir, 'source> {
     body: MirBody<'hir, 'source>,
 }
 
 impl<'hir, 'source> MirMacroBody<'hir, 'source> {
+    /// 把延迟正文降低为可暂停的指令序列。
     pub fn lower(body: &'hir [HirBodyNode<'source>]) -> Result<Self, MirLowerError> {
         Ok(Self {
             body: lower_body(body)?,
@@ -231,14 +244,17 @@ impl<'hir, 'source> MirMacroBody<'hir, 'source> {
 }
 
 impl<'hir, 'source> MirBody<'hir, 'source> {
+    /// 全部指令序列，末尾固定为 `Halt`。
     pub fn instructions(&self) -> &[MirInstruction<'hir, 'source>] {
         &self.instructions
     }
 
+    /// 执行帧可容纳的临时值槽数量。
     pub fn value_slot_count(&self) -> usize {
         self.value_slot_count
     }
 
+    /// 执行帧可容纳的可暂停迭代槽数量。
     pub fn iterator_slot_count(&self) -> usize {
         self.iterator_slot_count
     }
@@ -249,6 +265,7 @@ impl<'hir, 'source> MirBody<'hir, 'source> {
 pub struct MirPassageId(usize);
 
 impl MirPassageId {
+    /// 以 usize 返回 Passage 身份编号。
     pub fn index(self) -> usize {
         self.0
     }
@@ -278,14 +295,17 @@ impl MirExecutionPosition {
         }
     }
 
+    /// 当前所在的 Passage。
     pub fn passage(self) -> MirPassageId {
         self.passage
     }
 
+    /// 当前所在的指令位置。
     pub fn instruction(self) -> MirInstructionPointer {
         self.instruction
     }
 
+    /// 在同一 Passage 内替换指令位置（供 VM 实现跳转）。
     pub(crate) fn with_instruction(self, instruction: MirInstructionPointer) -> Self {
         Self {
             passage: self.passage,
@@ -311,18 +331,22 @@ pub struct MirPassage<'hir, 'source> {
 }
 
 impl<'hir, 'source> MirPassage<'hir, 'source> {
+    /// 本次编译内的稳定 Passage 身份。
     pub fn id(&self) -> MirPassageId {
         self.id
     }
 
+    /// 区分大小写的 Passage 名称。
     pub fn name(&self) -> &'source str {
         self.name
     }
 
+    /// 全部指令序列。
     pub fn instructions(&self) -> &[MirInstruction<'hir, 'source>] {
         self.body.instructions()
     }
 
+    /// 按指令位置查询单条指令。
     pub fn instruction(
         &self,
         pointer: MirInstructionPointer,
@@ -330,10 +354,12 @@ impl<'hir, 'source> MirPassage<'hir, 'source> {
         self.body.instructions.get(pointer.index())
     }
 
+    /// 执行帧可容纳的临时值槽数量。
     pub fn value_slot_count(&self) -> usize {
         self.body.value_slot_count()
     }
 
+    /// 执行帧可容纳的可暂停迭代槽数量。
     pub fn iterator_slot_count(&self) -> usize {
         self.body.iterator_slot_count()
     }
@@ -378,6 +404,7 @@ impl<'hir, 'source> MirStory<'hir, 'source> {
         self.passages.get(id.0)
     }
 
+    /// 按 HIR 顺序返回全部 Passage。
     pub fn passages(&self) -> &[MirPassage<'hir, 'source>] {
         &self.passages
     }

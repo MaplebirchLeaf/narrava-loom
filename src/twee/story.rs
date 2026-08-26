@@ -34,6 +34,7 @@ impl<'source> Story<'source> {
     }
 }
 
+/// 对全部 Passage 执行跨 Source 语义检查：名称全局唯一，特殊 Passage 不带 Tag。
 pub fn validate<'source>(passages: &[Passage<'source>]) -> Result<(), SemanticError<'source>> {
     let mut names: HashSet<&str> = HashSet::new();
 

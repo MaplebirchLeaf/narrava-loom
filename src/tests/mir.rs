@@ -194,7 +194,7 @@ fn lowers_if_to_typed_conditional_and_end_jumps() {
         panic!("真分支后应跳过 fallback");
     };
     assert_eq!(target.index(), 3);
-    assert_eq!(end.index(), 4);
+    assert_eq!(end.index(), 5);
     assert!(matches!(
         instructions[1],
         MirInstruction::Text {
@@ -209,7 +209,11 @@ fn lowers_if_to_typed_conditional_and_end_jumps() {
             ..
         }
     ));
-    assert!(matches!(instructions[4], MirInstruction::Halt));
+    assert!(
+        matches!(instructions[4], MirInstruction::Jump { .. }),
+        "fallback 后应有跳转到结构末尾的分隔"
+    );
+    assert!(matches!(instructions[5], MirInstruction::Halt));
 }
 
 #[test]
@@ -244,7 +248,7 @@ fn lowers_switch_with_one_evaluation_slot_and_strict_case_jumps() {
     assert_eq!(destination, left);
     assert_eq!(destination.index(), 0);
     assert_eq!(next.index(), 4);
-    assert_eq!(end.index(), 5);
+    assert_eq!(end.index(), 6);
     assert!(matches!(
         instructions[2],
         MirInstruction::Text {
@@ -259,7 +263,11 @@ fn lowers_switch_with_one_evaluation_slot_and_strict_case_jumps() {
             ..
         }
     ));
-    assert!(matches!(instructions[5], MirInstruction::Halt));
+    assert!(
+        matches!(instructions[5], MirInstruction::Jump { .. }),
+        "default 后应有跳转到结构末尾的分隔"
+    );
+    assert!(matches!(instructions[6], MirInstruction::Halt));
 }
 
 #[test]

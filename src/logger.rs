@@ -22,6 +22,7 @@ pub struct LogFilter {
 }
 
 impl LogFilter {
+    /// 判断事件是否同时满足级别与目标条件。
     fn matches(&self, event: &LogEvent) -> bool {
         let level_matches: bool = self
             .minimum_level
@@ -56,6 +57,7 @@ pub struct LogRecord {
     pub event: LogEvent,
 }
 
+/// 一条订阅：过滤条件与尚未取走的待处理记录。
 #[derive(Debug)]
 struct LogSubscription {
     filter: LogFilter,

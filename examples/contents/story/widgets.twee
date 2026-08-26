@@ -3,5 +3,5 @@
 %/
 :: SharedHighlightWidgets [widget]
 <<widget "crossFileCard">>
-  <strong><<print @args[0]>></strong>
+  <<print @args[0] 0 "strong">>
 <</widget>>

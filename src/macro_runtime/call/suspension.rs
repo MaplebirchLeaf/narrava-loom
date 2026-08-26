@@ -11,7 +11,9 @@ use super::super::{MacroHandlerOutcome, MacroLocalScopes, SuspendedMacroScopes};
 /// 一次已执行调用的同步结果或异步暂停状态。
 #[derive(Debug, PartialEq)]
 pub enum MacroCallOutcome<Output, Pending> {
+    /// Handler 同步完成并返回输出。
     Complete(Output),
+    /// Handler 异步暂停，调度器必须整体保存暂停状态。
     Pending(MacroSuspension<Pending>),
 }
 
@@ -26,10 +28,12 @@ pub struct MacroSuspension<Pending> {
 /// Pending 恢复后的完成状态或再次暂停状态。
 #[derive(Debug, PartialEq)]
 pub enum MacroResumeOutcome<Output, Pending> {
+    /// Handler 完成，输出与退出后的外层作用域一并交还。
     Complete {
         output: Output,
         scopes: MacroLocalScopes<Value>,
     },
+    /// Handler 再次暂停，作用域链重新转移。
     Pending(MacroSuspension<Pending>),
 }
 
@@ -62,9 +66,12 @@ impl<Pending> MacroResumeIdentityError<Pending> {
     }
 }
 
+/// 暂停恢复失败：执行身份不符，或恢复回调自身失败。
 #[derive(Debug, PartialEq)]
 pub enum MacroResumeError<Error, Pending> {
+    /// 暂停属于其他执行链，原状态保持完整。
     Identity(MacroResumeIdentityError<Pending>),
+    /// 恢复回调失败，作用域已退出并交还。
     Resume(MacroResumeFailure<Error>),
 }
 

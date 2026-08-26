@@ -3,11 +3,13 @@
 use super::session::evaluate_in;
 use super::*;
 
+/// 链式求值的中间结果；可选链命中空值时短路，不再继续求值。
 pub(crate) enum ChainValue {
     Ready(Value),
     ShortCircuited,
 }
 
+/// 把全局函数名解析为原生函数身份；未登记的名称返回 `None`。
 pub(crate) fn native_function(name: &str) -> Option<NativeFunction> {
     Some(match name {
         "abs" => NativeFunction::Abs,
@@ -31,6 +33,7 @@ pub(crate) fn native_function(name: &str) -> Option<NativeFunction> {
     })
 }
 
+/// 把全局名解析为原生命名空间；目前只登记 Object。
 pub(crate) fn native_namespace(name: &str) -> Option<NativeNamespace> {
     match name {
         "Object" => Some(NativeNamespace::Object),
@@ -39,6 +42,7 @@ pub(crate) fn native_namespace(name: &str) -> Option<NativeNamespace> {
 }
 
 impl ChainValue {
+    /// 解包为最终值；可选链短路时返回 undefined。
     pub(crate) fn into_value(self) -> Value {
         match self {
             Self::Ready(value) => value,
@@ -309,10 +313,12 @@ pub(crate) fn read_index(
     }
 }
 
+/// 把索引表达式的结果转换为属性名文本。
 pub(crate) fn index_property(value: &Value, span: Span) -> Result<TextValue, EvalError> {
     to_string(value).ok_or(EvalError::InvalidStringConversion(span))
 }
 
+/// 把 UTF-16 文本转换为可比较的属性名；含孤立代理项时转换失败。
 pub(crate) fn property_name(value: &TextValue, span: Span) -> Result<String, EvalError> {
     value
         .to_unicode_string()

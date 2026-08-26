@@ -20,6 +20,7 @@ pub trait NativeMacroCallbacks<Native, Story>
 where
     Story: MacroStoryAccess + ?Sized,
 {
+    /// 把 Native Handler 身份转换为一次同步调用并返回独立输出。
     fn invoke(
         &mut self,
         handler: &Native,
@@ -32,6 +33,7 @@ pub trait AsyncNativeMacroCallbacks<Native, Story, Pending>
 where
     Story: MacroStoryAccess + ?Sized,
 {
+    /// 首次调用异步 Native Handler，返回完成结果或可恢复的 Pending 句柄。
     fn invoke(
         &mut self,
         handler: &Native,
@@ -55,9 +57,11 @@ pub enum RuntimeNativeResumeError<HandlerError> {
     Lifecycle(Diagnostic),
 }
 
+/// 异步 Native Macro 恢复后的完成状态或再次暂停状态。
 pub type RuntimeNativeResumeOutcome<Pending> =
     MacroResumeOutcome<RuntimeMacroExecution, RuntimeNativePending<Pending>>;
 
+/// 异步 Native Macro 恢复失败的统一类型，保留调度句柄所有权。
 pub type RuntimeNativeResumeFailure<HandlerError, Pending> =
     MacroResumeError<RuntimeNativeResumeError<HandlerError>, RuntimeNativePending<Pending>>;
 

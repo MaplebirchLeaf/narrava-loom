@@ -93,6 +93,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
         self.get(name).is_some()
     }
 
+    /// 按区分大小写的 PassageName 精确查询；不触发任何导航，也不建立历史记录。
     pub fn get(&self, name: &str) -> Option<&'hir HirPassage<'source>> {
         self.compiled.passage(name)
     }
@@ -113,10 +114,12 @@ impl<'hir, 'source> Story<'hir, 'source> {
         self.get(special::STORY_INIT_PASSAGE)
     }
 
+    /// 当前已确认的 Passage；尚未导航时返回 `None`。
     pub fn current(&self) -> Option<&HirPassage<'source>> {
         self.current_entry().map(StoryHistoryEntry::passage)
     }
 
+    /// 当前已确认的导航记录（含历史编号与导航标记）；尚未导航时返回 `None`。
     pub fn current_entry(&self) -> Option<&StoryHistoryEntry<'hir, 'source>> {
         self.position
             .and_then(|position: usize| self.history.get(position))

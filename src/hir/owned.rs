@@ -1,4 +1,6 @@
-//! Bytecode 与发布产物使用的拥有型 Macro HIR。
+//! 拥有型 HIR：与借用型 HIR 同构但持有自己的数据，可序列化。
+//!
+//! 供 Bytecode 与发布产物使用，不依赖源码生命周期；`as_hir` 提供回借视图。
 
 use serde::{Deserialize, Serialize};
 
@@ -7,12 +9,14 @@ mod conversion;
 use super::*;
 use crate::expression::OwnedExpression;
 
+/// 拥有型正文节点；与 [`HirBodyNode`] 同构，不依赖源码生命周期，可序列化。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirBodyNode {
     pub kind: OwnedHirBodyKind,
     pub span: twee::Span,
 }
 
+/// 拥有型正文语义；对应 [`HirBodyKind`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedHirBodyKind {
     Text(String),
@@ -36,24 +40,28 @@ pub enum OwnedHirBodyKind {
     Macro(OwnedHirMacro),
 }
 
+/// 拥有型 `print` 参数；对应 [`HirPrint`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedHirPrint {
     Expression(OwnedExpression),
     Literal(String),
 }
 
+/// 拥有型 Widget 定义；对应 [`HirWidget`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirWidget {
     pub name: String,
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型 capture 结构；对应 [`HirCapture`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirCapture {
     pub locals: Vec<String>,
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型 switch 结构；对应 [`HirSwitch`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirSwitch {
     pub value: OwnedExpression,
@@ -61,18 +69,21 @@ pub struct OwnedHirSwitch {
     pub default: Option<Vec<OwnedHirBodyNode>>,
 }
 
+/// 拥有型 switch case；对应 [`HirSwitchCase`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirSwitchCase {
     pub value: OwnedExpression,
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型 while 循环；对应 [`HirWhile`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirWhile {
     pub condition: OwnedExpression,
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型 for 循环；对应 [`HirFor`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirFor {
     pub target: OwnedHirForTarget,
@@ -80,12 +91,14 @@ pub struct OwnedHirFor {
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型 for 写入目标；对应 [`HirForTarget`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirForTarget {
     pub value: OwnedExpression,
     pub span: twee::Span,
 }
 
+/// 拥有型 for 迭代模式；对应 [`HirForKind`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedHirForKind {
     In {
@@ -106,18 +119,21 @@ pub enum OwnedHirForKind {
     },
 }
 
+/// 拥有型 if 结构；对应 [`HirIf`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirIf {
     pub branches: Vec<OwnedHirIfBranch>,
     pub fallback: Option<Vec<OwnedHirBodyNode>>,
 }
 
+/// 拥有型 if 分支；对应 [`HirIfBranch`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirIfBranch {
     pub condition: OwnedExpression,
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型通用 Macro 调用；对应 [`HirMacro`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedHirMacro {
     pub name: String,
@@ -126,6 +142,7 @@ pub struct OwnedHirMacro {
     pub body: Vec<OwnedHirBodyNode>,
 }
 
+/// 拥有型 Macro 参数类别；对应 [`HirMacroArguments`]。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedHirMacroArguments {
     None,
@@ -134,6 +151,7 @@ pub enum OwnedHirMacroArguments {
 }
 
 impl OwnedHirBodyNode {
+    /// 借出内部数据，构造与源码生命周期无关的借用型正文节点。
     pub fn as_hir(&self) -> HirBodyNode<'_> {
         HirBodyNode {
             kind: self.kind.as_hir(),
@@ -296,6 +314,7 @@ impl OwnedHirIfBranch {
 }
 
 impl OwnedHirMacro {
+    /// 借出内部数据，构造借用型 Macro 调用。
     pub fn as_hir(&self) -> HirMacro<'_> {
         HirMacro {
             name: &self.name,

@@ -19,6 +19,7 @@ pub struct EngineMirProgress<'hir, 'source> {
 }
 
 impl<'hir, 'source> EngineMirProgress<'hir, 'source> {
+    /// 建立暂停进度；`entries` 末尾必须是 `current`。
     pub fn new(
         current: StoryHistoryEntry<'hir, 'source>,
         entries: Vec<StoryHistoryEntry<'hir, 'source>>,
@@ -42,39 +43,48 @@ impl<'hir, 'source> EngineMirProgress<'hir, 'source> {
         }
     }
 
+    /// 附加后续恢复时 VM 步进使用的目标语言。
     pub fn with_language(mut self, language: Option<I18nRuntimeLanguage>) -> Self {
         self.language = language;
         self
     }
 
+    /// 暂停时正在执行的 Passage。
     pub fn current(&self) -> StoryHistoryEntry<'hir, 'source> {
         self.current
     }
 
+    /// 已进入并确认的 Passage 历史链。
     pub fn entries(&self) -> &[StoryHistoryEntry<'hir, 'source>] {
         &self.entries
     }
 
+    /// 链上已累积的有序语义输出。
     pub fn output(&self) -> &PresentationOutput {
         &self.output
     }
 
+    /// 入口 Passage 收到的参数副本。
     pub fn params(&self) -> &Value {
         &self.params
     }
 
+    /// 已执行完的 Passage 数量（用于预算检查）。
     pub fn executed_passages(&self) -> usize {
         self.executed_passages
     }
 
+    /// Macro 调用已展开的 include 数量（用于预算检查）。
     pub fn macro_includes_entered(&self) -> usize {
         self.macro_includes_entered
     }
 
+    /// 本事务的控制流预算。
     pub fn limits(&self) -> EngineExecutionLimits {
         self.limits
     }
 
+    /// 恢复时 VM 步进使用的目标语言。
     pub fn language(&self) -> Option<&I18nRuntimeLanguage> {
         self.language.as_ref()
     }
@@ -92,6 +102,7 @@ pub struct EngineMirContinuation<'hir, 'source, Pending> {
 }
 
 impl<'hir, 'source, Pending> EngineMirContinuation<'hir, 'source, Pending> {
+    /// 组合暂停事务的全部所有权组件；恢复完成前不能作为 Host Resume 输入。
     pub fn new(
         runtime: RuntimeMacroContinuation<Pending>,
         state_checkpoint: StateCheckpoint,
@@ -108,14 +119,17 @@ impl<'hir, 'source, Pending> EngineMirContinuation<'hir, 'source, Pending> {
         }
     }
 
+    /// VM 级 Macro 暂停句柄。
     pub fn runtime(&self) -> &RuntimeMacroContinuation<Pending> {
         &self.runtime
     }
 
+    /// 暂停时尚未确认的 Story 请求。
     pub fn requests(&self) -> &StoryRuntimePending<'hir, 'source> {
         &self.requests
     }
 
+    /// 暂停时的 Passage 导航进度。
     pub fn progress(&self) -> &EngineMirProgress<'hir, 'source> {
         &self.progress
     }
@@ -211,12 +225,15 @@ impl<'hir, 'source, Pending> EngineMirContinuation<'hir, 'source, Pending> {
 
 /// 取消暂停时 Story 回滚失败；Macro 调度句柄仍返还给调用者。
 pub struct EngineMirContinuationRollbackError<Pending> {
+    /// Story 快照恢复失败的详情。
     pub story: StorySnapshotError,
+    /// 原样交还的 Macro 暂停句柄，供 Binding 释放调度资源。
     pub suspension: MacroSuspension<Pending>,
 }
 
 /// 当前异步 Macro 完成后，等待 Engine 继续驱动 VM 与 Passage 生命周期的事务。
 pub struct EngineMirResumedTransaction<'hir, 'source> {
+    /// Macro 完成后的 VM 与控制状态。
     pub runtime: RuntimeMacroResumed,
     state_checkpoint: StateCheckpoint,
     story_snapshot: StorySnapshot<'hir, 'source>,
@@ -225,10 +242,12 @@ pub struct EngineMirResumedTransaction<'hir, 'source> {
 }
 
 impl<'hir, 'source> EngineMirResumedTransaction<'hir, 'source> {
+    /// 等待确认的 Story 请求。
     pub fn requests(&self) -> &StoryRuntimePending<'hir, 'source> {
         &self.requests
     }
 
+    /// 当前 Passage 导航进度。
     pub fn progress(&self) -> &EngineMirProgress<'hir, 'source> {
         &self.progress
     }
@@ -391,16 +410,23 @@ impl<'hir, 'source> EngineMirResumedTransaction<'hir, 'source> {
     }
 }
 
+/// 放弃完成后的续跑时 Story 回滚失败；外层 Macro scopes 仍返还给调用者。
 pub struct EngineMirResumedRollbackError {
+    /// Story 快照恢复失败的详情。
     pub story: StorySnapshotError,
+    /// 回滚后仍应归还的 Macro 局部作用域。
     pub scopes: MacroLocalScopes<Value>,
 }
 
 /// 恢复后的 VM 到达的下一个稳定执行边界。
 pub enum EngineMirVmResume<'hir, 'source> {
+    /// 当前 Passage 执行完毕，可提交导航链。
     Halted(EngineMirResumedTransaction<'hir, 'source>),
+    /// VM 请求了 goto，等待 Engine 确认导航并进入目标 Passage。
     NavigationPending(EngineMirResumedTransaction<'hir, 'source>),
+    /// 遇到动态 Macro，等待交给 Macro 控制器。
     MacroPending(EngineMirResumedTransaction<'hir, 'source>),
+    /// Macro 请求停止当前 Passage，等待 Engine 处理导航请求。
     PassageStopped(EngineMirResumedTransaction<'hir, 'source>),
 }
 
@@ -410,14 +436,21 @@ pub enum EngineMirVmResume<'hir, 'source> {
 /// MacroPending 不会形成两套 VM 驱动规则。调用者仍负责进入 Passage 以及执行
 /// Init／Start；传入的检查点必须位于这次导航开始之前。
 pub struct EngineMirBeginTransaction<'hir, 'source> {
+    /// 本次执行链的运行时身份。
     pub identity: RuntimeExecutionIdentity,
+    /// 起始 Bytecode Passage 的 VM 执行帧。
     pub frame: crate::vm::MirExecutionFrame,
+    /// 本次导航开始前的 State 检查点。
     pub state_checkpoint: StateCheckpoint,
+    /// 本次导航开始前的 Story 快照。
     pub story_snapshot: StorySnapshot<'hir, 'source>,
+    /// 起始时尚未确认的 Story 请求。
     pub requests: StoryRuntimePending<'hir, 'source>,
+    /// 起始 Passage 的导航进度。
     pub progress: EngineMirProgress<'hir, 'source>,
 }
 
+/// 用首次导航已建立的事务组件启动 MIR，并运行到第一个稳定边界。
 pub fn begin_mir_transaction<'hir, 'source>(
     transaction: EngineMirBeginTransaction<'hir, 'source>,
     mir: &BytecodeProgram,
@@ -450,7 +483,9 @@ pub fn begin_mir_transaction<'hir, 'source>(
 
 /// 异步恢复链完成后提交给 Host 的导航结果与外层 Macro scopes。
 pub struct EngineMirCommitted<'hir, 'source> {
+    /// 提交成功的导航链与累积输出。
     pub navigation: EngineNavigationChain<'hir, 'source>,
+    /// 提交后仍由外层持有的 Macro 局部作用域。
     pub scopes: MacroLocalScopes<Value>,
 }
 

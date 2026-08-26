@@ -12,10 +12,12 @@ pub struct ScriptMacroHandler {
 }
 
 impl ScriptMacroHandler {
+    /// 包装 Binding 提供的 callable。
     pub fn new(callable: ScriptCallable) -> Self {
         Self { callable }
     }
 
+    /// 读取绑定的 callable。
     pub fn callable(&self) -> &ScriptCallable {
         &self.callable
     }
@@ -37,6 +39,7 @@ pub struct ScriptMacroApi<'macro_api> {
 }
 
 impl<'macro_api> ScriptMacroApi<'macro_api> {
+    /// 绑定定义集合与生命周期订阅集合。
     pub fn new(
         definitions: &'macro_api mut ScriptMacroDefinitions,
         hooks: &'macro_api mut ScriptMacroHooks,
@@ -44,6 +47,7 @@ impl<'macro_api> ScriptMacroApi<'macro_api> {
         Self { definitions, hooks }
     }
 
+    /// 注册 Macro；同名已有定义时返回被替换的旧定义。
     pub fn add(
         &mut self,
         name: &str,
@@ -52,6 +56,7 @@ impl<'macro_api> ScriptMacroApi<'macro_api> {
         self.definitions.add(name, definition)
     }
 
+    /// 替换已有 Macro 定义；不存在时返回错误。
     pub fn update(
         &mut self,
         name: &str,
@@ -60,18 +65,22 @@ impl<'macro_api> ScriptMacroApi<'macro_api> {
         self.definitions.update(name, definition)
     }
 
+    /// 删除 Macro，返回被移除的定义。
     pub fn del(&mut self, name: &str) -> Option<MacroDefinition<ScriptMacroHandler>> {
         self.definitions.del(name)
     }
 
+    /// 查询 Macro 定义。
     pub fn get(&self, name: &str) -> Option<&MacroDefinition<ScriptMacroHandler>> {
         self.definitions.get(name)
     }
 
+    /// Macro 是否已注册。
     pub fn has(&self, name: &str) -> bool {
         self.definitions.has(name)
     }
 
+    /// 订阅 Macro 执行前的 Hook。
     pub fn before(
         &mut self,
         name: &str,
@@ -80,6 +89,7 @@ impl<'macro_api> ScriptMacroApi<'macro_api> {
         self.hooks.before(name, hook)
     }
 
+    /// 订阅 Macro 执行后的 Hook。
     pub fn after(
         &mut self,
         name: &str,
@@ -88,6 +98,7 @@ impl<'macro_api> ScriptMacroApi<'macro_api> {
         self.hooks.after(name, hook)
     }
 
+    /// 按身份退订 Hook，返回被移除的 Hook。
     pub fn off(&mut self, id: MacroLifecycleSubscriptionId) -> Option<ScriptMacroHook> {
         self.hooks.off(id)
     }

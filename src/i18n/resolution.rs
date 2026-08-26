@@ -22,10 +22,12 @@ pub struct I18nResolvedText {
 }
 
 impl I18nResolvedText {
+    /// 最终渲染出的文本。
     pub fn text(&self) -> &str {
         &self.text
     }
 
+    /// 文本来自目标语言译文还是默认原文回退。
     pub fn origin(&self) -> I18nTextOrigin {
         self.origin
     }
@@ -40,6 +42,7 @@ pub enum I18nResolveError {
     InvalidTemplate { id: String },
 }
 
+/// 用已验证译文解析一条消息；译文缺失时回退默认原文。
 pub(super) fn resolve(
     catalog: &I18nCatalog,
     translation: &I18nValidatedTemplate,
@@ -49,6 +52,7 @@ pub(super) fn resolve(
     resolve_with_dictionary_values(catalog, translation, id, values, None)
 }
 
+/// VM 保留原始 Value 类型时使用；只有集合中的 placeholder 可以查询动态字典。
 pub(super) fn resolve_runtime(
     catalog: &I18nCatalog,
     translation: &I18nValidatedTemplate,
@@ -59,6 +63,7 @@ pub(super) fn resolve_runtime(
     resolve_with_dictionary_values(catalog, translation, id, values, Some(dictionary_values))
 }
 
+/// 解析公共路径：校验目录身份、选择译文或默认原文、渲染并保留尾部空白。
 fn resolve_with_dictionary_values(
     catalog: &I18nCatalog,
     translation: &I18nValidatedTemplate,
@@ -106,6 +111,7 @@ fn resolve_with_dictionary_values(
     Ok(I18nResolvedText { text, origin })
 }
 
+/// 不加载目标语言时，用默认原文与模板规则直接解析。
 pub(super) fn resolve_default(
     catalog: &I18nCatalog,
     id: &str,
@@ -123,6 +129,7 @@ pub(super) fn resolve_default(
     })
 }
 
+/// 把模板片段渲染为文本：占位符取值，并按绑定查询动态字典。
 fn render(
     id: &str,
     pattern: &str,
@@ -159,6 +166,7 @@ fn render(
     Ok(output)
 }
 
+/// 按占位符绑定查询动态字典；无绑定、绑定为空或未命中时原样返回。
 fn resolve_dictionary_value<'value>(
     placeholder: &str,
     raw: &'value str,
@@ -183,6 +191,7 @@ fn resolve_dictionary_value<'value>(
         .unwrap_or(raw)
 }
 
+/// 构造 `InvalidTemplate` 错误的简写。
 fn invalid_template(id: &str) -> I18nResolveError {
     I18nResolveError::InvalidTemplate { id: id.to_owned() }
 }

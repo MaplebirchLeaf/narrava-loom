@@ -1,10 +1,27 @@
 # Narrava Tauri Host
 
-> 状态：可运行桌面 Host 已实现
+> 状态：共享 Host 实现已建立；桌面可运行和发行，Android/iOS 工程尚未初始化
 >
 > 更新日期：2026-08-24
 
-## 定位
+## 桌面与移动端当前状态
+
+`narrava-loom-tauri` 是一个共享 Host crate，不是两个独立 Host。Rust Worker、DTO、Renderer、
+默认主题和游戏 API 由桌面与移动端共同使用；区别只出现在 Tauri 平台入口、系统能力和打包层。
+
+| 能力 | 桌面 | Android/iOS |
+|---|---|---|
+| Rust Worker、Core、DTO | 共用，已测试 | 共用，已测试 |
+| Renderer 与响应式／触屏 CSS | 共用，已测试 | 共用，尚需真机验收 |
+| 平台入口 | `src/main.rs`，可运行 | `run_mobile()` 已标注 mobile entry point |
+| 平台工程与打包 | Linux/Windows/macOS 发行已接通 | 尚未初始化，无仓库级构建命令 |
+| 完成状态 | 可开发、测试和生成可移动目录 | 不能宣称已交付 |
+
+因此，`cargo run -p narrava-loom-tauri -- examples` 始终表示桌面开发入口。移动端后续要先初始化
+Tauri 2 Android/iOS 工程，再处理权限、签名、资源、生命周期和真机 WebView；桌面测试不能替代
+这些工作。
+
+## 定位与数据流
 
 Tauri 是首个平台 Host，不是 Narrava Core 的表现模型。Rust 后端直接依赖
 `narrava-loom-core`，WebView 使用平台自己的页面能力显示宿主无关语义；Core 不产生 DOM 或
@@ -32,15 +49,15 @@ ModLoader。`TauriHost::spawn(relative_game_path)` 建立专用 Runtime Worker�
 
 游戏 Worker 中可用的 TypeScript 契约位于 `bindings/typescript/narrava.d.ts`。
 
-该 crate 包含桌面入口、`tauri.conf.json`、默认 CSS 和无框架 WebView Renderer。页面只消费
+该 crate 包含桌面二进制入口、mobile entry point、`tauri.conf.json`、默认 CSS 和无框架
+Renderer。页面只消费
 `HostUpdateDto`：Text 成为文本节点，Navigation／SafeReturn 成为原生按钮，点击后把
 Interaction ID 交回 `activate`。DOM 与 CSS 因此留在 Tauri Host，不进入 Core 或游戏 Source。
 
 ## Core 与 Host 的表现边界
 
-Core 只输出可由 WebView、TUI 或其他 Host 映射的语义：文本、文字语气、图片、区域、动作、
-状态绑定输入、导航，以及带 fallback 的版本化 Component。Core 不承诺 HTML 标签、CSS class、
-CSS selector、Dialog 像素布局或 DOM 更新算法。
+Core 输出文本、文字语气、图片、区域、动作、状态绑定输入、导航和带 fallback 的版本化
+Component。Tauri 再决定 DOM、CSS、Dialog 布局和更新算法。
 
 `replace "header"` 是 Core 固定的 Region／Key 替换语义。WebView 把固定区域映射到稳定 DOM
 插槽，TUI 把它映射到自己的终端区域；Core 不保存 CSS selector。Radio 的互斥组同样是跨 Host
@@ -65,7 +82,7 @@ Renderer 提供 `passage-header`、`passage-main`、`passage-footer`、`bar`、`
 展开时会阻止误触正文。`styles/**/*.css` 是主题覆盖层，不是获得基础布局的必填文件；游戏作者
 可以只改颜色和字体，也可以完全不提供它。
 
-稳定 DOM 骨架如下，游戏 CSS 应优先使用这些公开元素和 class，避免依赖内部的临时节点：
+需要自定义主题时，稳定骨架如下：
 
 ```text
 nv-story
@@ -123,21 +140,14 @@ maximized = false
 不能使用绝对路径、`..` 或反斜杠。当前 Host 不创建原生菜单栏；完整菜单需要多菜单、
 多条目与动作分派契约，等实际 Host 动作稳定后再单独设计。
 
-从 workspace 根目录运行：
+桌面开发从 workspace 根目录运行：
 
 ```text
 cargo run -p narrava-loom-tauri -- examples
 ```
 
-省略最后一个参数时也使用唯一的完整游戏 `examples/`。应用入口拒绝绝对游戏路径。
-
-Tauri 2 的 command 使用 `#[tauri::command]` 并通过 `generate_handler!` 注册；可返回
-serde `Serialize` 数据与错误。managed state 由 Tauri `State` 注入。实现依据：
-
-- https://v2.tauri.app/develop/calling-rust/
-- https://v2.tauri.app/develop/state-management/
-- https://v2.tauri.app/start/create-project/
-- https://v2.tauri.app/reference/config/
+省略最后一个参数时使用 `examples/`。应用入口拒绝绝对游戏路径。其他测试和发行命令见
+[仓库命令](../development/commands.md)。
 
 ## 平台管理能力
 
@@ -148,8 +158,8 @@ serde `Serialize` 数据与错误。managed state 由 Tauri `State` 注入。实
   Presentation 定义；Host 只拥有原生 Dialog 外壳与经过验证的平台动作；
 - Mod 管理界面属于 `narrava-loom-modloader`，不进入本 Host 的 Core 完成条件。
 
-真实浏览器检查覆盖语义 DOM、导航、控制台与 320/768/1024/1440 宽度；实际 Tauri 系统窗口仍
-需要在目标桌面环境中启动确认。
+默认主题包含窄屏、safe-area 与 coarse pointer 规则。这只说明共享页面具备移动布局基础，
+不代表 Android WebView 或 iOS WKWebView 已完成平台验收。
 
 具体的自动测试、WebView 静态检查、真实窗口验收与发行目录回归步骤见
 [Tauri Host 开发与测试](../development/testing-tauri.md)。非 Web Host 的对照验证见

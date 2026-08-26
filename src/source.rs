@@ -59,6 +59,7 @@ impl SourceList {
         Ok(sources)
     }
 
+    /// 递归收集受支持类型文件的相对保存路径。
     fn collect_paths(
         directory: &Path,
         relative: &Path,
@@ -102,6 +103,7 @@ pub enum SourceKind {
 }
 
 impl SourceKind {
+    /// 按保存路径扩展名推断类型；仅 crate 内部使用。
     pub(crate) fn from_path(path: &SourcePath) -> io::Result<Self> {
         let extension: Option<&str> = Path::new(path.as_str())
             .extension()
@@ -111,11 +113,13 @@ impl SourceKind {
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "不支持的源码类型"))
     }
 
+    /// 路径是否带受支持类型的扩展名。
     fn supports_path(path: &Path) -> bool {
         let extension: Option<&str> = path.extension().and_then(|value| value.to_str());
         Self::from_extension(extension).is_some()
     }
 
+    /// 扩展名到源码类型的映射；不认识的返回 `None`。
     fn from_extension(extension: Option<&str>) -> Option<Self> {
         match extension {
             Some("twee") => Some(Self::Twee),
@@ -141,6 +145,7 @@ impl SourcePath {
         Self(String::from("<fragment>"))
     }
 
+    /// 把磁盘相对路径规范化为平台无关保存路径；仅 crate 内部使用。
     pub(crate) fn from_path(path: &Path) -> io::Result<Self> {
         if !is_relative_path(path) {
             return Err(io::Error::new(
@@ -198,6 +203,7 @@ impl Error for SourceError {
 }
 
 impl Source {
+    /// 从保存路径与内容重建 Source（NAR 还原用）；仅 crate 内部使用。
     pub(crate) fn from_saved_path(path: &str, content: String) -> io::Result<Self> {
         let path: SourcePath = SourcePath::from_path(Path::new(path))?;
         let kind: SourceKind = SourceKind::from_path(&path)?;
@@ -247,6 +253,7 @@ impl Source {
     }
 }
 
+/// 路径是否只由普通段组成（无绝对前缀、无 `..` 等特殊组件）。
 fn is_relative_path(path: &Path) -> bool {
     !path.as_os_str().is_empty()
         && path

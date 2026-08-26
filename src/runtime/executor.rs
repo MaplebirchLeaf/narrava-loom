@@ -35,28 +35,43 @@ use super::{
 /// 上层节点分派保留逻辑节点与动态 Macro 各自的错误类型。
 #[derive(Debug, PartialEq)]
 pub enum RuntimeExecutionError<StoryError> {
+    /// HIR 逻辑节点（求值、Story 请求等）失败。
     Logic(LogicNodeError<StoryError>),
+    /// Widget 调用或正文执行失败。
     Widget(WidgetMacroError<StoryError>),
+    /// Macro Definition 查询失败。
     MacroDefinition(MacroDefinitionError),
+    /// before／after 生命周期回调返回失败 Diagnostic。
     MacroLifecycle(Diagnostic),
+    /// Native／scripts Macro 调用边界失败。
     NativeMacro(NativeMacroError),
+    /// 按名称执行的 Passage 不存在。
     MissingPassage(String),
+    /// 本条执行链展开的 include 超过预算。
     IncludeLimitExceeded { limit: usize },
 }
 
 /// Native／scripts Macro 在进入 Handler 前后能够稳定区分的错误。
 #[derive(Debug, PartialEq)]
 pub enum NativeMacroError {
+    /// 参数列表在边界解析阶段失败。
     ArgumentList(MacroArgumentListError),
+    /// 参数 Expression 求值失败。
     ArgumentValue(MacroArgumentValueError<crate::expression::evaluator::EvalError>),
+    /// 调用处使用了当前 Native 边界不支持的 Expression 参数形式。
     InvalidHirArguments,
+    /// 调用处正文形态与注册定义不一致。
     BodyKindMismatch {
         expected: MacroBodyKind,
         actual: MacroBodyKind,
     },
+    /// 同步入口遇到了 Async Definition。
     AsyncUnsupported,
+    /// 异步入口遇到了非 Async Definition。
     ExpectedAsync,
+    /// 当前执行上下文没有安装 Native Macro 调用适配器。
     MissingCallbacks,
+    /// Handler 自身报告的业务或 Runtime 错误。
     Handler(Diagnostic),
 }
 
@@ -131,7 +146,7 @@ where
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         match &node.kind {
             HirBodyKind::Text(text) => {
-                // Native Twee 静态正文也是语义文本，不携带 HTML 特权。
+                // 静态正文直接进入 Presentation，不进行二次语法解释。
                 if !text.trim().is_empty() {
                     self.output
                         .push(PresentationNode::Text(TextValue::from(*text)));

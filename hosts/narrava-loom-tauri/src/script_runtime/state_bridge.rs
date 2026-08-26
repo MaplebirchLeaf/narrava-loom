@@ -19,6 +19,7 @@ struct ActiveState {
     value: RefCell<Option<State>>,
 }
 
+/// 安装 `__narravaState*` 原生函数与活动 State 槽位。
 pub(super) fn install(context: &mut Context) -> JsResult<()> {
     context.insert_data(ActiveState {
         value: RefCell::new(None),
@@ -32,6 +33,7 @@ pub(super) fn install(context: &mut Context) -> JsResult<()> {
     Ok(())
 }
 
+/// 把 Rust `State` 移入 Context 槽位执行一段脚本调用，结束后移回原处。
 pub(super) fn with_state<T>(
     context: &mut Context,
     state: &mut State,
@@ -57,6 +59,7 @@ pub(super) fn with_state<T>(
     result
 }
 
+/// 注册一个原生全局函数。
 fn register(
     context: &mut Context,
     name: &'static str,
@@ -70,6 +73,7 @@ fn register(
     )
 }
 
+/// `State.*.get` 原生实现。
 fn state_get(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let name = string_argument(arguments, 1, context)?;
@@ -80,12 +84,14 @@ fn state_get(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsRes
     }
 }
 
+/// `State.*.has` 原生实现。
 fn state_has(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let name = string_argument(arguments, 1, context)?;
     with_active(context, |state| has(state, &namespace, &name)).map(JsValue::new)
 }
 
+/// `State.*.set` 原生实现（返回旧值）。
 fn state_set(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let name = string_argument(arguments, 1, context)?;
@@ -97,6 +103,7 @@ fn state_set(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsRes
     }
 }
 
+/// `State.*.del` 原生实现（返回旧值）。
 fn state_del(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let name = string_argument(arguments, 1, context)?;
@@ -107,6 +114,7 @@ fn state_del(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsRes
     }
 }
 
+/// 导出某命名空间全部条目为 JSON 对象（用于 `Save.capture`）。
 fn state_snapshot(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let values = with_active(context, |state| entries(state, &namespace))?;
@@ -121,6 +129,7 @@ fn state_snapshot(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> 
     JsValue::from_json(&serde_json::Value::Object(json), context)
 }
 
+/// 用 JSON 对象整体替换某命名空间（用于 `Save.restore`）。
 fn state_replace(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let json = arguments
@@ -138,6 +147,7 @@ fn state_replace(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> J
     Ok(JsValue::undefined())
 }
 
+/// 在活动 State 上执行操作；未在调用期内访问则报错。
 fn with_active<T>(context: &Context, operation: impl FnOnce(&mut State) -> T) -> JsResult<T> {
     let slot = context
         .get_data::<ActiveState>()
@@ -149,6 +159,7 @@ fn with_active<T>(context: &Context, operation: impl FnOnce(&mut State) -> T) ->
     Ok(operation(state))
 }
 
+/// 按命名空间读值。
 fn get<'state>(state: &'state State, namespace: &str, name: &str) -> Option<&'state Value> {
     match namespace {
         "global" => state.global_get(name),
@@ -159,6 +170,7 @@ fn get<'state>(state: &'state State, namespace: &str, name: &str) -> Option<&'st
     }
 }
 
+/// 按命名空间查询存在性。
 fn has(state: &State, namespace: &str, name: &str) -> bool {
     match namespace {
         "global" => state.global_has(name),
@@ -169,6 +181,7 @@ fn has(state: &State, namespace: &str, name: &str) -> bool {
     }
 }
 
+/// 按命名空间写值，返回旧值。
 fn set(state: &mut State, namespace: &str, name: &str, value: Value) -> Option<Value> {
     match namespace {
         "global" => state.global_set(name, value),
@@ -179,6 +192,7 @@ fn set(state: &mut State, namespace: &str, name: &str, value: Value) -> Option<V
     }
 }
 
+/// 按命名空间删除，返回旧值。
 fn del(state: &mut State, namespace: &str, name: &str) -> Option<Value> {
     match namespace {
         "global" => state.global_del(name),
@@ -219,6 +233,7 @@ fn replace(state: &mut State, namespace: &str, values: Vec<(String, Value)>) {
     }
 }
 
+/// Core 值 → JsValue；脚本函数转为 `__narravaCallable` 标记对象。
 fn core_to_js(value: &Value, context: &mut Context) -> JsResult<JsValue> {
     match value {
         Value::Undefined => Ok(JsValue::undefined()),
@@ -236,6 +251,7 @@ fn core_to_js(value: &Value, context: &mut Context) -> JsResult<JsValue> {
     }
 }
 
+/// JsValue → Core 值；`__narravaCallable` 标记对象还原为脚本函数。
 fn js_to_core(value: &JsValue, context: &mut Context) -> JsResult<Value> {
     let Some(json) = value.to_json(context)? else {
         return Ok(Value::Undefined);
@@ -256,6 +272,7 @@ fn js_to_core(value: &JsValue, context: &mut Context) -> JsResult<Value> {
     json_to_value(&json).map_err(host_error)
 }
 
+/// 取指定位置的字符串参数。
 fn string_argument(arguments: &[JsValue], index: usize, context: &mut Context) -> JsResult<String> {
     arguments
         .get_or_undefined(index)
@@ -263,10 +280,12 @@ fn string_argument(arguments: &[JsValue], index: usize, context: &mut Context) -
         .map(|value| value.to_std_string_escaped())
 }
 
+/// Host 错误 → JS 类型错误。
 fn host_error(error: crate::HostErrorDto) -> boa_engine::JsError {
     type_error(error.message)
 }
 
+/// 构造 JS TypeError。
 fn type_error(message: impl Into<String>) -> boa_engine::JsError {
     JsNativeError::typ().with_message(message.into()).into()
 }

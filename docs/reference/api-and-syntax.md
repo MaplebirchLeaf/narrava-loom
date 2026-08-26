@@ -27,12 +27,12 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `set` | `<<set $name = value>>` | 赋值；也接受 `to` 写法 |
 | `unset` | `<<unset $name>>` | 删除可写目标 |
 | `run` | `<<run expression>>` | 求值并丢弃结果，保留副作用 |
-| `print` | `<<print expression>>` | 把表达式结果加入 Passage 输出 |
+| `print` | `<<print expression [tone] [style...]>>` 或 `<<print expression {tone, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、tone、delay 与结构性标题的 StyledText |
 | `include` | `<<include "Passage">>` | 在当前位置执行另一 Passage，不发生导航 |
 | `goto` | `<<goto "Passage">>` | 请求导航并停止当前 Passage |
 | `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
 | `button` | `<<button [[文本\|Passage]]>>...<</button>>` | 与 link 共享事务语义，但由 Host 呈现为按钮 |
-| `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/dialog` 或稳定 Presentation key |
+| `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Presentation key |
 | `slot` | `<<slot "status">>...<</slot>>` | 建立可由 `replace "status"` 定位的稳定内容槽 |
 | `silently` | `<<silently>>...<</silently>>` | 执行正文但抑制其直接输出 |
 | `exit` | `<<exit>>` | 停止当前执行正文 |
@@ -53,6 +53,12 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 因此不会留下可替换目标。
 其他名称按稳定 Presentation key 解析。当前正文支持静态文本与 Core 逻辑节点；嵌套动态 `print`
 的 I18n 身份和动态／异步脚本 Macro 尚未接通，遇到时会报错而不是忽略。
+
+> **书写约束**：结构容器（`if`/  `switch`/  `for`/  `while` 及其子句 `elseif`/  `else`/  `case`/  `default` 与
+> 各闭合标签）必须独占一行且从行首开始（顶格、无缩进）；缩进的容器行不会被识别为结构，可能被当作
+> 内联调用求值或直接泄漏为文本。`link`/  `button`/  `replace`/  `slot`/  `silently`/  `capture` 既可顶格
+> 跨行书写，也可单行内联（`<<silently>><<set $x to 1>><</silently>>`）。`set`/  `unset`/  `print`/  `run`/
+> `include`/  `goto`/  `break`/  `continue`/  `exit`/  `return` 等内联 Macro 可出现在行内任意位置。
 
 ## 2. Twee Expression 内置函数
 
@@ -109,9 +115,9 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 
 ## 5. Worker ECMAScript 全局 API
 
-统一入口是 `narrava`；下列大写全局是同一对象成员的便捷别名。完整类型签名位于
+游戏脚本直接使用下列大写全局；完整类型签名位于
 [`bindings/typescript/narrava.d.ts`](../../bindings/typescript/narrava.d.ts)。Worker 没有
-`window`、`document` 或 Tauri API。
+`window`、`document` 或 Tauri API，也不存在统一的 `narrava` 聚合对象。
 
 ### `State`
 
@@ -164,7 +170,7 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 
 ### `Presentation`
 
-- `text(text, { key?, styles?, tone? })`
+- `text(text, { key?, styles?, tone?, delay?, heading? })`
 - `image(resource, { key?, alt?, caption? })`
 - `region(region, children, { key? })`
 - `component(capability, version, properties, fallback, { key? })`
@@ -181,15 +187,56 @@ Twee 的普通正文已经直接编译为 `Presentation Text`，动态普通文�
 ```
 
 `Presentation.text()` 这个 builder 本身属于 Worker ECMAScript，不能放进 Twee Expression。
-需要在正文中穿插带语义颜色或样式的短文字，直接使用 Core `text` Macro：
+需要在正文中穿插带语义样式或 tone 的短文字，直接使用 Core `print` Macro：
 
 ```twee
-你获得了 <<text "关键道具" "positive" "strong">>。
-<<text $status "warning" "emphasis">>
+你获得了 <<print "关键道具" 30 "strong">>。
+<<print $status 40 "emphasis">>
 ```
 
 参数依次是内容、可选 tone、零到多个 style；内容可以是变量或其他 Twee Expression。它是
-Inline Macro，不使用闭合标签。tone 和 style 名称与下方 `Presentation.text()` 相同。
+Inline Macro，不使用闭合标签。也支持对象形式同时指定 tone、styles、delay 与结构性标题：
+
+```twee
+<<print $status {tone: 40, styles: ["strong", "code"]}>>
+<<print "两秒后出现" {tone: 20, delay: 2000}>>
+<<print "第一页" {heading: 2}>>
+```
+
+### `print` 的 tone：0..=63 状态色阶
+
+tone 是 0..=63 的色阶，**颜色由 Host 映射**（对齐二进制边界：灰阶 0-7（白`1`→亮灰`2`→浅灰`3`→灰`4`→深灰`5`→暗灰`6`→黑`7`），光谱 8-63（红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`，每色相 8 级）），0 为正文默认（不染色）。必须是 0..=63 的整数，否则报 `macro.print.invalid_arguments`。
+Tauri 默认 Renderer 会计算并验证 0..63 的全部映射，游戏作者无需为色阶编写 64 条 CSS；
+只有希望覆盖品牌色时才使用 `[data-tone="N"]`。
+
+### `print` 的 style：8 个语义字形
+
+| style | 含义 | 渲染提示 |
+|---|---|---|
+| `emphasis` | 语气强调 | 斜体 |
+| `strong` | 重要 | 加粗 |
+| `code` | 代码/标识符/键位 | 等宽 |
+| `quote` | 引文/信件/留言 | 引用块 |
+| `marked` | 需要玩家注意 | 半透明高亮底色；与 tone 文字颜色相互独立 |
+| `small` | 注释/脚注/次要信息 | 小字 |
+| `inserted` | 新增内容 | 下划线/加号（TUI `++…++`） |
+| `deleted` | 删除/废弃内容 | 删除线（TUI `~~…~~`） |
+
+Tauri 默认主题已经实现全部 8 种字形及 heading 排版；作者 CSS 只负责可选的品牌覆盖。
+
+### `print` 的 delay：延迟浮现
+
+delay 是毫秒，`0..=86400000` 的整数。渲染器在此之前保持文本隐藏、到时淡入浮现
+（淡入时长由游戏 `styles/*.css` 的 `--narrava-reveal-duration` 控制，默认 300ms）；
+TUI 把延迟文本停放在 `frame.delayed`，由消费方按 `render_at` 到点显示，终端无平滑
+过渡但时序一致。
+
+### `print` 的 heading：结构性标题
+
+heading 是 `1` 或 `2` 的**结构性标题级别**，不属于字形样式：它表达文档层级（例如
+弹窗 Dialog 的页面标题），Host 据此划分页面并生成页签或标题元素。Tauri WebView 把
+heading 1/2 渲染为 `h1`/`h2`，弹窗按顶层标题把后续内容归入对应页面并生成页签；
+TUI 加粗下划线提示。不带 heading 的文本不受影响。
 
 需要 Region、Component 或 fallback 等结构化表现时，再在 `.ts/.js` 中定义语义 Macro：
 
@@ -198,7 +245,7 @@ Macro.add("statusCard", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
-  handler: () => Presentation.text("状态正常", { styles: ["strong"], tone: "positive" }),
+  handler: () => Presentation.text("状态正常", { styles: ["strong"], tone: 30 }),
 })
 ```
 

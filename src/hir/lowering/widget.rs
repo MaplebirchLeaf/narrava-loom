@@ -44,6 +44,7 @@ pub(super) fn validate_widget_passage_content(passages: &[HirPassage<'_>]) -> Re
     Ok(())
 }
 
+/// 确保 Widget Definition 只出现在 `[widget]` Passage 顶层。
 pub(super) fn validate_top_level_widgets(passages: &[HirPassage<'_>]) -> Result<(), HirError> {
     for passage in passages {
         for node in &passage.body {
@@ -178,6 +179,7 @@ fn find_nested_widget_call<'node, 'source>(
     }
 }
 
+/// 校验 Widget 名称与声明参数，并降低声明正文（进入独立调用边界）。
 pub(super) fn lower_widget<'source>(
     passage: &twee::Passage<'source>,
     macro_node: &twee::MacroNode<'source>,
@@ -281,6 +283,7 @@ fn find_nested_widget<'node, 'source>(
     }
 }
 
+/// 判断名称是否为合法标识符：字母/下划线开头，其余为字母数字下划线。
 fn is_widget_name(name: &str) -> bool {
     let mut bytes: std::slice::Iter<'_, u8> = name.as_bytes().iter();
     let Some(first) = bytes.next() else {

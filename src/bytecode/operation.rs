@@ -43,8 +43,11 @@ impl BytecodeI18nPart {
 /// 表达式本体存放在 `BytecodeInstruction::expressions`，这里仅保留参数类别，
 /// 让解码校验能够确认表达式数量与拥有型 Macro 调用彼此一致。
 pub enum BytecodeMacroArguments {
+    /// 不接受参数。
     None,
+    /// 参数原文，由运行时 Macro Definition 自行解析。
     Raw(String),
+    /// 表达式本体保存在 `BytecodeInstruction::expressions` 中。
     Expression,
 }
 
@@ -200,6 +203,7 @@ impl BytecodeOperation {
         }
     }
 
+    /// 返回输出指令（Text/PrintExpression/PrintLiteral）附着的翻译消息身份。
     pub fn i18n(&self) -> Option<&BytecodeI18nPart> {
         match self {
             Self::Text { i18n, .. }

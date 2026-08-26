@@ -45,27 +45,33 @@ pub struct I18nValidatedTemplate {
 }
 
 impl I18nValidatedTemplate {
+    /// 目标语言标签。
     pub fn language(&self) -> &str {
         self.template.language()
     }
 
+    /// 动态字典。
     pub fn dictionary(&self) -> &BTreeMap<String, BTreeMap<String, String>> {
         self.template.dictionary()
     }
 
+    /// 消息表。
     pub fn passages(&self) -> &BTreeMap<String, I18nTemplateMessage> {
         self.template.passages()
     }
 
+    /// 消耗校验结果，取回模板本体。
     pub fn into_template(self) -> I18nTemplate {
         self.template
     }
 
+    /// 译文是否由该目录构建校验；仅 crate 内部使用。
     pub(super) fn belongs_to(&self, catalog: &I18nCatalog) -> bool {
         self.catalog == catalog.identity
     }
 }
 
+/// 校验语言标签、消息存在性、原文一致性与 placeholder 集合；全部通过才返回已验证模板。
 pub(super) fn validate(
     catalog: &I18nCatalog,
     template: I18nTemplate,
@@ -100,6 +106,7 @@ pub(super) fn validate(
     }
 }
 
+/// 校验单条消息的原文、placeholder 与字典绑定，错误累积到 `errors`。
 fn validate_message(
     id: &str,
     source: &I18nMessage,
@@ -128,6 +135,7 @@ fn validate_message(
     }
 }
 
+/// 解析译文模板并核对占位符集合，返回（期望集合，实际集合）。
 fn validate_text<'source>(
     id: &str,
     source: &'source I18nMessage,

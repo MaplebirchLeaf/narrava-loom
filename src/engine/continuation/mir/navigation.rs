@@ -5,35 +5,48 @@
 
 use super::*;
 
+/// 继续导航链时的失败阶段；`Failed` 已完成回滚，`Continue` 保留可回滚事务。
 pub enum EngineMirNavigationResumeError<'hir, 'source, LifecycleError> {
+    /// 当前边界不是 NavigationPending／PassageStopped，原样交还。
     NotNavigation(Box<EngineMirVmResume<'hir, 'source>>),
+    /// 导航确认或目标 Passage 准备失败，事务已回滚。
     Failed(Box<EngineMirNavigationFailure<LifecycleError>>),
+    /// 已进入目标 Passage 后驱动 VM 失败，事务保留可回滚。
     Continue(Box<EngineMirVmResumeError<'hir, 'source>>),
 }
 
+/// 导航继续失败且已完成回滚的结果；Story 恢复失败时单独报告。
 pub struct EngineMirNavigationFailure<LifecycleError> {
+    /// 具体失败原因。
     pub kind: EngineMirNavigationFailureKind<LifecycleError>,
+    /// Story 快照恢复失败时携带其错误；成功恢复时为 `None`。
     pub story_rollback: Option<StorySnapshotError>,
+    /// 回滚后仍应归还的 Macro 局部作用域。
     pub scopes: MacroLocalScopes<Value>,
 }
 
+/// 导航继续失败的细分原因。
 pub enum EngineMirNavigationFailureKind<LifecycleError> {
+    /// Story 无法从待处理请求重新附着（快照不匹配）。
     StoryMismatch,
-    UnconsumedIncludes {
-        count: usize,
-    },
+    /// 请求中残留未消费的 include。
+    UnconsumedIncludes { count: usize },
+    /// 边界要求导航但没有 pending goto。
     MissingGoto,
-    PassageLimitExceeded {
-        limit: usize,
-    },
+    /// 继续后会超过 Passage 预算。
+    PassageLimitExceeded { limit: usize },
+    /// 目标 Passage 没有对应的 Bytecode Passage。
     MissingMirPassage(String),
+    /// 生命周期回调（End／Init／Start）失败。
     Lifecycle {
         phase: PassageLifecyclePhase,
         error: LifecycleError,
     },
+    /// Story 拒绝确认导航请求。
     Confirmation(StoryNavigationError),
 }
 
+/// 确认 pending goto、结束旧 Passage 并进入目标 Passage，继续同一事务。
 pub(super) fn continue_navigation_transaction<'hir, 'source, LifecycleError>(
     transaction: EngineMirResumedTransaction<'hir, 'source>,
     mir: &BytecodeProgram,
@@ -205,6 +218,7 @@ pub(super) fn continue_navigation_transaction<'hir, 'source, LifecycleError>(
     .map_err(|error| EngineMirNavigationResumeError::Continue(Box::new(error)))
 }
 
+/// 恢复 State 检查点与 Story 快照，并组装导航失败结果。
 fn rollback_navigation_failure<'hir, 'source, LifecycleError>(
     state: &mut State,
     story: &mut Story<'hir, 'source>,
@@ -222,29 +236,40 @@ fn rollback_navigation_failure<'hir, 'source, LifecycleError>(
     }
 }
 
+/// 提交 Halted 边界时的失败阶段。
 pub enum EngineMirCommitError<'hir, 'source, LifecycleError> {
+    /// 当前边界不是 Halted，不能提交。
     NotHalted(Box<EngineMirVmResume<'hir, 'source>>),
+    /// 提交校验或生命周期失败，事务已回滚。
     Failed(Box<EngineMirCommitFailure<LifecycleError>>),
 }
 
+/// 提交失败且已完成回滚的结果；Story 恢复失败时单独报告。
 pub struct EngineMirCommitFailure<LifecycleError> {
+    /// 具体失败原因。
     pub kind: EngineMirCommitFailureKind<LifecycleError>,
+    /// Story 快照恢复失败时携带其错误；成功恢复时为 `None`。
     pub story_rollback: Option<StorySnapshotError>,
+    /// 回滚后仍应归还的 Macro 局部作用域。
     pub scopes: MacroLocalScopes<Value>,
 }
 
+/// 提交 Halted 边界失败的细分原因。
 pub enum EngineMirCommitFailureKind<LifecycleError> {
+    /// Story 无法从待处理请求重新附着（快照不匹配）。
     StoryMismatch,
-    UnconsumedIncludes {
-        count: usize,
-    },
+    /// 请求中残留未消费的 include。
+    UnconsumedIncludes { count: usize },
+    /// Halted 边界仍带未确认的 goto。
     UnexpectedGoto,
+    /// Render／Display 生命周期回调失败。
     Lifecycle {
         phase: PassageLifecyclePhase,
         error: LifecycleError,
     },
 }
 
+/// 校验 Halted 边界、发布 Render／Display 并提交最终导航链。
 pub(super) fn commit_halted_transaction<'hir, 'source, LifecycleError>(
     transaction: EngineMirResumedTransaction<'hir, 'source>,
     state: &mut State,
@@ -343,6 +368,7 @@ pub(super) fn commit_halted_transaction<'hir, 'source, LifecycleError>(
     })
 }
 
+/// 恢复 State 检查点与 Story 快照，并组装提交失败结果。
 fn rollback_commit_failure<'hir, 'source, LifecycleError>(
     state: &mut State,
     story: &mut Story<'hir, 'source>,

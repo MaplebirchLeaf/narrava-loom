@@ -1,3 +1,8 @@
+//! Engine 启动与生命周期事务。
+//!
+//! 首次启动（含可选 StoryInit）与结束旧游戏后重新开始的原子事务都在本文件；
+//! 导航链执行见 `navigation`，阶段定义与上下文见模块根。
+
 use super::*;
 
 impl Engine {
@@ -79,6 +84,7 @@ impl Engine {
         Ok(EngineStoryInit::Executed)
     }
 
+    /// 首次启动 Story；不安装生命周期回调，保持原有行为。
     pub fn start<'hir, 'source, RuntimeError, Execute>(
         state: &mut State,
         story: &mut Story<'hir, 'source>,

@@ -1,4 +1,7 @@
 //! LIR 到 VM 之间的不可变内存 Bytecode。
+//!
+//! 编译时一次性建立拥有型指令、常量目录与 Passage 名称索引；反序列化时校验
+//! 文件头、目录一致性与每条指令的布局。
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -21,14 +24,21 @@ use crate::{
     mir::{MirInstruction, MirInstructionPointer, MirMacroBody, MirPassageId},
 };
 
+/// Bytecode JSON 文件头的固定魔数。
 pub const BYTECODE_MAGIC: [u8; 4] = *b"NRVA";
+/// 当前 Bytecode 编码版本；解码时与文件头比对，不匹配即拒绝。
 pub const BYTECODE_VERSION: u16 = 1;
 
+/// Bytecode 解码或布局校验失败的原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BytecodeDecodeError {
+    /// JSON 无法解析为 Bytecode 结构。
     InvalidJson(String),
+    /// 文件头魔数不是 `BYTECODE_MAGIC`。
     InvalidMagic,
+    /// 文件头版本不是 `BYTECODE_VERSION`。
     UnsupportedVersion(u16),
+    /// 结构完整但内部布局不一致（目录大小、槽位或跳转越界等）。
     InvalidLayout(String),
 }
 
@@ -40,6 +50,7 @@ impl fmt::Display for BytecodeDecodeError {
 
 impl Error for BytecodeDecodeError {}
 
+/// 指令类别标签；与 [`BytecodeOperation`] 一一对应，解码时交叉验证冗余信息。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Opcode {
@@ -62,6 +73,7 @@ pub enum Opcode {
     Halt,
 }
 
+/// Bytecode 文件头：固定魔数与编码版本，解码时据此拒绝无效输入。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BytecodeHeader {
     pub magic: [u8; 4],
@@ -78,15 +90,19 @@ pub struct BytecodeConstants {
 }
 
 impl BytecodeConstants {
+    /// 全部文本指令去重后的字符串常量。
     pub fn strings(&self) -> &[String] {
         &self.strings
     }
+    /// 指令按求值顺序引用的表达式常量。
     pub fn expressions(&self) -> &[OwnedExpression] {
         &self.expressions
     }
+    /// InvokeMacro 使用的拥有型 Macro 调用常量。
     pub fn macros(&self) -> &[OwnedHirMacro] {
         &self.macros
     }
+    /// 指令附着的翻译消息身份常量。
     pub fn i18n(&self) -> &[BytecodeI18nPart] {
         &self.i18n
     }
@@ -136,6 +152,7 @@ impl BytecodeConstants {
     }
 }
 
+/// 一条编码后的指令：操作元数据、按求值顺序的表达式与可选的 Macro 调用。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BytecodeInstruction {
     opcode: Opcode,
@@ -145,9 +162,11 @@ pub struct BytecodeInstruction {
 }
 
 impl BytecodeInstruction {
+    /// 指令的类别标签。
     pub fn opcode(&self) -> Opcode {
         self.opcode
     }
+    /// 指令的执行元数据（控制流、输出模式、槽位与 Span）。
     pub fn operation(&self) -> &BytecodeOperation {
         &self.operation
     }
@@ -155,11 +174,13 @@ impl BytecodeInstruction {
     pub fn expressions(&self) -> &[OwnedExpression] {
         &self.expressions
     }
+    /// InvokeMacro 指令的完整拥有型调用；其他指令为 None。
     pub fn macro_call(&self) -> Option<&OwnedHirMacro> {
         self.macro_call.as_ref()
     }
 }
 
+/// 编码后的 Passage：稳定 ID、区分大小写的名称、执行帧槽位数量与指令序列。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BytecodePassage {
     id: MirPassageId,
@@ -170,26 +191,33 @@ pub struct BytecodePassage {
 }
 
 impl BytecodePassage {
+    /// 本次编译内的稳定 Passage 身份。
     pub fn id(&self) -> MirPassageId {
         self.id
     }
+    /// 区分大小写的 Passage 名称。
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// 全部指令序列。
     pub fn instructions(&self) -> &[BytecodeInstruction] {
         &self.instructions
     }
+    /// 按指令位置查询单条指令。
     pub fn instruction(&self, index: MirInstructionPointer) -> Option<&BytecodeInstruction> {
         self.instructions.get(index.index())
     }
+    /// 执行帧可容纳的临时值槽数量。
     pub fn value_slot_count(&self) -> usize {
         self.value_slot_count
     }
+    /// 执行帧可容纳的可暂停迭代槽数量。
     pub fn iterator_slot_count(&self) -> usize {
         self.iterator_slot_count
     }
 }
 
+/// 完整可执行的 Bytecode 程序：文件头、Passage 目录、名称索引、常量与 I18n。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BytecodeProgram {
     header: BytecodeHeader,
@@ -200,6 +228,7 @@ pub struct BytecodeProgram {
 }
 
 impl BytecodeProgram {
+    /// 从已通过地址校验的 LIR 编译：收集常量目录、建立名称索引并编码全部指令。
     pub fn compile(lir: &LirProgram<'_, '_, '_>) -> Self {
         let mut constants: BytecodeConstants = BytecodeConstants::default();
         let mut names: BTreeMap<String, MirPassageId> = BTreeMap::new();
@@ -237,30 +266,38 @@ impl BytecodeProgram {
         }
     }
 
+    /// 返回文件头（魔数与版本）。
     pub fn header(&self) -> BytecodeHeader {
         self.header
     }
+    /// 返回指令共享的常量目录。
     pub fn constants(&self) -> &BytecodeConstants {
         &self.constants
     }
+    /// 按区分大小写的名称查询 Passage。
     pub fn passage(&self, name: &str) -> Option<&BytecodePassage> {
         self.passage_by_id(*self.names.get(name)?)
     }
+    /// 按本次编译内的稳定 ID 查询 Passage。
     pub fn passage_by_id(&self, id: MirPassageId) -> Option<&BytecodePassage> {
         self.passages.iter().find(|passage| passage.id() == id)
     }
+    /// 按编译顺序返回全部 Passage。
     pub fn passages(&self) -> &[BytecodePassage] {
         &self.passages
     }
+    /// 返回程序附带的默认语言文本目录。
     pub fn i18n(&self) -> &I18nCatalog {
         &self.i18n
     }
 
+    /// 把整个程序序列化为 JSON 字节；不执行布局校验。
     pub fn to_json(&self) -> Result<Vec<u8>, BytecodeDecodeError> {
         serde_json::to_vec(self)
             .map_err(|error| BytecodeDecodeError::InvalidJson(error.to_string()))
     }
 
+    /// 从 JSON 字节解码并执行完整布局校验；任何不一致返回 BytecodeDecodeError。
     pub fn from_json(input: &[u8]) -> Result<Self, BytecodeDecodeError> {
         let program: Self = serde_json::from_slice(input)
             .map_err(|error| BytecodeDecodeError::InvalidJson(error.to_string()))?;
@@ -372,6 +409,7 @@ impl BytecodeInstruction {
     }
 }
 
+/// 容器 Macro 延迟正文的编码形式：与 Passage 共享指令格式，但持有独立常量目录。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BytecodeMacroBody {
     value_slot_count: usize,
@@ -381,6 +419,7 @@ pub struct BytecodeMacroBody {
 }
 
 impl BytecodeMacroBody {
+    /// 从 MIR Macro 正文编译为拥有型指令序列与常量目录。
     pub fn compile(source: &MirMacroBody<'_, '_>) -> Self {
         let mut constants: BytecodeConstants = BytecodeConstants::default();
         let instructions = source
@@ -398,18 +437,23 @@ impl BytecodeMacroBody {
             constants,
         }
     }
+    /// 全部指令序列。
     pub fn instructions(&self) -> &[BytecodeInstruction] {
         &self.instructions
     }
+    /// 按指令位置查询单条指令。
     pub fn instruction(&self, index: MirInstructionPointer) -> Option<&BytecodeInstruction> {
         self.instructions.get(index.index())
     }
+    /// 本正文专用的常量目录。
     pub fn constants(&self) -> &BytecodeConstants {
         &self.constants
     }
+    /// 执行帧可容纳的临时值槽数量。
     pub fn value_slot_count(&self) -> usize {
         self.value_slot_count
     }
+    /// 执行帧可容纳的可暂停迭代槽数量。
     pub fn iterator_slot_count(&self) -> usize {
         self.iterator_slot_count
     }

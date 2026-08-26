@@ -6,6 +6,7 @@ use narrava_loom_core::{ProjectConfig, save::SaveDocument, state::State, story::
 
 use crate::{HostErrorDto, script_runtime::EcmaBinding};
 
+/// 取出脚本登记的 Save 请求并执行；import 成功后同步脚本变量，再回传完成钩子。
 pub(crate) fn process_save(
     game_path: &Path,
     config: &ProjectConfig,
@@ -31,7 +32,7 @@ pub(crate) fn process_save(
     outcome
 }
 
-/// Executes the same save boundary for Host UI commands and script requests.
+/// 执行同一存档边界：Host UI 命令与脚本请求共用此实现。
 pub(crate) fn process_save_operation(
     game_path: &Path,
     config: &ProjectConfig,
@@ -69,6 +70,7 @@ pub(crate) fn process_save_operation(
     .map_err(|message| HostErrorDto::new("tauri_host.save", message))
 }
 
+/// 校验并规范化存档目标为 `<target>.nsave` 文件名（禁止路径逃逸）。
 pub(crate) fn save_file_name(target: &str) -> Result<String, HostErrorDto> {
     if target.is_empty()
         || target.len() > 80

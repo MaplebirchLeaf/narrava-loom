@@ -20,7 +20,7 @@ Twee Macro Parser
 - Macro Definitions 独立管理定义并参与 Macro 分派；
 - State 只在执行上下文中按需提供变量访问。
 
-## 当前实现
+## 实现
 
 - `MacroNode` 已保留名称、原始参数、正文节点和 Span；
 - 已支持同一行、空正文、完整闭合的 Macro；
@@ -57,7 +57,7 @@ Native Twee 正文不会因为出现 `$`、`_`、`@` 或 `${...}` 而自动求�
 | `你在<<print ${$forest_name}>>森林里。` | `你在奇幻森林里。` |
 | `你在${$forest_name}森林里。` | `你在${$forest_name}森林里。` |
 
-`print` 的反引号形式是完整字面文本，因此 `` `$forest_name` `` 不读取变量。`print ${expression}` 是 `print` 自己的显式求值参数形式，只在 Macro 参数边界生效；相同字符出现在普通 Twee 正文中仍是字面 Text。`print` 求值后产生宿主无关 Text，不产生 HTML，也不会把输出再次当作 Macro 源码执行。
+`print` 的反引号形式是完整字面文本，因此 `` `$forest_name` `` 不读取变量。`print ${expression}` 是 `print` 自己的显式求值参数形式，只在 Macro 参数边界生效；相同字符出现在普通 Twee 正文中仍是字面 Text。`print` 的结果也不会再次作为 Macro 源码执行。
 
 Macro 外壳与位移运算符共享 `<`、`>` 字符。为让源码和 Parser 都保持确定性，位于 Macro 参数中的 `<<`、`>>`、`>>>`、`<<=`、`>>=`、`>>>=` 必须出现在显式圆括号内；Macro Header Scanner 只把分组深度为零的 `>>` 识别为外壳结束符。例如：
 
@@ -156,7 +156,7 @@ Argument List 已建立独立解析结果，并按调用源码顺序保存 Expre
 
 参数准备层已把上述结果转换为有序 `Value`：Expression 使用 Runtime 注入的求值函数，Interaction Target 对 scripts Handler 表现为只有 `label`、`target` 两个字段的对象，不附加 `kind`。求值函数不固定为只读入口，后续可接入可写 Context、随机源或异步调度；失败时仍保留对应 Expression 的宏参数原文偏移。
 
-`InteractionTarget` 可由 `link`、`button`、`choice` 等交互 Macro 复用。Parser 只校验完整外壳、`|` 分隔符和两侧非空内容，并保留原文供后续求值。Core `link()` 把单个 Interaction Target 转换为 `PresentationNode::Navigation`；容器入口 `link_with_body()` 还会用同一 ID 原子登记延迟正文、目标与捕获值，不创建平台控件。Host 激活后的执行顺序仍待接通。
+`InteractionTarget` 可由 `link`、`button`、`choice` 等交互 Macro 复用。Parser 只校验完整外壳、`|` 分隔符和两侧非空内容，并保留原文供后续求值。Core `link()` 把单个 Interaction Target 转换为 `PresentationNode::Navigation`；容器入口 `link_with_body()` 还会用同一 ID 原子登记延迟正文、目标与捕获值，不创建平台控件。Host 激活后由 `HostApi::take_macro_interaction()`、`advance_macro_interaction_mir()` 与 `drive_macro_interaction()` 恢复正文并进入目标 Passage（见 [/docs/architecture/host-presentation.md](/docs/architecture/host-presentation.md)）。
 
 `label` 与 `target` 已支持两种动态写法：整段 `$`、`_`、`@` 变量引用，以及普通文本中的 `${expression}`。两者共用 Runtime 注入的 Expression 求值函数和 Narrava 受控标量文本转换；`undefined`、`null`、Boolean、Number、String 可转换，Array、Object、Function 不会被隐式文本化。普通裸文本仍按字面值处理，因此 `Map` 不会被误读为 global。解析结果分别保存 `label`、`target` 在 Macro 参数原文中的字节起点，用于映射解析、求值和文本转换错误。
 
@@ -304,7 +304,7 @@ Runtime 逻辑分派现已直接识别 HIR 的 `Run`、`Set`、`Unset`、`Includ
 
 小写 `<<for target range start to end>>` 与可选的 `step amount` 也已接入。Range 包含终点；起点、终点和步长只求值一次。默认步长根据方向选择 `1` 或 `-1`，显式步长必须是有限、非零且朝终点移动的 Number。
 
-Text 与 `silently` 已进入 Host-neutral Presentation 边界。`link` 已有 Navigation 语义，并能将容器正文原子登记到延迟动作所有权容器；Host 已能在同一检查点内执行同步或异步正文并导航。正文输出不做瞬时呈现，主要用于 State 与逻辑副作用；`button`、`choice` 后续只有在形成不同且稳定的跨 Host 语义时才扩展。区域替换和计时显示等语义在存在跨宿主稳定类型前不进入 Core。
+Text 与 `silently` 已进入 Host-neutral Presentation 边界。`link` 已有 Navigation 语义，并能将容器正文原子登记到延迟动作所有权容器；Host 已能在同一检查点内执行同步或异步正文并导航。正文输出不做瞬时呈现，主要用于 State 与逻辑副作用；`button` 复用同一延迟正文语义，只要求 Host 呈现为按钮角色。`slot`／`replace` 已提供跨 Host 的稳定 Key 区域替换；`print` Macro 的 `delay` 选项由 Host 在渲染时延迟浮现（见 [/docs/reference/api-and-syntax.md](/docs/reference/api-and-syntax.md)）。`choice` 后续只有在形成不同于 `link` 的稳定跨 Host 语义时才扩展。
 
 ## Capture
 
@@ -344,8 +344,6 @@ HIR 已使用专用 Capture 节点保存有序且不重复的局部变量名与�
 | Native／scripts 自定义名称 | 同步分派及异步首次调用已实现 | 是 | Binding 通过同步或异步 Callback 执行不透明 Handler 身份 |
 | `return` | Parser／HIR 已保留，Runtime 未执行 | 否 | 未来结束可返回值调用单元 |
 | `capture` | MIR、Engine 与 Widget Runtime 传递已接通 | 否 | 为延迟正文保存指定 `@` 绑定 |
-
-Native Narrava 没有 `div`、`span` 或其他 HTML Macro；形似 HTML 的 Twee 内容只会成为普通 Text。
 
 后续条件与赋值 Macro 也必须复用同一个 Expression AST，不能建立第二套运算符解析器。
 

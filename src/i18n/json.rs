@@ -23,22 +23,27 @@ pub struct I18nJsonError {
 }
 
 impl I18nJsonError {
+    /// 错误的稳定分类。
     pub fn kind(&self) -> I18nJsonErrorKind {
         self.kind
     }
 
+    /// 出错位置的行号（1 基）。
     pub fn line(&self) -> usize {
         self.line
     }
 
+    /// 出错位置的列号（1 基）。
     pub fn column(&self) -> usize {
         self.column
     }
 
+    /// 底层错误说明。
     pub fn message(&self) -> &str {
         &self.message
     }
 
+    /// 把解码错误包装为稳定分类；仅 crate 内部使用。
     pub(super) fn decode(error: serde_json::Error) -> Self {
         let kind: I18nJsonErrorKind = match error.classify() {
             Category::Syntax => I18nJsonErrorKind::Syntax,
@@ -55,6 +60,7 @@ impl I18nJsonError {
         }
     }
 
+    /// 把编码错误包装为 `Encode` 分类；仅 crate 内部使用。
     pub(super) fn encode(error: serde_json::Error) -> Self {
         Self {
             kind: I18nJsonErrorKind::Encode,

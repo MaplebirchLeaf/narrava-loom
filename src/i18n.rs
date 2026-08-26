@@ -54,6 +54,7 @@ struct I18nCatalogIdentity(u64);
 static NEXT_I18N_CATALOG_ID: AtomicU64 = AtomicU64::new(1);
 
 impl I18nCatalogIdentity {
+    /// 原子分配下一个目录身份。
     fn next() -> Self {
         let id: u64 = NEXT_I18N_CATALOG_ID
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current: u64| {
@@ -65,6 +66,7 @@ impl I18nCatalogIdentity {
 }
 
 impl I18nTextId {
+    /// 原始字符串形式的文本身份。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -89,36 +91,44 @@ pub struct I18nPlaceholder {
 }
 
 impl I18nPlaceholder {
+    /// 模板中使用的受控占位名称。
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// 该动态值的 HIR 来源路径。
     pub fn node_path(&self) -> &str {
         &self.node_path
     }
 }
 
 impl I18nMessage {
+    /// 编译结构决定的文本身份。
     pub fn id(&self) -> &I18nTextId {
         &self.id
     }
 
+    /// 消息所属的源码文件。
     pub fn source(&self) -> &str {
         &self.source
     }
 
+    /// 消息所属的 Passage 名称。
     pub fn passage(&self) -> &str {
         &self.passage
     }
 
+    /// 默认语言原文。
     pub fn text(&self) -> &str {
         &self.text
     }
 
+    /// 模板中受控的动态值占位符。
     pub fn placeholders(&self) -> &[I18nPlaceholder] {
         &self.placeholders
     }
 
+    /// 消息在源码中的位置。
     pub fn span(&self) -> Span {
         self.span
     }
@@ -162,6 +172,7 @@ impl I18nCatalog {
         }
     }
 
+    /// 按收集顺序返回全部默认语言消息。
     pub fn messages(&self) -> &[I18nMessage] {
         &self.messages
     }
@@ -257,6 +268,7 @@ pub struct I18nTemplate {
 }
 
 impl I18nTemplate {
+    /// 用目标语言、动态字典与消息表直接构造模板。
     pub fn new(
         language: impl Into<String>,
         dictionary: BTreeMap<String, BTreeMap<String, String>>,
@@ -269,14 +281,17 @@ impl I18nTemplate {
         }
     }
 
+    /// 目标语言标签。
     pub fn language(&self) -> &str {
         &self.language
     }
 
+    /// 动态字典：placeholder 名到（键 → 译文）的映射。
     pub fn dictionary(&self) -> &BTreeMap<String, BTreeMap<String, String>> {
         &self.dictionary
     }
 
+    /// 消息表：文本身份到模板消息的映射。
     pub fn passages(&self) -> &BTreeMap<String, I18nTemplateMessage> {
         &self.passages
     }
@@ -302,6 +317,7 @@ pub struct I18nTemplateMessage {
 }
 
 impl I18nTemplateMessage {
+    /// 用原文、译文与动态值绑定直接构造消息。
     pub fn new(
         source: impl Into<String>,
         text: impl Into<String>,
@@ -314,14 +330,17 @@ impl I18nTemplateMessage {
         }
     }
 
+    /// 默认语言原文，供译文对照。
     pub fn source(&self) -> &str {
         &self.source
     }
 
+    /// 目标语言译文。
     pub fn text(&self) -> &str {
         &self.text
     }
 
+    /// 该消息的动态值绑定。
     pub fn values(&self) -> &BTreeMap<String, String> {
         &self.values
     }

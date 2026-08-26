@@ -7,7 +7,9 @@ use crate::{
 };
 
 use super::super::{HirBodyKind, HirBodyNode, HirError, HirMacro, HirMacroArguments, HirPrint};
+use super::has_print_options;
 
+/// print 参数解析失败的类型：缺少参数，或表达式错误（含片段起始偏移）。
 pub(super) enum PrintLoweringError {
     Required,
     Expression {
@@ -16,6 +18,7 @@ pub(super) enum PrintLoweringError {
     },
 }
 
+/// 区分反引号字面文本与 `${}` 表达式，解析 print 参数。
 pub(super) fn lower_print_argument<'source>(
     arguments: &'source str,
 ) -> Result<HirPrint<'source>, PrintLoweringError> {
@@ -37,6 +40,7 @@ pub(super) fn lower_print_argument<'source>(
         .map_err(|error| PrintLoweringError::Expression { offset, error })
 }
 
+/// print 缺少参数时的公共 Diagnostic。
 pub(super) fn print_argument_required_diagnostic() -> Diagnostic {
     Diagnostic::new(
         "hir.print_argument_required",
@@ -55,20 +59,31 @@ pub fn lower_fragment<'source>(
     nodes.iter().map(lower_fragment_node).collect()
 }
 
+/// 把单个动态 Twee 节点降为 HIR；通用 Macro 参数保持 Raw。
 fn lower_fragment_node<'source>(
     node: &twee::BodyNode<'source>,
 ) -> Result<HirBodyNode<'source>, HirError> {
     let kind: HirBodyKind<'source> = match &node.kind {
         twee::BodyNodeKind::Text(text) => HirBodyKind::Text(text),
         twee::BodyNodeKind::Macro(macro_node) if macro_node.name == "print" => {
-            let print: HirPrint<'source> =
-                lower_print_argument(macro_node.arguments).map_err(|error| HirError {
-                    diagnostic: match error {
-                        PrintLoweringError::Required => print_argument_required_diagnostic(),
-                        PrintLoweringError::Expression { error, .. } => error.diagnostic(),
-                    },
-                })?;
-            HirBodyKind::Print(print)
+            if has_print_options(macro_node.arguments) {
+                // 与正文路径一致：带样式选项的 print 走动态宏，单参数仍是编译器固有 Print。
+                HirBodyKind::Macro(HirMacro {
+                    name: macro_node.name,
+                    arguments: HirMacroArguments::Raw(macro_node.arguments),
+                    syntax_kind: macro_node.syntax_kind,
+                    body: Vec::new(),
+                })
+            } else {
+                let print: HirPrint<'source> =
+                    lower_print_argument(macro_node.arguments).map_err(|error| HirError {
+                        diagnostic: match error {
+                            PrintLoweringError::Required => print_argument_required_diagnostic(),
+                            PrintLoweringError::Expression { error, .. } => error.diagnostic(),
+                        },
+                    })?;
+                HirBodyKind::Print(print)
+            }
         }
         twee::BodyNodeKind::Macro(macro_node) if macro_node.name == "silently" => {
             if !macro_node.arguments.is_empty() {

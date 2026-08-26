@@ -17,6 +17,7 @@ const dialog = document.querySelector("#nv-dialog")
 const dialogTabs = document.querySelector("#dialog-tabs")
 const dialogMessage = document.querySelector("#dialog-message")
 const dialogPresentation = document.querySelector("#dialog-presentation")
+// 可变运行时状态：作者样式 Blob URL、Resource 路径集合、最近一次更新与侧栏区域缓存。
 const objectUrls = new Set()
 let resourcePaths = new Set()
 let lastUpdate = null
@@ -35,6 +36,7 @@ function setBarStowed(stowed) {
 barToggle.addEventListener("click", () => setBarStowed(!bar.classList.contains("stowed")))
 if (window.matchMedia("(max-width: 39.5em)").matches) setBarStowed(true)
 
+/** 开发者面板的说明表：每项是 window.narrava 方法的一句话用法。 */
 const help = () => ({
   state: "读取 global、variables、temporary 的安全摘要",
   set: "set(namespace, name, JSON值) 修改 Worker State",
@@ -45,6 +47,7 @@ const help = () => ({
   devtools: "开关 WebView DevTools",
 })
 
+/** 开启后把只读调试 API 挂到 window.narrava，并注册 F12 切换 DevTools。 */
 function configureDeveloperMode(enabled) {
   if (!enabled) return
   const state = () => invoke("developer_state")
@@ -70,10 +73,7 @@ function configureDeveloperMode(enabled) {
   )
 }
 
-/**
- * WebView 只把 Core Presentation DTO 映射为语义 DOM。
- * keyed reconcile 保留仍存在的控件与焦点，避免每次 State 更新都重建整个页面。
- */
+/** 按 key 协调 Presentation DTO，保留仍存在的控件与焦点。 */
 function render(update) {
   lastUpdate = structuredClone(update)
   const focusedKey =
@@ -120,6 +120,41 @@ function render(update) {
   else if (!passageRoot.contains(document.activeElement)) passageRoot.focus({ preventScroll: true })
 }
 
+/** 64 级色阶（0..=63）→ RGB；与 TUI 的 tone_rgb 使用同一映射。
+ *  灰阶 0-7（白 1 → 黑 7），光谱 8-63（红 8 → 橙 16 → 黄 24 → 绿 32 → 蓝 40 → 紫 48 → 深紫 63）。 */
+function toneColor(index) {
+  if (!(index >= 1)) return ""
+  const stops = [
+    [1, [255, 255, 255]],
+    [2, [229, 229, 229]],
+    [3, [201, 201, 201]],
+    [4, [138, 138, 138]],
+    [5, [85, 85, 85]],
+    [6, [50, 50, 50]],
+    [7, [0, 0, 0]],
+    [8, [255, 90, 90]],
+    [16, [255, 158, 69]],
+    [24, [242, 201, 76]],
+    [32, [82, 200, 120]],
+    [40, [79, 163, 255]],
+    [48, [167, 139, 250]],
+    [56, [124, 58, 237]],
+    [63, [88, 28, 135]],
+  ]
+  for (let i = 0; i < stops.length - 1; i++) {
+    const fromIndex = stops[i][0]
+    const from = stops[i][1]
+    const toIndex = stops[i + 1][0]
+    const to = stops[i + 1][1]
+    if (index <= toIndex) {
+      const t = (index - fromIndex) / (toIndex - fromIndex)
+      const lerp = (a, b) => Math.round(a + (b - a) * t)
+      return `rgb(${lerp(from[0], to[0])}, ${lerp(from[1], to[1])}, ${lerp(from[2], to[2])})`
+    }
+  }
+  return ""
+}
+
 /** 重绘前把页签 Panel 里的原节点放回 keyed reconcile 容器。 */
 function resetDialogTabs() {
   for (const panel of dialogPresentation.querySelectorAll(":scope > .dialog-panel")) {
@@ -163,6 +198,7 @@ function buildDialogTabs() {
   return panels
 }
 
+/** 切换活动页签：更新按钮的 active/aria-selected 与对应面板的 hidden。 */
 function selectDialogTab(activeIndex, panels) {
   ;[...dialogTabs.children].forEach((tab, index) => {
     const active = index === activeIndex
@@ -196,6 +232,7 @@ function reconcile(container, nodes) {
   for (const element of existing.values()) element.remove()
 }
 
+/** 按 DTO 节点类型创建语义元素骨架并绑定交互事件；字段值由 updateNode 填充。 */
 function createNode(node) {
   let element
   if (node.type === "image") {
@@ -274,7 +311,7 @@ function createNode(node) {
     if (node.type === "navigation" || node.type === "safeReturn") element.className = "choice"
     element.addEventListener("click", () => activate(element.dataset.interaction))
   } else {
-    element = document.createElement(node.type === "styledText" ? styledTag(node.styles) : "span")
+    element = document.createElement(node.type === "styledText" ? styledTag(node) : "span")
   }
   element.dataset.presentationKey = node.key
   element.dataset.presentationType = nodeDomType(node)
@@ -283,22 +320,21 @@ function createNode(node) {
 
 /** 返回会影响元素标签或内部结构的类型身份，供 reconcile 判断能否复用。 */
 function nodeDomType(node) {
-  if (node.type === "styledText") return `${node.type}:${styledTag(node.styles)}`
+  if (node.type === "styledText") return `${node.type}:${styledTag(node)}`
   if (node.type === "component") return `${node.type}:${node.capability}:${node.version}`
   return node.type
 }
 
-function styledTag(styles) {
-  const headings = ["heading1", "heading2", "heading3", "heading4", "heading5", "heading6"]
-  const heading = headings.findIndex((style) => styles.includes(style))
-  if (heading >= 0) return `h${heading + 1}`
+/** 语义字形 → 原生语义标签；结构性标题级别 → h1/h2；无字形时回退 span。 */
+function styledTag(node) {
+  if (node.heading === 1) return "h1"
+  if (node.heading === 2) return "h2"
+  const styles = node.styles
   if (styles.includes("quote")) return "q"
   if (styles.includes("code")) return "code"
-  if (styles.includes("deleted")) return "del"
-  if (styles.includes("inserted")) return "ins"
   if (styles.includes("marked")) return "mark"
-  if (styles.includes("subscript")) return "sub"
-  if (styles.includes("superscript")) return "sup"
+  if (styles.includes("inserted")) return "ins"
+  if (styles.includes("deleted")) return "del"
   if (styles.includes("strong")) return "strong"
   if (styles.includes("emphasis")) return "em"
   if (styles.includes("small")) return "small"
@@ -314,8 +350,19 @@ function updateNode(element, node) {
   }
   if (node.type === "styledText") {
     element.className = `presentation-text ${node.styles.map((style) => `text-${style}`).join(" ")}`
-    element.dataset.tone = node.tone
+    element.dataset.tone = String(node.tone)
+    if (node.tone > 0) {
+      element.style.setProperty("--narrava-tone", toneColor(node.tone))
+    } else {
+      element.style.removeProperty("--narrava-tone")
+    }
     element.textContent = node.text
+    if (node.delay > 0) {
+      // 延迟浮现：等待 delay 毫秒后淡入（时长由 --narrava-reveal-duration 控制，默认 300ms）。
+      element.style.animation = `narrava-reveal var(--narrava-reveal-duration, 300ms) ${node.delay}ms both`
+    } else {
+      element.style.animation = ""
+    }
     return
   }
   if (node.type === "image") {
@@ -388,14 +435,12 @@ function updateNode(element, node) {
   element.dataset.target = node.target
 }
 
+/** 只接受有限数值，否则回退默认值（组件属性的防御性解析）。 */
 function finiteNumber(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
-/**
- * 执行 Tauri 专属的受限 DOM 替换能力。
- * Core 只传 Region 或稳定 Presentation key；这里不接受 CSS selector 或注入 HTML。
- */
+/** 把 Core 的 Region 或 Presentation key 替换映射到 Tauri 页面。 */
 function applyReplacements() {
   const regions = new Map([
     ["header", passageHeader],
@@ -417,6 +462,7 @@ function applyReplacements() {
   }
 }
 
+/** 把交互 ID 送回 Worker 执行；成功后渲染并返回新的 Presentation 更新。 */
 async function activate(interaction) {
   setBusy(true, "正在处理行动…")
   try {
@@ -432,14 +478,10 @@ async function activate(interaction) {
 
 /** 输入先由 Worker 校验并写入 State；失败时调用方负责恢复控件的已提交值。 */
 async function submitInput(interaction, value) {
-  setBusy(true, "正在保存输入…")
-  try {
-    await invoke("input", { interaction, value })
-  } finally {
-    setBusy(false)
-  }
+  await invoke("input", { interaction, value })
 }
 
+/** 忙碌期间禁用全部交互控件并同步 aria-busy；message 非空时写入状态行。 */
 function setBusy(isBusy, message = "") {
   story.setAttribute("aria-busy", String(isBusy))
   for (const control of story.querySelectorAll(
@@ -491,6 +533,7 @@ function applyAuthorStyles(assets) {
   }
 }
 
+/** 把 Resource 逻辑路径编码为只读自定义协议的 URL；未收录的路径抛错。 */
 function resourceUrl(path) {
   if (!resourcePaths.has(path)) throw new Error(`Resource 不存在：${path}`)
   const encoded = path.split("/").map(encodeURIComponent).join("/")

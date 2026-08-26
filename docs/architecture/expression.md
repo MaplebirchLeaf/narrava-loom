@@ -136,7 +136,7 @@ value between[] lower upper  // lower <= value <= upper
 
 三目条件运算 `condition ? value : fallback` 保留。管道运算符 `|>` 暂不加入，等出现明确运行场景后再决定。
 
-## 首轮明确排除
+## 明确排除
 
 `delete`、`void`、`new`、逗号运算、`await` 与 `yield` 暂不加入。它们依赖对象生命周期、异步或生成器语义，不是首轮叙事表达式的必要能力。
 
@@ -229,22 +229,7 @@ Object 已支持点号读取自身属性，包括连续读取嵌套对象。普�
 
 直接可选成员 `target?.member`、可选索引 `target?.[index]` 与可选调用 `callee?.()` 已进入 Evaluator。目标为 `null` 或 `undefined` 时返回 `undefined`，短路时不会求值索引或调用参数。短路状态会继续穿过同一条成员、索引和调用链，例如 `null?.profile().name`，并与属性值本身恰好为 `undefined` 的情况分开保存。括号会结束短路传播，因此 `(null?.profile).name` 仍按普通成员读取报错。非空目标不会吞掉未知成员、非法目标或不可调用值等真实错误。
 
-## 实现顺序
-
-1. Expression Token、Span 与三种变量（已完成）；
-2. 字符串、数值、布尔值、`null`、`undefined`、数组、对象、State 名称、变量引用与括号（已完成）；
-3. 成员访问、索引、调用、可选链与可赋值目标（已完成）；
-4. 一元运算、`typeof`、自增、自减与幂运算（名称和变量目标已完成）；
-5. 算术、整除、三种位移、三向比较、其他比较、`instanceof`、`in`、`notin`、`between`、相等与按位运算（已完成）；
-6. 逻辑运算、空值合并、条件运算与英文别名（已完成）；
-7. 赋值及复合赋值（Parser 与 Evaluator 已完成，包括 global、setup、三类变量及成员索引路径）；
-8. 求值接口、内置函数、受控原型与 State 访问边界。
-
-每一步都需要优先级和错误位置测试。变量引用的具体书写形式在实现对应步骤前单独确定。
-
-Parser 首轮覆盖审查已完成。求值代码不继续堆入已较大的 `expression.rs`；下一阶段从独立的 Expression Value 子模块开始拆分职责。
-
-原 `expression.rs` 已完成职责拆分：AST、Lexer、Parser 和测试均已迁出。Evaluator 也已拆成主调度、目标、原生函数、原生方法、运算和转换模块。项目现有测试全部集中在 `src/tests/`；需要访问私有实现的测试仍由对应生产模块通过 `#[path]` 挂载，因此不扩大公开 API。
+## 值与运算规则
 
 Value 中的 `Null` 与 `Undefined` 必须保持独立；二者只在 `is_nullish()` 等明确语义中归为一类。`Number` 首轮使用 `f64` 对齐 Web `number`，`NaN` 与无穷值规则在数值求值阶段固定。
 

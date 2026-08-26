@@ -19,13 +19,19 @@ use super::{BodyControl, LogicNodeError, execute_logic_body};
 /// Widget 调用准备与正文执行保持各自原始错误边界。
 #[derive(Debug, PartialEq)]
 pub enum WidgetMacroError<StoryError> {
+    /// Widget Definition 查询失败。
     Definition(MacroDefinitionError),
+    /// Widget 位置实参解析失败。
     ArgumentList(MacroArgumentListError),
+    /// Widget 位置实参求值失败。
     ArgumentValue(MacroArgumentValueError<EvalError>),
+    /// 调用处使用了不支持的 Expression 参数形式。
     InvalidHirArguments,
+    /// 名称对应的 Definition 是 Native Handler，不是 Widget。
     NativeHandler,
     /// Widget 调用是 Inline Macro，调用处不能再携带正文。
     ContainerCall,
+    /// Widget 正文中的逻辑节点执行失败。
     Logic(LogicNodeError<StoryError>),
 }
 

@@ -10,21 +10,24 @@
 :: Start
 <<set $hero to "Maple">>
 <<set $visits to 1>>
-欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。
+欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。<br>
 <<link [[进入大厅|Hall]]>><</link>>
 
 :: Hall [hub]
 <<set $visits to $visits + 1>>
-你已第 <<print $visits>> 次来到大厅。
+你已第 <<print $visits>> 次来到大厅。<br>
 <<if $visits > 1>>
-门后的机关已经启动。
-你发现了 <<text "发光的钥匙" "positive" "strong">>。
+门后的机关已经启动。<br>
+你发现了<<print " 发光的钥匙" 32 "strong">>。<br>
 <</if>>
-<<link [[查看藏书室|Library]]>><</link>>
-<<link [[查看语义渲染|PresentationGallery]]>><</link>>
-<<link [[查看弹窗与按钮|DialogGallery]]>><</link>>
-<<link [[查看状态绑定表单|FormGallery]]>><</link>>
-<<link [[查看内容替换|ReplaceGallery]]>><</link>>
+<<link [[查看藏书室|Library]]>><</link>><br>
+<<link [[查看语义渲染|PresentationGallery]]>><</link>><br>
+<<link [[查看弹窗与按钮|DialogGallery]]>><</link>><br>
+<<link [[查看状态绑定表单|FormGallery]]>><</link>><br>
+<<link [[查看内容替换|ReplaceGallery]]>><</link>><br>
+<<link [[查看作者能力演示|AuthorToolsGallery]]>><</link>><br>
+<<link [[查看 Twee 内 Presentation|TextGallery]]>><</link>><br>
+<<link [[查看控制流范本|MacroGallery]]>><</link>>
 
 :: PresentationGallery [reference]
 <<presentationDemo>>
@@ -37,15 +40,15 @@
 :: FormGallery [reference]
 <<set $tips_enabled to $tips_enabled ?? false>>
 <<set $route to $route ?? "quiet">>
-提示开关：<<checkbox "$tips_enabled" false true>>
-安静路线：<<radiobutton "$route" "quiet">>
-探索路线：<<radiobutton "$route" "explore">>
-玩家姓名：<<textbox "$player_name" "Maple">>
-当前值：提示=<<print $tips_enabled>>，路线=<<print $route>>，姓名=<<print $player_name>>。
+提示开关：<<checkbox "$tips_enabled" false true>><br>
+安静路线：<<radiobutton "$route" "quiet">><br>
+探索路线：<<radiobutton "$route" "explore">><br>
+玩家姓名：<<textbox "$player_name" "Maple">><br>
+当前值：提示=<<print $tips_enabled>>，路线=<<print $route>>，姓名=<<print $player_name>>。<br>
 <<button [[确认表单并返回|Hall]]>>
   <<set $form_confirmed to true>>
 <</button>>
-<<link [[刷新当前值|FormGallery]]>><</link>>
+<br><<link [[刷新当前值|FormGallery]]>><</link>><br>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: ReplaceGallery [reference]
@@ -58,11 +61,119 @@
 <<replace "header">>
   替换后的页眉：这是由 replace 容器正文产生的 Presentation。
 <</replace>>
-正文仍保留在 Passage Main；TUI 与 WebView 都能把 header 映射到自己的区域。
+正文仍保留在 Passage Main；TUI 与 WebView 都能把 header 映射到自己的区域。<br>
 <<link [[返回大厅|Hall]]>><</link>>
 
+:: AuthorToolsGallery [reference]
+存档：脚本函数经 State.global 暴露后可在 Twee 中调用，请求进入 Host 队列。<br>
+<<print saveGame("manual-1")>><br>
+导出槽位已写入 save/manual-1.nsave（首次进入时由 Host 创建目录）。<br>
+<<button [[读取存档并返回|Hall]]>><<run loadGame("manual-1")>><</button>>
+<<button [[读取不存在的槽位（失败不阻塞）|Hall]]>><<run loadGame("ghost-slot")>><</button>>
+
+<br>日志：只写入 Host 控制台，不进入 Passage 输出。<br>
+<<run logStory("玩家打开了作者能力演示页")>>
+<<run logWarnStory("这是 warn 级别示例")>>
+
+<br>语言：翻译链由 config.toml 的 default_locale 与 languages/ 语言包决定。<br>
+默认语言：<<print defaultLocale()>>，当前生效：<<print currentLocale()>>。<br>
+<<print exportI18nTemplate()>><br>
+开发目录会直接导入 languages/en/；发行构建会把它打包为 languages/en.nlang。<br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: TextGallery [reference]
+这是由 print Macro 提供的 Twee 内 Presentation：内容 + 可选 tone + 零到多个 style，<br>
+不需要写脚本。结构化的 Region、Component、图片与 Dialog 仍需在 scripts 中构建。<br>
+
+<br>状态色阶是 0..=63，对齐二进制边界：0-7 是灰阶（白1→亮灰2→浅灰3→灰4→深灰5→暗灰6→黑7），<br>
+8-63 是光谱（红8→橙16→黄24→绿32→蓝40→紫48→深紫56→63，每色相 8 级）；0 为正文默认。<br>
+<<print "3" 3>> <<print "8" 8>> <<print "16" 16>> <<print "24" 24>><br>
+<<print "32" 32>> <<print "40" 40>> <<print "48" 48>> <<print "63" 63>><br>
+常用锚点：3=浅灰（弱化）、16=橙（强调）、24=黄、32=绿（正面）、40=蓝（信息）、8=红（负面）。<br>
+
+<br>style 是语义字形，可任意组合：<br>
+<<print "强调" 0 "emphasis">> <<print "加粗" 0 "strong">><br>
+<<print "代码(等宽)" 0 "code">> <<print "引用" 0 "quote">><br>
+<<print "标记" 0 "marked">> <<print "小字" 0 "small">><br>
+<<print "新增内容" 0 "inserted">> <<print "删除内容" 0 "deleted">><br>
+
+<br>标题示例（色阶 16 是橙色，strong 只负责加粗）：<br>
+<<print "橙色标题演示" 16 "strong">><br>
+
+<br>tone 与 style 互不排斥，可以同时指定。位置形式（内容、tone、style...）：<br>
+<<print "正面加粗" 32 "strong">><br>
+对象形式把 tone 与多个 style 写在一个对象里：<br>
+<<print "警告对象形式" {tone: 24, styles: ["strong", "code"]}>><br>
+
+<br>变量内容：<<print $hero 16 "strong">>。<br>
+
+<br>延迟显示：对象形式加 delay（毫秒），渲染器在此之前保持隐藏、到时淡入浮现。<br>
+<<print "两秒后出现的文字" {tone: 40, delay: 2000}>><br>
+<<print "一秒后出现的文字" {tone: 32, styles: ["strong"], delay: 1000}>><br>
+
+<br>浮现属于 Host 视觉层：Presentation 只表达色阶、语义字形和延迟提示。<br>
+作者可在 styles/*.css 里用 [data-tone="N"] 覆盖任意色阶。<br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: MacroGallery [reference]
+switch：按值严格匹配，命中输出该分支：<br>
+<<set $weather to "rain">>
+<<switch $weather>>
+<<case "sunny">>
+晴天<br>
+<<case "rain">>
+下雨<br>
+<<default>>
+其他天气<br>
+<</switch>>
+
+<br>for：三种遍历形式<br>
+<<set $items to ["钥匙", "火把", "地图"]>>
+背包：<br>
+<<for $item of $items>>
+  <<print $item>><br>
+<</for>>
+序号：<br>
+<<for $index in $items>>
+  <<print $index>><br>
+<</for>>
+范围：<br>
+<<for $step range 1 to 3>>
+  <<print $step>><br>
+<</for>>
+
+<br>while + break / continue（2 被 continue 跳过，随后 break 提前结束，输出 1、3）：<br>
+<<set $count to 0>>
+<<while $count < 10>>
+<<set $count to $count + 1>>
+<<if $count == 2>>
+<<continue>>
+<</if>>
+<<if $count >= 4>>
+<<break>>
+<</if>>
+<<print $count>><br>
+<</while>>
+
+<br>unset：删除变量后 defined() 为 false：<br>
+<<set $count to 3>>
+<<unset $count>>
+<<print defined($count)>><br>
+
+<br>include：原地执行另一 Passage，不发生导航<br>
+<<include "SharedTip">>
+
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: GotoDemo [reference]
+/% 进入后立即导航到 Library，当前 Passage 不再输出。 %/
+<<goto "Library">>
+
+:: SharedTip
+（被 include 的提示正文：显示在调用位置，不产生导航，也不进入 Story 历史。）<br>
+
 :: Library [quiet]
-书架上写着：<<print scriptedGreeting($hero)>>
+书架上写着：<<print scriptedGreeting($hero)>><br>
 <<silently>>
 <<set $found_book to true>>
 <</silently>>

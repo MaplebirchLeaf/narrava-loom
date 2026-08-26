@@ -213,6 +213,7 @@ impl Expression<'_> {
         }
     }
 
+    /// 目标链上是否含有可选链节点；赋值目标校验据此拒绝可选链位置。
     fn has_optional_chain(&self) -> bool {
         match &self.kind {
             ExpressionKind::OptionalCall { .. }

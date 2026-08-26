@@ -185,6 +185,7 @@ where
     Ok(BodyControl::Continue)
 }
 
+/// 把循环范围边界强制为有限数值；非数值或无穷大报告对应 Span 错误。
 pub(crate) fn finite_range_number(
     value: Value,
     span: crate::expression::Span,
@@ -215,6 +216,7 @@ where
     }
 }
 
+/// 按 `in`（键）或 `of`（值）语义把集合展开为稳定迭代快照。
 pub(crate) fn collection_iteration_values(
     collection: Value,
     keys: bool,

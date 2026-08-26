@@ -13,6 +13,7 @@ pub trait I18nDiagnostic {
     fn diagnostic(&self) -> Diagnostic;
 }
 
+/// 构造 Error 级 Diagnostic 的简写。
 fn error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(code, DiagnosticSeverity::Error, &message.into())
 }
