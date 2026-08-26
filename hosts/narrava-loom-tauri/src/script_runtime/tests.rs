@@ -11,7 +11,7 @@ use narrava_loom_core::{
 use super::{BOOTSTRAP, EcmaBinding, EcmaRuntime, ScriptMacroOutcome, state_bridge, transpile};
 
 #[test]
-fn bootstrap_exposes_unified_narrava_without_browser_window_and_delivers_events() {
+fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
     let mut context = Context::default();
     context
         .eval(Source::from_bytes(BOOTSTRAP))
@@ -20,14 +20,13 @@ fn bootstrap_exposes_unified_narrava_without_browser_window_and_delivers_events(
         .eval(Source::from_bytes(
             r#"
                 (() => {
-                  const all = narrava.Event.subscribe();
+                  const all = Event.subscribe();
                   const quest = Event.subscribe({ name: "quest:completed" });
-                  const sequence = narrava.Event.emit("quest:completed", { id: 7 });
+                  const sequence = Event.emit("quest:completed", { id: 7 });
                   Event.emit("ui:hint", null);
                   return JSON.stringify({
                     windowType: typeof window,
-                    sameEvents: narrava.Event === Event,
-                    frozen: Object.isFrozen(narrava),
+                    narravaType: typeof narrava,
                     sequence,
                     quest: Event.take(quest),
                     all: Event.take(all),
@@ -46,8 +45,7 @@ fn bootstrap_exposes_unified_narrava_without_browser_window_and_delivers_events(
     let value: serde_json::Value = serde_json::from_str(&json).expect("结果应为 JSON");
 
     assert_eq!(value["windowType"], "undefined");
-    assert_eq!(value["sameEvents"], true);
-    assert_eq!(value["frozen"], true);
+    assert_eq!(value["narravaType"], "undefined");
     assert_eq!(value["sequence"], 1);
     assert_eq!(value["quest"].as_array().unwrap().len(), 1);
     assert_eq!(value["all"].as_array().unwrap().len(), 2);
@@ -66,7 +64,7 @@ fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
         .eval(Source::from_bytes(
             r#"
               JSON.stringify({
-                same: narrava.Presentation === Presentation,
+                narravaType: typeof narrava,
                 frozen: Object.isFrozen(Presentation),
                 value: Presentation.region("bar", [
                   Presentation.text("体力不足", { key: "stamina", styles: ["strong"], tone: "warning" }),
@@ -82,7 +80,7 @@ fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
         .to_std_string_escaped();
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-    assert_eq!(value["same"], true);
+    assert_eq!(value["narravaType"], "undefined");
     assert_eq!(value["frozen"], true);
     assert_eq!(value["value"]["__narravaPresentation"], "region");
     assert_eq!(value["value"]["children"][0]["tone"], "warning");

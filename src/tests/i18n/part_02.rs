@@ -63,6 +63,61 @@ fn i18n_catalog_groups_visible_text_and_print_placeholders() {
 }
 
 #[test]
+fn i18n_catalog_preserves_static_member_paths_as_placeholder_names() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("示例 Source 应可读取");
+    let story: HirStory<'_> = HirStory {
+        passages: vec![HirPassage {
+            source: &source.path,
+            name: "Profile",
+            tags: Vec::new(),
+            body: vec![
+                text_node("姓名：", 1),
+                HirBodyNode {
+                    kind: HirBodyKind::Print(HirPrint::Expression(
+                        parse("$hero.profile.name").expect("成员表达式应有效"),
+                    )),
+                    span: span(2),
+                },
+                text_node("，频道：", 3),
+                HirBodyNode {
+                    kind: HirBodyKind::Print(HirPrint::Expression(
+                        parse("setup.build.channel").expect("Setup 成员表达式应有效"),
+                    )),
+                    span: span(4),
+                },
+                text_node("，动态：", 5),
+                HirBodyNode {
+                    kind: HirBodyKind::Print(HirPrint::Expression(
+                        parse("$heroes[$selected].name").expect("动态索引表达式应有效"),
+                    )),
+                    span: span(6),
+                },
+            ],
+        }],
+    };
+
+    let catalog: I18nCatalog = I18nCatalog::from_hir(&story);
+    let message = &catalog.messages()[0];
+
+    assert_eq!(
+        message.text(),
+        "姓名：{$hero.profile.name}，频道：{setup.build.channel}，动态：{value_3}"
+    );
+    assert_eq!(
+        message
+            .placeholders()
+            .iter()
+            .map(|placeholder| placeholder.name())
+            .collect::<Vec<_>>(),
+        vec!["$hero.profile.name", "setup.build.channel", "value_3"]
+    );
+}
+
+#[test]
 fn nlang_manifest_parses_the_minimal_strict_schema() {
     let json: &str = r#"{
         "locale": "zh-CN",

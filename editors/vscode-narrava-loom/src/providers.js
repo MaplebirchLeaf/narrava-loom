@@ -7,12 +7,23 @@ const legend = new vscode.SemanticTokensLegend(["keyword", "type"])
 
 function callAt(document, position) {
   const offset = document.offsetAt(position)
-  return scanTwee(document.getText()).calls.find(call => offset >= call.start && offset <= call.start + call.length)
+  return scanTwee(document.getText()).calls.find(
+    (call) => offset >= call.start && offset <= call.start + call.length,
+  )
 }
 
 function passageLinkAt(document, position) {
   const offset = document.offsetAt(position)
-  return scanTwee(document.getText()).links.find(link => offset >= link.start && offset <= link.start + link.length)
+  return scanTwee(document.getText()).links.find(
+    (link) => offset >= link.start && offset <= link.start + link.length,
+  )
+}
+
+function functionCallAt(document, position) {
+  const offset = document.offsetAt(position)
+  return scanTwee(document.getText()).functionCalls.find(
+    (call) => offset >= call.start && offset <= call.start + call.length,
+  )
 }
 
 function semanticProvider(workspace) {
@@ -40,20 +51,38 @@ function definitionProvider(workspace) {
     async provideDefinition(document, position) {
       const link = passageLinkAt(document, position)
       if (link) {
-        const locations = []
-        for (const passage of workspace.passages.filter(item => item.name === link.target)) {
-          const target = await vscode.workspace.openTextDocument(passage.uri)
-          locations.push(new vscode.Location(passage.uri, target.positionAt(passage.start)))
-        }
+        const locations = await Promise.all(
+          workspace.passages
+            .filter((item) => item.name === link.target)
+            .map(async (passage) => {
+              const target = await vscode.workspace.openTextDocument(passage.uri)
+              return new vscode.Location(passage.uri, target.positionAt(passage.start))
+            }),
+        )
         return locations
+      }
+      const functionCall = functionCallAt(document, position)
+      if (functionCall) {
+        const locations = await Promise.all(
+          workspace.functions
+            .filter((item) => item.name === functionCall.name)
+            .map(async (definition) => {
+              const target = await vscode.workspace.openTextDocument(definition.uri)
+              return new vscode.Location(definition.uri, target.positionAt(definition.start))
+            }),
+        )
+        if (locations.length > 0) return locations
       }
       const call = callAt(document, position)
       if (!call) return undefined
-      const locations = []
-      for (const definition of workspace.definitions.filter(item => item.name === call.name)) {
-        const target = await vscode.workspace.openTextDocument(definition.uri)
-        locations.push(new vscode.Location(definition.uri, target.positionAt(definition.start)))
-      }
+      const locations = await Promise.all(
+        workspace.definitions
+          .filter((item) => item.name === call.name)
+          .map(async (definition) => {
+            const target = await vscode.workspace.openTextDocument(definition.uri)
+            return new vscode.Location(definition.uri, target.positionAt(definition.start))
+          }),
+      )
       return locations
     },
   }
@@ -62,7 +91,9 @@ function definitionProvider(workspace) {
 function completionProvider(workspace) {
   return {
     provideCompletionItems() {
-      return [...workspace.known].sort().map(name => new vscode.CompletionItem(name, vscode.CompletionItemKind.Function))
+      return [...workspace.known]
+        .toSorted()
+        .map((name) => new vscode.CompletionItem(name, vscode.CompletionItemKind.Function))
     },
   }
 }

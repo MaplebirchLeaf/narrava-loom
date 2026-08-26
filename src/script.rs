@@ -23,6 +23,12 @@ use crate::{
     story::Story,
 };
 
+mod bundle;
+mod macro_api;
+
+pub use bundle::*;
+pub use macro_api::*;
+
 /// State 在 VM 求值期间把 ScriptCallable 交还给 Binding 的瞬时路由。
 ///
 /// 路由不进入 State checkpoint、Save 或 Value 图；真实函数对象仍归 Binding。
@@ -105,109 +111,6 @@ pub trait ScriptSaveHost {
     fn restore_json(&mut self, json: &str) -> Result<(), Diagnostic>;
     fn request_export(&mut self) -> Result<(), Diagnostic>;
     fn request_import(&mut self) -> Result<(), Diagnostic>;
-}
-
-/// scripts 注册的 Macro Handler；实际函数仍由 Binding 的函数表拥有。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ScriptMacroHandler {
-    callable: ScriptCallable,
-}
-
-impl ScriptMacroHandler {
-    pub fn new(callable: ScriptCallable) -> Self {
-        Self { callable }
-    }
-
-    pub fn callable(&self) -> &ScriptCallable {
-        &self.callable
-    }
-}
-
-/// scripts 注册的 before／after Hook 身份。
-pub type ScriptMacroHook = ScriptCallable;
-
-/// Script API 使用的 Macro 定义集合。
-pub type ScriptMacroDefinitions = MacroDefinitions<MacroDefinition<ScriptMacroHandler>>;
-
-/// Script API 使用的 Macro 生命周期订阅集合。
-pub type ScriptMacroHooks = MacroLifecycleSubscriptions<ScriptMacroHook>;
-
-/// scripts 可见的 Macro 增删查改与生命周期控制面。
-pub struct ScriptMacroApi<'macro_api> {
-    definitions: &'macro_api mut ScriptMacroDefinitions,
-    hooks: &'macro_api mut ScriptMacroHooks,
-}
-
-impl<'macro_api> ScriptMacroApi<'macro_api> {
-    pub fn new(
-        definitions: &'macro_api mut ScriptMacroDefinitions,
-        hooks: &'macro_api mut ScriptMacroHooks,
-    ) -> Self {
-        Self { definitions, hooks }
-    }
-
-    pub fn add(
-        &mut self,
-        name: &str,
-        definition: MacroDefinition<ScriptMacroHandler>,
-    ) -> Option<MacroDefinition<ScriptMacroHandler>> {
-        self.definitions.add(name, definition)
-    }
-
-    pub fn update(
-        &mut self,
-        name: &str,
-        definition: MacroDefinition<ScriptMacroHandler>,
-    ) -> Result<MacroDefinition<ScriptMacroHandler>, MacroDefinitionError> {
-        self.definitions.update(name, definition)
-    }
-
-    pub fn del(&mut self, name: &str) -> Option<MacroDefinition<ScriptMacroHandler>> {
-        self.definitions.del(name)
-    }
-
-    pub fn get(&self, name: &str) -> Option<&MacroDefinition<ScriptMacroHandler>> {
-        self.definitions.get(name)
-    }
-
-    pub fn has(&self, name: &str) -> bool {
-        self.definitions.has(name)
-    }
-
-    pub fn before(
-        &mut self,
-        name: &str,
-        hook: ScriptMacroHook,
-    ) -> Result<MacroLifecycleSubscriptionId, MacroLifecycleSubscriptionError> {
-        self.hooks.before(name, hook)
-    }
-
-    pub fn after(
-        &mut self,
-        name: &str,
-        hook: ScriptMacroHook,
-    ) -> Result<MacroLifecycleSubscriptionId, MacroLifecycleSubscriptionError> {
-        self.hooks.after(name, hook)
-    }
-
-    pub fn off(&mut self, id: MacroLifecycleSubscriptionId) -> Option<ScriptMacroHook> {
-        self.hooks.off(id)
-    }
-}
-
-/// 建立 scripts 最常用的 Macro 定义，避免 Binding 重复拼装字段。
-pub fn script_macro_definition(
-    callable: ScriptCallable,
-    body_kind: MacroBodyKind,
-    argument_kind: MacroArgumentKind,
-    execution_kind: MacroExecutionKind,
-) -> MacroDefinition<ScriptMacroHandler> {
-    MacroDefinition::new(
-        body_kind,
-        argument_kind,
-        execution_kind,
-        ScriptMacroHandler::new(callable),
-    )
 }
 
 /// Binding 侧真实函数表的最小调用接口。
@@ -438,76 +341,5 @@ impl<'core> ScriptI18nApi<'core> {
 
     pub fn locale(&self) -> &'core str {
         self.locale
-    }
-}
-
-/// 由 Tauri、Web 或嵌入式 ECMAScript 环境实现的启动加载边界。
-pub trait ScriptBinding {
-    type Error;
-
-    fn load(
-        &mut self,
-        bundle: &ScriptBundle<'_>,
-        context: &mut ScriptLoadContext<'_>,
-    ) -> Result<(), Self::Error>;
-}
-
-/// Binding 选择编译或执行路径所需的 ECMAScript 源码语言。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ScriptLanguage {
-    TypeScript,
-    JavaScript,
-}
-
-/// 一份借用现有 Source 的脚本模块，不复制源码文本。
-pub struct ScriptModule<'source> {
-    source: &'source Source,
-    language: ScriptLanguage,
-}
-
-impl ScriptModule<'_> {
-    pub fn path(&self) -> &str {
-        self.source.path.as_str()
-    }
-
-    pub fn language(&self) -> ScriptLanguage {
-        self.language
-    }
-
-    pub fn source(&self) -> &str {
-        &self.source.content
-    }
-}
-
-/// 按 Source 顺序交给同一个 Script Binding 的模块集合。
-#[derive(Default)]
-pub struct ScriptBundle<'source> {
-    modules: Vec<ScriptModule<'source>>,
-}
-
-impl<'source> ScriptBundle<'source> {
-    /// Twee 继续进入叙事编译器，只有 `.ts/.js` 进入脚本边界。
-    pub fn from_sources(sources: &'source SourceList) -> Self {
-        let modules: Vec<ScriptModule<'source>> = sources
-            .items
-            .iter()
-            .filter_map(|source: &Source| {
-                let language: ScriptLanguage = match source.kind {
-                    SourceKind::TypeScript => ScriptLanguage::TypeScript,
-                    SourceKind::JavaScript => ScriptLanguage::JavaScript,
-                    SourceKind::Twee => return None,
-                };
-                Some(ScriptModule { source, language })
-            })
-            .collect();
-        Self { modules }
-    }
-
-    pub fn modules(&self) -> &[ScriptModule<'source>] {
-        &self.modules
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.modules.is_empty()
     }
 }

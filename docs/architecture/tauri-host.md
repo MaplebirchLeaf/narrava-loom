@@ -142,10 +142,10 @@ serde `Serialize` 数据与错误。managed state 由 Tauri `State` 注入。实
 ## 平台管理能力
 
 - `Host.delay()` 经 Core Pending／Resume 边界恢复，不阻塞 WebView 或 Runtime Worker；
-- `:: Bar` 请求的 `narrava.host-tools` Component 可打开“存档”页面，把命名槽位写入
-  `save/<target>.nsave`；脚本 `Save.export/import` 复用同一边界；
-- “语言”页面读取 `languages/*.nlang` 并切换 Runtime 语言链；
-- “日志”页面显示 Host 的有界结构化诊断记录；
+- `Save.export/import` 把命名槽位写入或读自 `save/<target>.nsave`；
+- Host 提供语言包选择和有界结构化诊断能力，但不生成“存档／语言／日志”固定页面；
+- 游戏内管理弹窗的标题、页签、控件、文案与布局全部由游戏作者通过 Twee、脚本和
+  Presentation 定义；Host 只拥有原生 Dialog 外壳与经过验证的平台动作；
 - Mod 管理界面属于 `narrava-loom-modloader`，不进入本 Host 的 Core 完成条件。
 
 真实浏览器检查覆盖语义 DOM、导航、控制台与 320/768/1024/1440 宽度；实际 Tauri 系统窗口仍

@@ -1,0 +1,23 @@
+{
+  "name": "narrava-loom-workspace",
+  "private": true,
+  "workspaces": [
+    "bindings/typescript"
+  ],
+  "scripts": {
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "typecheck": "tsc -p bindings/typescript/tsconfig.json",
+    "lint": "oxlint --deny-warnings bindings editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts",
+    "format": "oxfmt --write package.json .oxfmtrc.json .oxlintrc.json bindings/typescript editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts",
+    "format:check": "oxfmt --check package.json .oxfmtrc.json .oxlintrc.json bindings/typescript editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts",
+    "test": "bun run test:vscode",
+    "test:vscode": "bun run --cwd editors/vscode-narrava-loom test"
+  },
+  "devDependencies": {
+    "@narrava-loom/types": "workspace:*",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
+    "typescript": "^7.0.2"
+  },
+  "packageManager": "bun@1.4.0"
+}

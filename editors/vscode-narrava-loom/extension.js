@@ -2,7 +2,12 @@
 
 const vscode = require("vscode")
 const { MacroWorkspace } = require("./src/workspace")
-const { completionProvider, definitionProvider, legend, semanticProvider } = require("./src/providers")
+const {
+  completionProvider,
+  definitionProvider,
+  legend,
+  semanticProvider,
+} = require("./src/providers")
 
 async function activate(context) {
   const workspace = new MacroWorkspace()
@@ -14,13 +19,17 @@ async function activate(context) {
   }
   context.subscriptions.push(
     workspace,
-    vscode.languages.registerDocumentSemanticTokensProvider(selector, semanticProvider(workspace), legend),
+    vscode.languages.registerDocumentSemanticTokensProvider(
+      selector,
+      semanticProvider(workspace),
+      legend,
+    ),
     vscode.languages.registerDefinitionProvider(selector, definitionProvider(workspace)),
     vscode.languages.registerCompletionItemProvider(selector, completionProvider(workspace), "<"),
-    vscode.workspace.onDidChangeTextDocument(event => {
+    vscode.workspace.onDidChangeTextDocument((event) => {
       if (/\.(?:twee|ts|js)$/.test(event.document.uri.path)) scheduleRefresh()
     }),
-    vscode.workspace.onDidOpenTextDocument(document => {
+    vscode.workspace.onDidOpenTextDocument((document) => {
       if (document.languageId === "narrava-twee") workspace.validate(document)
     }),
     vscode.workspace.onDidCreateFiles(scheduleRefresh),

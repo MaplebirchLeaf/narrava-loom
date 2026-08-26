@@ -230,13 +230,6 @@ const BOOTSTRAP: &str = r#"
     }),
     fragment: (...children) => presentationNode("fragment", { children: Object.freeze(children) }),
   });
-  globalThis.narrava = Object.freeze({
-    Engine: globalThis.Engine, State: globalThis.State, Macro: globalThis.Macro,
-    Story: globalThis.Story, Logger: globalThis.Logger, Event: globalThis.Event,
-    Host: globalThis.Host,
-    Save: globalThis.Save, Resource: globalThis.Resource, I18n: globalThis.I18n,
-    Presentation: globalThis.Presentation,
-  });
   globalThis.__narrava = {
     engine: null, save: null, events, logs, macros,
     configure(value) { Object.assign(configuration, value) },

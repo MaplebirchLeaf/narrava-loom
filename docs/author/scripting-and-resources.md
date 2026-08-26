@@ -31,40 +31,25 @@ State.global.set("greeting", greeting)
 - WebView 不执行游戏脚本；
 - 可保存数据只能是 Narrava 数据，函数句柄不能进入存档变量图。
 
-### 13.1 为什么游戏脚本不能写 `window.narrava`
+### 13.1 为什么游戏脚本直接使用顶层单例
 
 游戏脚本在 **Rust 内的 ECMAScript Runtime** 中执行，不在 Tauri WebView 中执行。因此
 `typeof window` 和 `typeof document` 都是 `"undefined"`。
 
-统一入口是小写的 `globalThis.narrava`，顶层可以直接写 `narrava`：
+Script Binding 直接提供职责明确的顶层单例，不再套一层 `narrava` 命名空间：
 
 ```ts
-narrava.State.variables.set("coins", 10)
-narrava.Logger.info("game", "脚本已加载")
-narrava.Event.emit("game:ready", { coins: 10 })
+State.variables.set("coins", 10)
+Logger.info("game", "脚本已加载")
+Event.emit("game:ready", { coins: 10 })
 ```
 
-大写名字是同一批对象的简写别名：
+`Engine`、`State`、`Macro`、`Story`、`Logger`、`Event`、`Host`、`Save`、`Resource`、`I18n`
+和 `Presentation` 是彼此独立的公开契约。Worker 中不存在 `narrava.Save` 或聚合对象
+`globalThis.narrava`，也始终没有 `window`、Renderer、DOM 或 Tauri API。
 
-```ts
-narrava.Engine === Engine
-narrava.State === State
-narrava.Macro === Macro
-narrava.Story === Story
-narrava.Logger === Logger
-narrava.Event === Event
-narrava.Host === Host
-narrava.Save === Save
-narrava.Resource === Resource
-narrava.I18n === I18n
-```
-
-Worker 中的 `narrava` 本身被冻结，游戏不能替换入口。它故意不包含 Renderer、DOM、Tauri API、
-ModLoader 或 ModUtils：前几项属于 Host，后两项属于附属模组加载器。
-
-不要混淆两个隔离环境中的同名入口：游戏脚本的 `globalThis.narrava` 是 Core API，始终没有
-`window`；开发模式 DevTools 的 `window.narrava` 只提供 `state/set/del` 调试桥；发布模式不会
-向 WebView 注入 `window.narrava`。
+开发模式 DevTools 的 `window.narrava` 只属于 WebView 调试桥，提供 `state/set/del` 等开发工具；
+它不是游戏脚本 API，发布模式也不会注入。
 
 上面的三斜线声明路径取决于脚本文件与仓库 `bindings/` 的相对位置。复制 `examples/` 时无需
 修改；如果把游戏移到仓库外，编辑器可能找不到声明文件，但这不影响 Host 运行。可把

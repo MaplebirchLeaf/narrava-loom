@@ -6,30 +6,61 @@ export {}
 
 declare global {
   type NarravaPrimitive = undefined | null | boolean | number | string
-  type NarravaData = NarravaPrimitive | readonly NarravaData[] | { readonly [key: string]: NarravaData }
+  type NarravaData =
+    | NarravaPrimitive
+    | readonly NarravaData[]
+    | { readonly [key: string]: NarravaData }
   type NarravaCallable = (...arguments_: never[]) => NarravaData | void
   type NarravaGlobal = NarravaData | NarravaCallable
 
   type NarravaTextStyle =
-    | "emphasis" | "strong" | "code" | "deleted" | "inserted" | "marked" | "small"
-    | "subscript" | "superscript" | "quote"
-    | "heading1" | "heading2" | "heading3" | "heading4" | "heading5" | "heading6"
+    | "emphasis"
+    | "strong"
+    | "code"
+    | "deleted"
+    | "inserted"
+    | "marked"
+    | "small"
+    | "subscript"
+    | "superscript"
+    | "quote"
+    | "heading1"
+    | "heading2"
+    | "heading3"
+    | "heading4"
+    | "heading5"
+    | "heading6"
   type NarravaTextTone =
-    | "default" | "muted" | "accent" | "informational"
-    | "positive" | "warning" | "negative" | "critical"
+    | "default"
+    | "muted"
+    | "accent"
+    | "informational"
+    | "positive"
+    | "warning"
+    | "negative"
+    | "critical"
   type NarravaPresentationRegion = "header" | "main" | "footer" | "bar" | "dialog"
-  interface NarravaPresentationNode { readonly __narravaPresentation: string; readonly key?: string }
+  interface NarravaPresentationNode {
+    readonly __narravaPresentation: string
+    readonly key?: string
+  }
   interface NarravaPresentation {
-    text(text: string, options?: {
-      readonly key?: string
-      readonly styles?: readonly NarravaTextStyle[]
-      readonly tone?: NarravaTextTone
-    }): NarravaPresentationNode
-    image(resource: string, options?: {
-      readonly key?: string
-      readonly alt?: string
-      readonly caption?: string
-    }): NarravaPresentationNode
+    text(
+      text: string,
+      options?: {
+        readonly key?: string
+        readonly styles?: readonly NarravaTextStyle[]
+        readonly tone?: NarravaTextTone
+      },
+    ): NarravaPresentationNode
+    image(
+      resource: string,
+      options?: {
+        readonly key?: string
+        readonly alt?: string
+        readonly caption?: string
+      },
+    ): NarravaPresentationNode
     region(
       region: NarravaPresentationRegion,
       children: readonly (string | NarravaPresentationNode)[],
@@ -54,7 +85,10 @@ declare global {
   }
   const Presentation: NarravaPresentation
 
-  interface NarravaImportReport { readonly inserted: number; readonly replaced: number }
+  interface NarravaImportReport {
+    readonly inserted: number
+    readonly replaced: number
+  }
   interface NarravaStateNamespace<T> {
     get(name: string): T | undefined
     has(name: string): boolean
@@ -83,8 +117,9 @@ declare global {
      * `async` 允许返回 Promise；需要等待时间时使用 `Host.delay()`。
      */
     readonly execution: "sync" | "async"
-    readonly handler: (call: NarravaMacroCall) =>
-      NarravaData | NarravaPresentationNode | Promise<NarravaData | NarravaPresentationNode>
+    readonly handler: (
+      call: NarravaMacroCall,
+    ) => NarravaData | NarravaPresentationNode | Promise<NarravaData | NarravaPresentationNode>
   }
   interface NarravaMacro {
     add(name: string, definition: NarravaMacroDefinition): NarravaMacroDefinition | undefined
@@ -93,7 +128,10 @@ declare global {
     get(name: string): NarravaMacroDefinition | undefined
     has(name: string): boolean
     before(name: string, hook: (call: NarravaMacroCall) => void): NarravaMacroSubscription
-    after(name: string, hook: (output: NarravaData, call: NarravaMacroCall) => NarravaData): NarravaMacroSubscription
+    after(
+      name: string,
+      hook: (output: NarravaData, call: NarravaMacroCall) => NarravaData,
+    ): NarravaMacroSubscription
     off(subscription: NarravaMacroSubscription): boolean
   }
   const Macro: NarravaMacro
@@ -107,7 +145,10 @@ declare global {
   }
   const Engine: NarravaEngine
 
-  interface NarravaPassageInfo { readonly name: string; readonly tags: readonly string[] }
+  interface NarravaPassageInfo {
+    readonly name: string
+    readonly tags: readonly string[]
+  }
   interface NarravaStory {
     has(name: string): boolean
     current(): NarravaPassageInfo | undefined
@@ -172,7 +213,11 @@ declare global {
   }
   const Host: NarravaHost
 
-  interface NarravaResourceInfo { readonly path: string; readonly mediaType: string; readonly size: number }
+  interface NarravaResourceInfo {
+    readonly path: string
+    readonly mediaType: string
+    readonly size: number
+  }
   interface NarravaResource {
     paths(): readonly string[]
     has(path: string): boolean
@@ -185,7 +230,10 @@ declare global {
 
   type NarravaSaveOperation = "capture" | "restore" | "export" | "import"
   type NarravaSaveSubscription = number & { readonly __saveSubscription: unique symbol }
-  interface NarravaSaveBeforeContext { readonly operation: NarravaSaveOperation; readonly target?: string }
+  interface NarravaSaveBeforeContext {
+    readonly operation: NarravaSaveOperation
+    readonly target?: string
+  }
   interface NarravaSaveCompletion {
     readonly operation: NarravaSaveOperation
     readonly target?: string
@@ -198,9 +246,15 @@ declare global {
     export(target?: string): void
     import(target?: string): void
     /** Run before an operation. Returning a string rewrites export/import target. */
-    before(operation: NarravaSaveOperation, hook: (context: NarravaSaveBeforeContext) => string | void): NarravaSaveSubscription
+    before(
+      operation: NarravaSaveOperation,
+      hook: (context: NarravaSaveBeforeContext) => string | void,
+    ): NarravaSaveSubscription
     /** Run only after an operation has an actual completion result. */
-    after(operation: NarravaSaveOperation, hook: (completion: NarravaSaveCompletion) => void): NarravaSaveSubscription
+    after(
+      operation: NarravaSaveOperation,
+      hook: (completion: NarravaSaveCompletion) => void,
+    ): NarravaSaveSubscription
     off(subscription: NarravaSaveSubscription): boolean
   }
   const Save: NarravaSave
@@ -212,20 +266,4 @@ declare global {
     export(): string
   }
   const I18n: NarravaI18n
-
-  /** Unified, frozen entry point. Uppercase globals remain available as aliases. */
-  interface NarravaApi {
-    readonly Engine: NarravaEngine
-    readonly State: NarravaState
-    readonly Macro: NarravaMacro
-    readonly Story: NarravaStory
-    readonly Logger: NarravaLogger
-    readonly Event: NarravaEvent
-    readonly Host: NarravaHost
-    readonly Save: NarravaSave
-    readonly Resource: NarravaResource
-    readonly I18n: NarravaI18n
-    readonly Presentation: NarravaPresentation
-  }
-  const narrava: NarravaApi
 }

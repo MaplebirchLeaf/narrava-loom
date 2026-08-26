@@ -16,7 +16,7 @@
 保持各自的语义颜色。链接目标也进入工作区 Passage 索引。在 `[[进入大厅|Hall]]` 的 `Hall` 上按住 `Ctrl`
 并单击（macOS 使用 `Cmd+单击`）会跳到同文件或其他 `.twee` 文件中的 `:: Hall`；目标不存在时，
 扩展只在目标名称下报告 `Passage \`Hall\` 未定义`。Core 保留的 `Start`、`StoryInit`、
-`Header`、`Footer`、`Bar` 和 `BarStowed` 使用特殊 Passage 颜色，与普通 Passage 区分。
+`Header`、`Footer`、`Bar`和`BarStowed` 使用特殊 Passage 颜色，与普通 Passage 区分。
 这六个特殊 Passage 都不能带 Tag；扩展会在 Tag 位置直接报告错误。
 
 Widget 的规范定义形式是 `<<widget "name">>`：定义位置的 `"name"` 保持字符串色；
@@ -24,8 +24,15 @@ Widget 的规范定义形式是 `<<widget "name">>`：定义位置的 `"name"` �
 以及 `.js`/`.ts` 中的 `Macro.add()`、`Macro.update()`；未定义的 Macro 保持中性色并报告错误。
 因此一个文件定义、另一个文件调用也能识别。Macro 的 `<<`、`/`、`>>` 复用 HTML
 标签的 `punctuation.definition.tag` 边界 scope，与 `</...>` 一样渲染为灰色标点；
-反引号字符串内插值的 `${`/`}` 采用与 JS 模板字符串一致的
-`punctuation.definition.template-expression` scope，按 JS 的插值颜色着色。
+反引号字符串内 `${` 的 `$` 使用模板插值起始色，`{`/`}` 使用嵌入区域边界色，
+不再与 `$hero` 混在一起，也不会作为普通运算符显示成白色。
+变量链也按语义拆开：`$hero`、`setup` 是变量根，`.` 是访问符，`profile`、`build`
+等后缀是属性；访问符使用独立的 accessor scope，在 `${...}` 内也不会继承反引号
+字符串的颜色，长表达式可以一眼分清对象与成员。
+
+在 Twee 表达式中 Ctrl+点击项目脚本函数（例如 `scriptedGreeting()`）会跳到工作区内
+`.js`/`.ts` 的函数声明或箭头函数定义。`Object.assign()` 这类 ECMAScript 原生 API
+没有项目内定义文件，因此只参与语法高亮，不提供虚假的工作区跳转。
 
 扩展还读取脚本 Macro 的 `body: "inline" | "container"`。`widget` 的定义正文是 Container，
 但它注册出来的自定义 Macro 固定为 Inline 调用，例如 `<<highlightCard "内容">>`。

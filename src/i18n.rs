@@ -7,6 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+mod catalog;
 mod diagnostics;
 mod export;
 mod json;
@@ -17,6 +18,8 @@ mod package;
 mod resolution;
 mod template;
 mod validation;
+
+use catalog::collect_body;
 
 pub use diagnostics::I18nDiagnostic;
 pub use export::{I18nExport, I18nExportError, I18nExportObsolete, I18nExportObsoleteReason};
@@ -223,6 +226,17 @@ impl I18nCatalog {
         resolution::resolve(self, translation, id, values)
     }
 
+    /// VM 保留原始 Value 类型时使用；只有集合中的 placeholder 可以查询动态字典。
+    pub(crate) fn resolve_runtime(
+        &self,
+        translation: &I18nValidatedTemplate,
+        id: &str,
+        values: &BTreeMap<String, String>,
+        dictionary_values: &std::collections::BTreeSet<String>,
+    ) -> Result<I18nResolvedText, I18nResolveError> {
+        resolution::resolve_runtime(self, translation, id, values, dictionary_values)
+    }
+
     /// 不加载目标语言时，使用同一模板规则解析默认文本。
     pub fn resolve_default(
         &self,
@@ -310,224 +324,5 @@ impl I18nTemplateMessage {
 
     pub fn values(&self) -> &BTreeMap<String, String> {
         &self.values
-    }
-}
-
-fn collect_body(
-    source: &str,
-    passage: &str,
-    path: &str,
-    body: &[HirBodyNode<'_>],
-    messages: &mut Vec<I18nMessage>,
-) {
-    let mut visible: Option<VisibleMessage> = None;
-
-    for (index, node) in body.iter().enumerate() {
-        let node_path: String = format!("{path}.{index}");
-        match &node.kind {
-            HirBodyKind::Text(text) => visible
-                .get_or_insert_with(|| VisibleMessage::new(index, node.span))
-                .push_text(text, node.span),
-            HirBodyKind::Print(HirPrint::Literal(text)) => visible
-                .get_or_insert_with(|| VisibleMessage::new(index, node.span))
-                .push_text(text, node.span),
-            HirBodyKind::Print(HirPrint::Expression(expression)) => visible
-                .get_or_insert_with(|| VisibleMessage::new(index, node.span))
-                .push_expression(expression, node_path, node.span),
-            // silently 的正文不会进入 Presentation，因此不属于翻译目录。
-            HirBodyKind::Silently(_) => {
-                flush_visible(source, passage, path, &mut visible, messages)
-            }
-            HirBodyKind::If(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                for (branch_index, branch) in value.branches.iter().enumerate() {
-                    collect_body(
-                        source,
-                        passage,
-                        &format!("{node_path}.branch.{branch_index}"),
-                        &branch.body,
-                        messages,
-                    );
-                }
-                if let Some(fallback) = &value.fallback {
-                    collect_body(
-                        source,
-                        passage,
-                        &format!("{node_path}.fallback"),
-                        fallback,
-                        messages,
-                    );
-                }
-            }
-            HirBodyKind::Switch(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                for (case_index, case) in value.cases.iter().enumerate() {
-                    collect_body(
-                        source,
-                        passage,
-                        &format!("{node_path}.case.{case_index}"),
-                        &case.body,
-                        messages,
-                    );
-                }
-                if let Some(default) = &value.default {
-                    collect_body(
-                        source,
-                        passage,
-                        &format!("{node_path}.default"),
-                        default,
-                        messages,
-                    );
-                }
-            }
-            HirBodyKind::For(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                collect_body(
-                    source,
-                    passage,
-                    &format!("{node_path}.body"),
-                    &value.body,
-                    messages,
-                );
-            }
-            HirBodyKind::While(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                collect_body(
-                    source,
-                    passage,
-                    &format!("{node_path}.body"),
-                    &value.body,
-                    messages,
-                );
-            }
-            HirBodyKind::Widget(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                collect_body(
-                    source,
-                    passage,
-                    &format!("{node_path}.body"),
-                    &value.body,
-                    messages,
-                );
-            }
-            HirBodyKind::Capture(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                collect_body(
-                    source,
-                    passage,
-                    &format!("{node_path}.body"),
-                    &value.body,
-                    messages,
-                );
-            }
-            HirBodyKind::Macro(value) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-                collect_body(
-                    source,
-                    passage,
-                    &format!("{node_path}.body"),
-                    &value.body,
-                    messages,
-                );
-            }
-            HirBodyKind::Break
-            | HirBodyKind::Continue
-            | HirBodyKind::Exit
-            | HirBodyKind::Set(_)
-            | HirBodyKind::Unset(_)
-            | HirBodyKind::Run(_)
-            | HirBodyKind::Include(_)
-            | HirBodyKind::Goto(_)
-            | HirBodyKind::Return(_) => {
-                flush_visible(source, passage, path, &mut visible, messages);
-            }
-        }
-    }
-
-    flush_visible(source, passage, path, &mut visible, messages);
-}
-
-struct VisibleMessage {
-    start_index: usize,
-    text: String,
-    placeholders: Vec<I18nPlaceholder>,
-    span: Span,
-    has_static_text: bool,
-}
-
-impl VisibleMessage {
-    fn new(start_index: usize, span: Span) -> Self {
-        Self {
-            start_index,
-            text: String::new(),
-            placeholders: Vec::new(),
-            span,
-            has_static_text: false,
-        }
-    }
-
-    fn push_text(&mut self, text: &str, span: Span) {
-        // 模板使用单花括号标记 placeholder，源码花括号必须先转义。
-        for character in text.chars() {
-            match character {
-                '{' => self.text.push_str("{{"),
-                '}' => self.text.push_str("}}"),
-                _ => self.text.push(character),
-            }
-        }
-        self.span.end = span.end;
-        self.has_static_text |= !text.trim().is_empty();
-    }
-
-    fn push_expression(&mut self, expression: &Expression<'_>, node_path: String, span: Span) {
-        let ordinal: usize = self.placeholders.len() + 1;
-        let name: String = placeholder_name(expression, ordinal);
-        self.text.push('{');
-        self.text.push_str(&name);
-        self.text.push('}');
-        self.placeholders.push(I18nPlaceholder { name, node_path });
-        self.span.end = span.end;
-    }
-}
-
-fn flush_visible(
-    source: &str,
-    passage: &str,
-    path: &str,
-    visible: &mut Option<VisibleMessage>,
-    messages: &mut Vec<I18nMessage>,
-) {
-    let Some(visible) = visible.take() else {
-        return;
-    };
-    // 只有动态值而没有可翻译文字时，不生成空洞的翻译条目。
-    if !visible.has_static_text {
-        return;
-    }
-    let node_path: String = format!("{path}.{}", visible.start_index);
-    messages.push(I18nMessage {
-        id: I18nTextId(format!("p{}:{passage}:{node_path}", passage.len())),
-        source: source.to_owned(),
-        passage: passage.to_owned(),
-        text: visible.text,
-        placeholders: visible.placeholders,
-        span: visible.span,
-    });
-}
-
-fn placeholder_name(expression: &Expression<'_>, ordinal: usize) -> String {
-    match &expression.kind {
-        ExpressionKind::Variable { scope, name } => {
-            let prefix: char = match scope {
-                VariableScope::Variables => '$',
-                VariableScope::Temporary => '_',
-                VariableScope::Local => '@',
-            };
-            format!("{prefix}{name}")
-        }
-        ExpressionKind::Global(name) => (*name).to_owned(),
-        ExpressionKind::Setup => String::from("setup"),
-        ExpressionKind::Group(inner) => placeholder_name(inner, ordinal),
-        _ => format!("value_{ordinal}"),
     }
 }

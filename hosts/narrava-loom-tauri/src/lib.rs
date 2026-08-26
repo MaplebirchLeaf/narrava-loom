@@ -1948,15 +1948,14 @@ mod release_tests {
         assert!(
             update.nodes.iter().any(|node| matches!(
                 node,
-                HostNodeDto::Region { region: "bar", nodes, .. }
-                    if nodes.iter().any(|child| matches!(
-                        child,
-                        HostNodeDto::Component { capability, .. }
-                            if capability == "narrava.host-tools"
-                    ))
+                HostNodeDto::Region { region: "bar", nodes, .. } if !nodes.is_empty()
             )),
-            "启动更新必须实际包含 Bar 请求的存档工具组件"
+            "启动更新必须包含游戏作者定义的 Bar 内容"
         );
+        assert!(!update.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Component { capability, .. } if capability == "narrava.host-tools"
+        )));
         drop(host);
         fs::remove_dir_all(root_path).unwrap();
         fs::remove_dir_all(project_path).unwrap();
@@ -2003,34 +2002,28 @@ mod release_tests {
     }
 
     #[test]
-    fn host_dialog_panels_do_not_enter_core_presentation_reconciliation() {
+    fn dialog_content_has_no_host_owned_save_language_or_log_panels() {
         let html: &str = include_str!("../frontend/index.html");
         let javascript: &str = include_str!("../frontend/main.js");
 
-        assert!(html.contains("id=\"host-dialog-presentation\""));
-        assert!(javascript.contains("hostDialogPresentation.replaceChildren(...panels)"));
-        assert!(javascript.contains("hostDialogPresentation.replaceChildren()"));
-        let host_panel_code: &str = javascript
-            .split_once("async function openHostPanel")
-            .expect("Host 面板应有独立打开函数")
-            .1
-            .split_once("function buildSavePanel")
-            .expect("Host 面板打开函数应在存档表单前结束")
-            .0;
-        assert!(!host_panel_code.contains("dialogPresentation.append(...panels)"));
+        assert!(!html.contains("id=\"host-dialog-presentation\""));
+        assert!(!javascript.contains("openHostPanel"));
+        assert!(!javascript.contains("buildSavePanel"));
+        assert!(!javascript.contains("buildLanguagePanel"));
+        assert!(!javascript.contains("buildLogsPanel"));
     }
 
     #[test]
-    fn bar_host_tools_are_author_requested_instead_of_hardcoded_shell_content() {
+    fn bar_and_dialog_content_are_entirely_author_owned() {
         let html: &str = include_str!("../frontend/index.html");
         let javascript: &str = include_str!("../frontend/main.js");
         let story: &str = include_str!("../../../examples/contents/story/main.twee");
         let script: &str = include_str!("../../../examples/contents/scripts/main.ts");
 
         assert!(!html.contains("data-host-panel="));
-        assert!(javascript.contains("node.capability === \"narrava.host-tools\""));
+        assert!(!javascript.contains("narrava.host-tools"));
         assert!(story.contains(":: Bar\n<<barDemo>>"));
-        assert!(script.contains("Presentation.component(\n      \"narrava.host-tools\""));
+        assert!(!script.contains("narrava.host-tools"));
     }
 
     #[test]

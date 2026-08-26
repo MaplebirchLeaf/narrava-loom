@@ -199,12 +199,12 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 | 脚本函数供 Expression 调用 | 已验证 | `State.global.set/extend` |
 | Resource 脚本读取 | 已可用 | `Resource.*` |
 | 同步与异步 Promise Macro | 已可用 | 外部等待使用 `await Host.delay(ms)` |
-| I18n 数据模型与 fallback | 已可用 | `:: Bar` 请求的 Host 工具语言页选择 `*.nlang` |
-| Save 数据模型与命名槽位 | 已可用 | `:: Bar` 请求的 Host 工具存档页或 `Save.export/import` |
-| 作者自定义 Event 总线 | 已可用 | `narrava.Event` 或 `Event` |
+| I18n 数据模型与 fallback | 已可用 | 游戏脚本使用 `I18n`，界面由作者定义 |
+| Save 数据模型与命名槽位 | 已可用 | 游戏脚本使用 `Save.export/import`，界面由作者定义 |
+| 作者自定义 Event 总线 | 已可用 | `Event` |
 | Passage 内置生命周期事件 | 已可用 | `passage:init/start/render/display/end` |
 | Story/Save 其他内置事件 | 尚无 | 不要猜测事件名 |
-| Host 诊断面板 | 已可用 | `:: Bar` 请求的 Host 工具“日志”页查看最近记录 |
+| Host 诊断记录 | 已可用 | Host 保存有界记录；游戏内日志界面由作者定义 |
 | ModLoader/ModUtils | 本体之外 | 等 `narrava-loom-modloader` |
 | 正式发布流水线 | 已配置 | tag 或手动触发 `Release packages` |
 

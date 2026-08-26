@@ -17,7 +17,6 @@ const dialog = document.querySelector("#nv-dialog")
 const dialogTabs = document.querySelector("#dialog-tabs")
 const dialogMessage = document.querySelector("#dialog-message")
 const dialogPresentation = document.querySelector("#dialog-presentation")
-const hostDialogPresentation = document.querySelector("#host-dialog-presentation")
 const objectUrls = new Set()
 let resourcePaths = new Set()
 let lastUpdate = null
@@ -36,6 +35,16 @@ function setBarStowed(stowed) {
 barToggle.addEventListener("click", () => setBarStowed(!bar.classList.contains("stowed")))
 if (window.matchMedia("(max-width: 39.5em)").matches) setBarStowed(true)
 
+const help = () => ({
+  state: "读取 global、variables、temporary 的安全摘要",
+  set: "set(namespace, name, JSON值) 修改 Worker State",
+  del: "del(namespace, name) 删除 Worker State 值",
+  current: "读取最近一次 Presentation 更新",
+  assets: "读取游戏 CSS 与 Resource 清单",
+  activate: "activate(interactionId) 触发当前表现中的交互",
+  devtools: "开关 WebView DevTools",
+})
+
 function configureDeveloperMode(enabled) {
   if (!enabled) return
   const state = () => invoke("developer_state")
@@ -50,15 +59,6 @@ function configureDeveloperMode(enabled) {
   const current = () => (lastUpdate === null ? null : structuredClone(lastUpdate))
   const assets = () => invoke("host_assets")
   const devtools = () => invoke("toggle_devtools")
-  const help = () => ({
-    state: "读取 global、variables、temporary 的安全摘要",
-    set: "set(namespace, name, JSON值) 修改 Worker State",
-    del: "del(namespace, name) 删除 Worker State 值",
-    current: "读取最近一次 Presentation 更新",
-    assets: "读取游戏 CSS 与 Resource 清单",
-    activate: "activate(interactionId) 触发当前表现中的交互",
-    devtools: "开关 WebView DevTools",
-  })
   window.narrava = Object.freeze({ state, set, del, current, assets, activate, devtools, help })
   window.addEventListener("keydown", (event) => {
     if (event.key !== "F12") return
@@ -76,7 +76,8 @@ function configureDeveloperMode(enabled) {
  */
 function render(update) {
   lastUpdate = structuredClone(update)
-  const focusedKey = document.activeElement?.closest?.("[data-presentation-key]")?.dataset.presentationKey
+  const focusedKey =
+    document.activeElement?.closest?.("[data-presentation-key]")?.dataset.presentationKey
   passageRoot.dataset.passage = update.current
   passageRoot.setAttribute("aria-label", update.current)
 
@@ -97,11 +98,6 @@ function render(update) {
     barPresentation,
     bar.classList.contains("stowed") ? barRegions.stowed : barRegions.expanded,
   )
-  // Host 工具不属于 Core Presentation。任何 Story 更新都退出 Host 面板，避免其节点被
-  // keyed reconcile 当成新的 Dialog 内容并在后续导航时重新弹出。
-  hostDialogPresentation.replaceChildren()
-  hostDialogPresentation.hidden = true
-  dialogPresentation.hidden = false
   resetDialogTabs()
   reconcile(dialogPresentation, regions.get("dialog") ?? [])
   applyReplacements()
@@ -116,16 +112,17 @@ function render(update) {
 
   status.textContent = update.nodes.length === 0 ? "当前 Passage 没有可显示内容" : ""
   story.setAttribute("aria-busy", "false")
-  const restoredFocus = focusedKey === undefined
-    ? null
-    : story.querySelector(`[data-presentation-key="${CSS.escape(focusedKey)}"]`)
+  const restoredFocus =
+    focusedKey === undefined
+      ? null
+      : story.querySelector(`[data-presentation-key="${CSS.escape(focusedKey)}"]`)
   if (restoredFocus instanceof HTMLElement) restoredFocus.focus({ preventScroll: true })
   else if (!passageRoot.contains(document.activeElement)) passageRoot.focus({ preventScroll: true })
 }
 
 /** 重绘前把页签 Panel 里的原节点放回 keyed reconcile 容器。 */
 function resetDialogTabs() {
-  for (const panel of [...dialogPresentation.querySelectorAll(":scope > .dialog-panel")]) {
+  for (const panel of dialogPresentation.querySelectorAll(":scope > .dialog-panel")) {
     panel.querySelector(".dialog-heading-source")?.classList.remove("dialog-heading-source")
     panel.replaceWith(...panel.childNodes)
   }
@@ -134,9 +131,7 @@ function resetDialogTabs() {
 
 /** 顶层语义标题划分页签，标题之后的节点归入对应页面。 */
 function buildDialogTabs() {
-  const headings = [...dialogPresentation.children].filter((element) =>
-    element.matches("h1, h2"),
-  )
+  const headings = [...dialogPresentation.children].filter((element) => element.matches("h1, h2"))
   const pageHeadings = headings.length > 0 ? headings : [null]
   const panels = pageHeadings.map(() => {
     const panel = document.createElement("section")
@@ -145,7 +140,7 @@ function buildDialogTabs() {
     return panel
   })
   let panelIndex = 0
-  for (const node of [...dialogPresentation.childNodes]) {
+  for (const node of Array.from(dialogPresentation.childNodes)) {
     const headingIndex = headings.indexOf(node)
     if (headingIndex >= 0) {
       panelIndex = headingIndex
@@ -176,115 +171,6 @@ function selectDialogTab(activeIndex, panels) {
     panels[index].hidden = !active
   })
 }
-
-/** Host tools are platform UI: they call Rust commands and never mutate Story in the WebView. */
-async function openHostPanel(initialPage) {
-  resetDialogTabs()
-  dialogPresentation.hidden = true
-  hostDialogPresentation.hidden = false
-  hostDialogPresentation.replaceChildren()
-  dialogMessage.hidden = true
-  const pages = [
-    ["save", "存档", buildSavePanel],
-    ["language", "语言", buildLanguagePanel],
-    ["logs", "日志", buildLogsPanel],
-  ]
-  const panels = pages.map(([, , build]) => {
-    const panel = document.createElement("section")
-    panel.className = "dialog-panel host-panel"
-    panel.setAttribute("role", "tabpanel")
-    build(panel)
-    return panel
-  })
-  pages.forEach(([id, label], index) => {
-    const tab = document.createElement("button")
-    tab.type = "button"
-    tab.className = "dialog-tab"
-    tab.textContent = label
-    tab.setAttribute("role", "tab")
-    tab.addEventListener("click", () => selectDialogTab(index, panels))
-    dialogTabs.append(tab)
-  })
-  hostDialogPresentation.replaceChildren(...panels)
-  selectDialogTab(Math.max(0, pages.findIndex(([id]) => id === initialPage)), panels)
-  if (!dialog.open) dialog.showModal()
-}
-
-function buildSavePanel(panel) {
-  const row = document.createElement("div")
-  row.className = "host-form-row"
-  const label = document.createElement("label")
-  const labelText = document.createElement("span")
-  labelText.textContent = "存档名称"
-  const input = document.createElement("input")
-  input.type = "text"
-  input.value = "quick"
-  input.maxLength = 80
-  input.pattern = "[A-Za-z0-9_-]+"
-  label.append(labelText, input)
-  const save = hostButton("保存", async () => invoke("save_game", { operation: "export", target: input.value }))
-  const load = hostButton("读取", async () => invoke("save_game", { operation: "import", target: input.value }))
-  row.append(label, save, load)
-  panel.append(row, hostNote("存档保存在游戏目录的 save/ 中；读取后下一次页面更新会反映恢复的状态。"))
-}
-
-function buildLanguagePanel(panel) {
-  const select = document.createElement("select")
-  const apply = hostButton("应用语言", async () => {
-    await invoke("select_language", { locale: select.value })
-    status.textContent = `语言已切换为 ${select.value}；下一次页面渲染生效`
-  })
-  panel.append(select, apply, hostNote("语言包来自 languages/*.nlang。切换不重启游戏。"))
-  void invoke("available_languages").then((locales) => {
-    select.replaceChildren(...locales.map((locale) => new Option(locale, locale)))
-  }).catch(showError)
-}
-
-function buildLogsPanel(panel) {
-  const output = document.createElement("ol")
-  output.className = "host-log"
-  const refresh = hostButton("刷新", async () => {
-    const entries = await invoke("host_logs")
-    output.replaceChildren(...entries.map((entry) => {
-      const item = document.createElement("li")
-      item.dataset.level = entry.level
-      item.textContent = entry.message
-      return item
-    }))
-  })
-  panel.append(refresh, output)
-  void refresh.click()
-}
-
-function hostButton(label, action) {
-  const button = document.createElement("button")
-  button.type = "button"
-  button.textContent = label
-  button.addEventListener("click", async () => {
-    button.disabled = true
-    try {
-      await action()
-      status.textContent = `${label}完成`
-    } catch (error) {
-      showError(error)
-    } finally {
-      button.disabled = false
-    }
-  })
-  return button
-}
-
-function hostNote(text) {
-  const note = document.createElement("p")
-  note.className = "host-note"
-  note.textContent = text
-  return note
-}
-
-story.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-host-panel]")
-  if (button) void openHostPanel(button.dataset.hostPanel)
-})
 
 /** 以 DTO key 为身份做最小 DOM 更新；key 类型变化时才替换元素。 */
 function reconcile(container, nodes) {
@@ -320,16 +206,6 @@ function createNode(node) {
     if (node.capability === "meter" && node.version === 1) {
       element.className = "component-meter"
       element.append(document.createElement("span"), document.createElement("meter"))
-    } else if (node.capability === "narrava.host-tools" && node.version === 1) {
-      element.className = "component-host-tools"
-      element.setAttribute("aria-label", "游戏管理")
-      for (const [panel, label] of [["save", "存档"], ["language", "语言"], ["logs", "日志"]]) {
-        const button = document.createElement("button")
-        button.type = "button"
-        button.dataset.hostPanel = panel
-        button.textContent = label
-        element.append(button)
-      }
     } else {
       const fallback = document.createElement("div")
       fallback.dataset.componentFallback = ""
@@ -352,23 +228,30 @@ function createNode(node) {
     element = document.createElement("input")
     element.type = node.type === "checkbox" ? "checkbox" : "radio"
     element.addEventListener("change", async () => {
-      const value = node.type === "checkbox"
-        ? JSON.parse(element.checked ? element.dataset.checkedValue : element.dataset.uncheckedValue)
-        : JSON.parse(element.dataset.inputValue)
+      const value =
+        node.type === "checkbox"
+          ? JSON.parse(
+              element.checked ? element.dataset.checkedValue : element.dataset.uncheckedValue,
+            )
+          : JSON.parse(element.dataset.inputValue)
       try {
         await submitInput(element.dataset.interaction, value)
         if (node.type === "radiobutton") {
-          for (const radio of story.querySelectorAll(`input[type="radio"][name="${CSS.escape(element.name)}"]`)) {
+          for (const radio of story.querySelectorAll(
+            `input[type="radio"][name="${CSS.escape(element.name)}"]`,
+          )) {
             radio.dataset.committedChecked = String(radio === element)
           }
         } else {
           element.dataset.committedChecked = String(element.checked)
         }
       } catch (error) {
-        const controls = node.type === "radiobutton"
-          ? story.querySelectorAll(`input[type="radio"][name="${CSS.escape(element.name)}"]`)
-          : [element]
-        for (const control of controls) control.checked = control.dataset.committedChecked === "true"
+        const controls =
+          node.type === "radiobutton"
+            ? story.querySelectorAll(`input[type="radio"][name="${CSS.escape(element.name)}"]`)
+            : [element]
+        for (const control of controls)
+          control.checked = control.dataset.committedChecked === "true"
         showError(error)
       }
     })
@@ -455,7 +338,7 @@ function updateNode(element, node) {
       meter.max = finiteNumber(node.properties.max, 100)
       meter.value = finiteNumber(node.properties.value, meter.min)
       meter.setAttribute("aria-label", label.textContent || "数值")
-    } else if (node.capability !== "narrava.host-tools" || node.version !== 1) {
+    } else {
       reconcile(element.querySelector("[data-component-fallback]"), node.fallback)
     }
     return
@@ -499,7 +382,8 @@ function updateNode(element, node) {
     element.dataset.committedValue = node.value
     return
   }
-  element.textContent = node.type === "navigation" || node.type === "button" ? node.label : "安全返回"
+  element.textContent =
+    node.type === "navigation" || node.type === "button" ? node.label : "安全返回"
   element.dataset.interaction = node.id
   element.dataset.target = node.target
 }
@@ -520,11 +404,15 @@ function applyReplacements() {
     ["bar", barPresentation],
     ["dialog", dialogPresentation],
   ])
-  for (const command of [...story.querySelectorAll("[data-presentation-replace]")]) {
-    const target = command.dataset.targetKind === "region"
-      ? regions.get(command.dataset.targetValue)
-      : story.querySelector(`[data-presentation-key="${CSS.escape(command.dataset.targetValue)}"]`)
-    if (!(target instanceof Element) || target === command) throw new Error("replace 目标不存在或形成自引用")
+  for (const command of story.querySelectorAll("[data-presentation-replace]")) {
+    const target =
+      command.dataset.targetKind === "region"
+        ? regions.get(command.dataset.targetValue)
+        : story.querySelector(
+            `[data-presentation-key="${CSS.escape(command.dataset.targetValue)}"]`,
+          )
+    if (!(target instanceof Element) || target === command)
+      throw new Error("replace 目标不存在或形成自引用")
     target.replaceChildren(...command.childNodes)
   }
 }
@@ -554,7 +442,9 @@ async function submitInput(interaction, value) {
 
 function setBusy(isBusy, message = "") {
   story.setAttribute("aria-busy", String(isBusy))
-  for (const control of story.querySelectorAll("button[data-interaction], button[data-presentation-action], input[data-interaction]")) {
+  for (const control of story.querySelectorAll(
+    "button[data-interaction], button[data-presentation-action], input[data-interaction]",
+  )) {
     control.disabled = isBusy
   }
   if (message) status.textContent = message
@@ -567,8 +457,6 @@ function showError(error) {
   resetDialogTabs()
   reconcile(dialogPresentation, [])
   dialogPresentation.hidden = true
-  hostDialogPresentation.hidden = true
-  hostDialogPresentation.replaceChildren()
   dialogTabs.replaceChildren()
   const errorTab = document.createElement("button")
   errorTab.type = "button"
@@ -589,8 +477,9 @@ function applyAuthorStyles(assets) {
   document.title = assets.title
   resourcePaths = new Set(assets.resources.map((resource) => resource.path))
   for (const style of assets.styles) {
-    const css = style.css.replace(/resource\(\s*(["'])([^"']+)\1\s*\)/gu, (_match, _quote, path) =>
-      `url("${resourceUrl(path)}")`,
+    const css = style.css.replace(
+      /resource\(\s*(["'])([^"']+)\1\s*\)/gu,
+      (_match, _quote, path) => `url("${resourceUrl(path)}")`,
     )
     const url = URL.createObjectURL(new Blob([css], { type: "text/css" }))
     objectUrls.add(url)

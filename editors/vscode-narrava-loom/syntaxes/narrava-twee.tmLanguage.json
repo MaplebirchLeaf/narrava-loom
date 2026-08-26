@@ -56,7 +56,7 @@
         "2": { "name": "punctuation.definition.tag.begin.narrava-twee" },
         "3": { "name": "meta.identifier.macro.narrava-twee" }
       },
-      "end": "(>>)" ,
+      "end": "(>>)",
       "endCaptures": {
         "1": { "name": "punctuation.definition.tag.end.narrava-twee" }
       },
@@ -107,19 +107,19 @@
     "variable": {
       "patterns": [
         {
-          "match": "\\$[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*",
           "name": "variable.language.narrava-twee"
         },
         {
-          "match": "_[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "match": "_[A-Za-z_][A-Za-z0-9_]*",
           "name": "variable.language.narrava-twee"
         },
         {
-          "match": "@[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "match": "@[A-Za-z_][A-Za-z0-9_]*",
           "name": "variable.language.narrava-twee"
         },
         {
-          "match": "\\bsetup(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
+          "match": "\\bsetup\\b",
           "name": "variable.language.narrava-twee"
         }
       ]
@@ -164,10 +164,13 @@
       ]
     },
     "interpolation": {
-      "begin": "(\\$\\{)",
-      "beginCaptures": { "1": { "name": "punctuation.definition.template-expression.begin.narrava-twee" } },
+      "begin": "(\\$)(\\{)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.template-expression.begin.narrava-twee" },
+        "2": { "name": "punctuation.section.embedded.begin.narrava-twee" }
+      },
       "end": "(\\})",
-      "endCaptures": { "1": { "name": "punctuation.definition.template-expression.end.narrava-twee" } },
+      "endCaptures": { "1": { "name": "punctuation.section.embedded.end.narrava-twee" } },
       "name": "meta.interpolation.narrava-twee",
       "patterns": [{ "include": "#expression" }]
     },
@@ -188,8 +191,16 @@
       "name": "keyword.operator.narrava-twee"
     },
     "punctuation": {
-      "match": "[()\\[\\]{},;.]",
-      "name": "punctuation.separator.expression.narrava-twee"
+      "patterns": [
+        {
+          "match": "\\.",
+          "name": "keyword.operator.accessor.narrava-twee"
+        },
+        {
+          "match": "[()\\[\\]{},;]",
+          "name": "punctuation.separator.expression.narrava-twee"
+        }
+      ]
     },
     "link": {
       "match": "(\\[)(\\[)([^|\\]\\r\\n]+)(\\|)([^\\]\\r\\n]+)(\\])(\\])",

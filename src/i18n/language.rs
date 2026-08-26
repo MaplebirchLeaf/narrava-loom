@@ -87,10 +87,13 @@ impl I18nRuntimeLanguage {
         catalog: &I18nCatalog,
         id: &str,
         values: &BTreeMap<String, String>,
+        dictionary_values: &BTreeSet<String>,
     ) -> Result<I18nResolvedText, I18nResolveError> {
         match self {
-            Self::Translation(translation) => catalog.resolve(translation, id, values),
-            Self::Chain(chain) => chain.resolve(catalog, id, values),
+            Self::Translation(translation) => {
+                catalog.resolve_runtime(translation, id, values, dictionary_values)
+            }
+            Self::Chain(chain) => chain.resolve_runtime(catalog, id, values, dictionary_values),
         }
     }
 }
@@ -207,6 +210,23 @@ impl I18nLanguageChain {
     ) -> Result<I18nResolvedText, I18nResolveError> {
         for layer in &self.layers {
             let resolved: I18nResolvedText = catalog.resolve(layer.translation(), id, values)?;
+            if resolved.origin() == I18nTextOrigin::Translation {
+                return Ok(resolved);
+            }
+        }
+        catalog.resolve_default(id, values)
+    }
+
+    pub(crate) fn resolve_runtime(
+        &self,
+        catalog: &I18nCatalog,
+        id: &str,
+        values: &BTreeMap<String, String>,
+        dictionary_values: &BTreeSet<String>,
+    ) -> Result<I18nResolvedText, I18nResolveError> {
+        for layer in &self.layers {
+            let resolved: I18nResolvedText =
+                catalog.resolve_runtime(layer.translation(), id, values, dictionary_values)?;
             if resolved.origin() == I18nTextOrigin::Translation {
                 return Ok(resolved);
             }

@@ -1,6 +1,6 @@
 //! 已验证译文、默认文本和 Runtime placeholder 值的解析。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     I18nCatalog, I18nTemplateMessage, I18nValidatedTemplate,
@@ -46,6 +46,26 @@ pub(super) fn resolve(
     id: &str,
     values: &BTreeMap<String, String>,
 ) -> Result<I18nResolvedText, I18nResolveError> {
+    resolve_with_dictionary_values(catalog, translation, id, values, None)
+}
+
+pub(super) fn resolve_runtime(
+    catalog: &I18nCatalog,
+    translation: &I18nValidatedTemplate,
+    id: &str,
+    values: &BTreeMap<String, String>,
+    dictionary_values: &BTreeSet<String>,
+) -> Result<I18nResolvedText, I18nResolveError> {
+    resolve_with_dictionary_values(catalog, translation, id, values, Some(dictionary_values))
+}
+
+fn resolve_with_dictionary_values(
+    catalog: &I18nCatalog,
+    translation: &I18nValidatedTemplate,
+    id: &str,
+    values: &BTreeMap<String, String>,
+    dictionary_values: Option<&BTreeSet<String>>,
+) -> Result<I18nResolvedText, I18nResolveError> {
     if !translation.belongs_to(catalog) {
         return Err(I18nResolveError::DifferentCatalog);
     }
@@ -72,7 +92,14 @@ pub(super) fn resolve(
     } else {
         pattern
     };
-    let mut text: String = render(id, pattern, values, bindings, translation.dictionary())?;
+    let mut text: String = render(
+        id,
+        pattern,
+        values,
+        bindings,
+        translation.dictionary(),
+        dictionary_values,
+    )?;
     if translated.is_some() {
         text.push_str(&source.text()[source.text().trim_end_matches('\n').len()..]);
     }
@@ -89,7 +116,7 @@ pub(super) fn resolve_default(
         .iter()
         .find(|message| message.id().as_str() == id)
         .ok_or_else(|| I18nResolveError::UnknownMessage { id: id.to_owned() })?;
-    let text: String = render(id, source.text(), values, None, &BTreeMap::new())?;
+    let text: String = render(id, source.text(), values, None, &BTreeMap::new(), None)?;
     Ok(I18nResolvedText {
         text,
         origin: I18nTextOrigin::Default,
@@ -102,6 +129,7 @@ fn render(
     values: &BTreeMap<String, String>,
     bindings: Option<&BTreeMap<String, String>>,
     dictionaries: &BTreeMap<String, BTreeMap<String, String>>,
+    dictionary_values: Option<&BTreeSet<String>>,
 ) -> Result<String, I18nResolveError> {
     let mut output: String = String::new();
     let parts: Vec<I18nTemplatePart<'_>> =
@@ -118,7 +146,13 @@ fn render(
                             id: id.to_owned(),
                             placeholder: name.to_owned(),
                         })?;
-                output.push_str(resolve_dictionary_value(name, raw, bindings, dictionaries));
+                output.push_str(resolve_dictionary_value(
+                    name,
+                    raw,
+                    bindings,
+                    dictionaries,
+                    dictionary_values,
+                ));
             }
         }
     }
@@ -130,7 +164,12 @@ fn resolve_dictionary_value<'value>(
     raw: &'value str,
     bindings: Option<&BTreeMap<String, String>>,
     dictionaries: &'value BTreeMap<String, BTreeMap<String, String>>,
+    dictionary_values: Option<&BTreeSet<String>>,
 ) -> &'value str {
+    if dictionary_values.is_some_and(|eligible: &BTreeSet<String>| !eligible.contains(placeholder))
+    {
+        return raw;
+    }
     let Some(dictionary_name) = bindings.and_then(|values| values.get(placeholder)) else {
         return raw;
     };

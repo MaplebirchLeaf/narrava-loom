@@ -102,7 +102,8 @@ Twee Source
 - Bytecode 自持有 I18n ID、placeholder、Expression 与 Macro HIR，不允许执行编码丢失翻译身份，也不保留构建期源码引用。
 - 翻译消息键以 PassageName 与 IR 结构路径为基础；源码行号只用于定位，不单独充当稳定身份。连续可显示文本可整理为一条消息，但不能跨越会改变执行或渲染顺序的控制节点。
 - 动态 Expression 在翻译目录中降为受控 placeholder，目录同时记录 placeholder 到已编译 Expression 的对应关系。译文可以调整语序，但载入时必须校验 placeholder 集合完全一致；翻译 JSON 永远不能创建新的 Expression。
-- placeholder 可选择关联动态 dictionary 名称；Runtime 用求值结果查询字典，缺项时保持原值。字典属于翻译数据，不进入 State，也不能改变变量本身。
+- 静态成员链会保留为可读 placeholder，例如 `$hero.profile.name` 与 `setup.build.channel`；动态索引、调用和计算表达式使用 `value_n`。
+- placeholder 可选择关联动态 dictionary 名称；只有运行时实际求值为 String 的结果会查询字典，Number、Boolean、Null 与 Undefined 仅插入显示文本。字典缺项时保持原字符串。字典属于翻译数据，不进入 State，也不能改变变量本身。
 
 `if`、循环和 `switch` 在 MIR 中降低为显式分支和跳转。Macro 调用保留名称或 ID，通过运行时 Macro 控制器分派，不能静态绑定到某个可被 `Macro.add()` 替换的实现。
 

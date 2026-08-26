@@ -179,17 +179,23 @@ fn frame_uses_validated_translation_to_reorder_and_translate_dynamic_values() {
         crate::bytecode::BytecodeProgram::compile(&lir);
     let template: I18nTemplate = I18nTemplate::new(
         "zh-CN",
-        BTreeMap::from([(
-            String::from("items"),
-            BTreeMap::from([(String::from("Iron Sword"), String::from("铁剑"))]),
-        )]),
+        BTreeMap::from([
+            (
+                String::from("items"),
+                BTreeMap::from([(String::from("Iron Sword"), String::from("铁剑"))]),
+            ),
+            (
+                String::from("counts"),
+                BTreeMap::from([(String::from("2"), String::from("二"))]),
+            ),
+        ]),
         BTreeMap::from([(
             String::from("p5:Start:body.0"),
             I18nTemplateMessage::new(
                 "Found {$item} × {$count}",
                 "{$count} 个{$item}",
                 BTreeMap::from([
-                    (String::from("$count"), String::new()),
+                    (String::from("$count"), String::from("counts")),
                     (String::from("$item"), String::from("items")),
                 ]),
             ),

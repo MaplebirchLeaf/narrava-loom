@@ -11,15 +11,51 @@
     <nv-story aria-busy="true">
       <nv-ui-bar id="ui-bar" slot="bar">
         <nav id="ui-bar-tray" aria-label="阅读控制">
-          <button id="history-backward" type="button" title="返回上一页" aria-label="返回上一页" disabled>
-            <svg class="ui-icon" aria-hidden="true" focusable="false" viewBox="0 0 32 32"><path d="M14 6 4 16l10 10v-6h12v-8H14V6Z"/></svg>
+          <button
+            id="history-backward"
+            type="button"
+            title="返回上一页"
+            aria-label="返回上一页"
+            disabled
+          >
+            <svg class="ui-icon" aria-hidden="true" focusable="false" viewBox="0 0 32 32">
+              <path d="M14 6 4 16l10 10v-6h12v-8H14V6Z" />
+            </svg>
           </button>
-          <button id="history-forward" type="button" title="前往下一页" aria-label="前往下一页" disabled>
-            <svg class="ui-icon" aria-hidden="true" focusable="false" viewBox="0 0 32 32"><path d="M18 6v6H6v8h12v6l10-10L18 6Z"/></svg>
+          <button
+            id="history-forward"
+            type="button"
+            title="前往下一页"
+            aria-label="前往下一页"
+            disabled
+          >
+            <svg class="ui-icon" aria-hidden="true" focusable="false" viewBox="0 0 32 32">
+              <path d="M18 6v6H6v8h12v6l10-10L18 6Z" />
+            </svg>
           </button>
-          <button id="ui-bar-toggle" type="button" title="收起侧栏" aria-label="收起侧栏" aria-expanded="true">
-            <svg class="ui-icon icon-collapse" aria-hidden="true" focusable="false" viewBox="0 0 32 32"><path d="m21 4-12 12 12 12 4-4-8-8 8-8-4-4Z"/></svg>
-            <svg class="ui-icon icon-expand" aria-hidden="true" focusable="false" viewBox="0 0 32 32"><path d="m11 4-4 4 8 8-8 8 4 4 12-12L11 4Z"/></svg>
+          <button
+            id="ui-bar-toggle"
+            type="button"
+            title="收起侧栏"
+            aria-label="收起侧栏"
+            aria-expanded="true"
+          >
+            <svg
+              class="ui-icon icon-collapse"
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 32 32"
+            >
+              <path d="m21 4-12 12 12 12 4-4-8-8 8-8-4-4Z" />
+            </svg>
+            <svg
+              class="ui-icon icon-expand"
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 32 32"
+            >
+              <path d="m11 4-4 4 8 8-8 8 4 4 12-12L11 4Z" />
+            </svg>
           </button>
         </nav>
         <div id="ui-bar-body">
@@ -37,11 +73,16 @@
       <dialog id="nv-dialog" slot="dialog" aria-label="弹窗">
         <div id="dialog-titlebar">
           <div id="dialog-tabs" role="tablist" aria-label="弹窗页面"></div>
-          <form method="dialog"><button id="dialog-close" type="submit" aria-label="关闭弹窗" title="关闭弹窗"><svg class="ui-icon" aria-hidden="true" focusable="false" viewBox="0 0 32 32"><path d="m7 3-4 4 9 9-9 9 4 4 9-9 9 9 4-4-9-9 9-9-4-4-9 9-9-9Z"/></svg></button></form>
+          <form method="dialog">
+            <button id="dialog-close" type="submit" aria-label="关闭弹窗" title="关闭弹窗">
+              <svg class="ui-icon" aria-hidden="true" focusable="false" viewBox="0 0 32 32">
+                <path d="m7 3-4 4 9 9-9 9 4 4 9-9 9 9 4-4-9-9 9-9-4-4-9 9-9-9Z" />
+              </svg>
+            </button>
+          </form>
         </div>
         <div id="dialog-content">
           <div id="dialog-presentation"></div>
-          <div id="host-dialog-presentation" hidden></div>
           <p id="dialog-message"></p>
         </div>
       </dialog>

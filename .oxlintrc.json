@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**", "target/**", "hosts/narrava-loom-tauri/gen/**"],
+  "rules": {
+    "no-underscore-dangle": ["error", { "allow": ["__TAURI__"] }],
+    "unicorn/require-module-specifiers": "off"
+  }
+}
