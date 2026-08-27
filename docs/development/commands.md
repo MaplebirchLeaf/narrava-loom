@@ -9,7 +9,7 @@
 |---|---|
 | `cargo run --locked -p narrava-loom-core -- examples` | 编译示例的 Config、Source、Twee、IR 与 Bytecode，不打开窗口 |
 | `cargo run --locked -p narrava-loom-tauri -- examples` | 启动 Tauri 桌面 Host；这不是 Android/iOS 命令 |
-| `cargo run --locked -p narrava-loom-tui --example visual_demo` | 启动可输入编号、帮助、重绘和退出的交互式终端示例 |
+| `cargo run --locked -p narrava-loom-tui -- examples` | 用根目录示例游戏驱动 TUI Host（终端交互） |
 
 把 `examples` 换成游戏目录即可检查或启动其他项目。Core CLI 的 `--` 用来结束 Cargo 参数，
 其后的路径交给 Narrava 程序。

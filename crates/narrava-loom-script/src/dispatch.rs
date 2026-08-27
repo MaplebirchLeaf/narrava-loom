@@ -1,7 +1,8 @@
 //! 动态 Macro 回调分发。
 //!
 //! Engine 在 MIR 遇到动态 Macro 时回调本模块：解析参数、求值、调用 builtin/脚本
-//! 宏、处理 before/after 与异步 Pending，并把输出交回 VM。
+//! 宏、处理 before/after 与异步 Pending，并把输出交回 VM。本模块宿主无关，
+//! Host（Tauri/TUI）只需提供脚本 Binding 与状态。
 
 use narrava_loom_core::{
     diagnostic::{Diagnostic, DiagnosticSeverity},
@@ -26,20 +27,20 @@ use narrava_loom_core::{
 
 use narrava_loom_protocol::{Surface, SurfaceNode};
 
-use crate::HostErrorDto;
+use narrava_loom_protocol::HostErrorDto;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn dispatch_macro<'hir, 'source>(
-    script: &narrava_loom_script::EcmaBinding,
+pub fn dispatch_macro<'hir, 'source>(
+    script: &crate::EcmaBinding,
     hir: &'hir HirStory<'source>,
     interactions: &mut MacroInteractions<'hir, 'source>,
-    scheduled: &mut Option<narrava_loom_script::ScriptPending>,
+    scheduled: &mut Option<crate::ScriptPending>,
     invocation: EngineMirMacroInvocation<'_>,
     state: &mut State,
     requests: &mut StoryRuntimeRequests<'_, 'hir, 'source>,
     mut scopes: MacroLocalScopes<Value>,
 ) -> Result<
-    MacroResumeOutcome<RuntimeMacroExecution, narrava_loom_script::ScriptPending>,
+    MacroResumeOutcome<RuntimeMacroExecution, crate::ScriptPending>,
     EngineMirMacroCallbackFailure<String>,
 > {
     let call: HirMacro<'_> = invocation.call.as_hir();
@@ -289,8 +290,8 @@ pub(crate) fn dispatch_macro<'hir, 'source>(
             }
         })?;
         let value: Value = match outcome {
-            narrava_loom_script::ScriptMacroOutcome::Complete(value) => value,
-            narrava_loom_script::ScriptMacroOutcome::Pending(handle) => {
+            crate::ScriptMacroOutcome::Complete(value) => value,
+            crate::ScriptMacroOutcome::Pending(handle) => {
                 scopes.enter_call(Vec::new());
                 *scheduled = Some(handle.clone());
                 let suspended =
@@ -409,7 +410,7 @@ pub(crate) fn find_hir_macro_in_body<'hir, 'source>(
     })
 }
 
-pub(crate) fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
+pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
     // 脚本 bridge 产生协议 Surface；Core 宏执行输出需要语义表示，做同构反向转换。
     let surface: Surface = match narrava_loom_protocol::protocol_bridge::output(value)? {
         Some(output) => output,

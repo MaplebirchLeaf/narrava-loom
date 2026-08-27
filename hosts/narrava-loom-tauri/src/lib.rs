@@ -264,7 +264,6 @@ fn build_main_window(
 
 /// Tauri 2 command 使用 managed state 注入同一个 Runtime Worker。
 pub mod commands;
-mod dispatch;
 mod worker;
 
 use worker::{

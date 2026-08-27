@@ -41,9 +41,10 @@ use narrava_loom_core::{
 
 use narrava_loom_protocol::convert;
 
+use narrava_loom_script::dispatch::{dispatch_macro, macro_value_execution};
+
 use crate::{
     HostErrorDto, HostLogDto, HostUpdateDto,
-    dispatch::{dispatch_macro, macro_value_execution},
     package::{load_language_packages, load_release_config_text, load_release_package},
     save_io::{process_save, process_save_operation},
 };

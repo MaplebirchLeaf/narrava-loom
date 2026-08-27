@@ -29,6 +29,7 @@ use oxc::{
 
 use narrava_loom_protocol::HostErrorDto;
 
+pub mod dispatch;
 mod resource_bridge;
 mod state_bridge;
 

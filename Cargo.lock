@@ -2255,6 +2255,8 @@ version = "0.3.0"
 dependencies = [
  "narrava-loom-core",
  "narrava-loom-protocol",
+ "narrava-loom-script",
+ "serde_json",
 ]
 
 [[package]]

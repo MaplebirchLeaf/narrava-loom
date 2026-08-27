@@ -15,6 +15,8 @@ use narrava_loom_protocol::{
     Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
 };
 
+pub mod host;
+
 /// 输入控件执行时需要的完整语义。TUI 保留这些值，避免终端层根据标签反推状态。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiInput {

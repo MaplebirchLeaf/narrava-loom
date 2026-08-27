@@ -48,21 +48,19 @@ cargo tree -p narrava-loom-tui
 
 ## 可视化检查
 
-运行不依赖终端 UI 库的可视 Demo：
+用根目录示例游戏驱动完整 TUI Host（编译 → Engine → 终端渲染与交互）：
 
 ```bash
-cargo run --locked -p narrava-loom-tui --example visual_demo
+cargo run --locked -p narrava-loom-tui -- examples
 ```
 
-它会把同一份 `Surface` 打印为 Header、Main、Bar、Dialog 和操作列表，并等待玩家
-输入。输入 `1` 切换复选框，`set 2 游侠` 修改文本框，输入 `3` 激活“返回大厅”；`help` 显示
-命令，`redraw` 重绘，`quit` 退出。示例同时建立
-`status` slot，再用 `replace` 替换，因此 Main 中应只出现“替换完成”，不出现“等待替换”。
-带 `delay` 的文本保留在 `frame.delayed`，完整 Runtime 驱动方应按最小 `delay_ms` 调用
-`render_at`。可用管道做一次真实输入回归：
+TUI Host 会加载 `examples/`、执行脚本并渲染 Header、Main、Bar、Dialog 与操作列表，
+等待玩家输入编号激活导航/按钮，`set <编号> <值>` 修改文本框，`help` 显示命令，
+`redraw` 重绘，`quit` 退出。带 `delay` 的文本保留在 `frame.delayed`，完整
+Runtime 驱动方应按最小 `delay_ms` 调用 `render_at`。可用管道做一次输入回归：
 
 ```bash
-printf 'help\n1\nset 2 游侠\n3\nquit\n' | cargo run --locked -p narrava-loom-tui --example visual_demo
+printf 'help\nquit\n' | cargo run --locked -p narrava-loom-tui -- examples
 ```
 
 ## 修改 Renderer 时必须覆盖什么
