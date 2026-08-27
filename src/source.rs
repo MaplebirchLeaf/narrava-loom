@@ -7,7 +7,7 @@ use std::{
 };
 
 /// 一份已读取的 UTF-8 源文件。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Source {
     pub path: SourcePath,
     pub kind: SourceKind,
@@ -15,7 +15,7 @@ pub struct Source {
 }
 
 /// 项目源码集合。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SourceList {
     pub items: Vec<Source>,
 }
@@ -131,7 +131,7 @@ impl SourceKind {
 }
 
 /// 平台无关的源码保存路径。
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourcePath(String);
 
 impl SourcePath {

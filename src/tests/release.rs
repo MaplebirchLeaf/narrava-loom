@@ -1,6 +1,10 @@
 use std::{fs, path::PathBuf};
 
-use crate::{nar::NarPackage, package_zip, release::build_directory};
+use crate::{
+    nar::{NAR_MAGIC, NAR_MAGIC_LEN, NarPackage},
+    package_zip,
+    release::build_directory,
+};
 
 #[test]
 fn release_embeds_author_styles_in_the_host_resource_namespace() {
@@ -33,7 +37,13 @@ fn release_embeds_author_styles_in_the_host_resource_namespace() {
     fs::write(&host, b"host").unwrap();
 
     build_directory(&project, &output, &host).unwrap();
-    let files = package_zip::decode(&fs::read(output.join("game.nar")).unwrap(), 16 << 20).unwrap();
+    let nar_bytes = fs::read(output.join("game.nar")).unwrap();
+    assert_eq!(
+        &nar_bytes[..NAR_MAGIC_LEN],
+        NAR_MAGIC,
+        "game.nar 应带 NAR 魔数头"
+    );
+    let files = package_zip::decode(&nar_bytes[NAR_MAGIC_LEN..], 16 << 20).unwrap();
     let package = NarPackage::from_files(files).unwrap().validate().unwrap();
 
     assert_eq!(

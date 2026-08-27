@@ -21,12 +21,17 @@ use narrava_loom_core::{
     lir::LirProgram,
     macro_runtime::{MacroHandlerOutcome, MacroInteractions, MacroLogicContext},
     mir::MirStory,
+    nar::{NAR_MAGIC, NarPackage},
+    package_zip,
     resource::ResourceCatalog,
     runtime::execute_logic_body,
     runtime::{BodyExecution, RuntimeExecutionIdentity},
-    semantic::{InteractionId, SemanticOutput, SemanticValue},
+    semantic::{InteractionId, RegionId, SemanticOutput, SemanticValue},
     state::{State, StateCheckpoint},
-    story::Story,
+    story::{
+        Story,
+        special::{BAR_PASSAGE, BAR_STOWED_PASSAGE},
+    },
     twee,
 };
 use narrava_loom_protocol::{HostErrorDto, Surface, SurfaceValue};
@@ -125,7 +130,21 @@ fn drive_to_update<'hir, 'source>(
 
 /// 装载游戏并进入渲染/输入主循环；`game_path` 是开发目录或含 `game.nar` 的发行目录。
 pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
-    let sources = load_game(game_path)?;
+    let loaded = load_game(game_path)?;
+    let (sources, resources) = match &loaded {
+        LoadedGame::Release {
+            sources, resources, ..
+        } => (sources, resources),
+        LoadedGame::Development { sources, resources } => (sources, resources),
+    };
+    let config = match &loaded {
+        LoadedGame::Release { config_toml, .. } => {
+            ProjectConfig::parse(Path::new("game.nar/config.toml"), config_toml)
+                .map_err(|error| HostErrorDto::new("tui_host.config", error.to_string()))?
+        }
+        LoadedGame::Development { .. } => ProjectConfig::load(game_path)
+            .map_err(|error| HostErrorDto::new("tui_host.config", error.to_string()))?,
+    };
     let ast: twee::Story<'_> = twee::Story::build(&sources.items)
         .map_err(|error| HostErrorDto::diagnostic(error.diagnostic()))?;
     let hir: HirStory<'_> =
@@ -135,14 +154,10 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     let lir: LirProgram<'_, '_, '_> = LirProgram::lower(&mir)
         .map_err(|error| HostErrorDto::new("tui_host.lir", format!("{:?}", error.kind())))?;
     let bytecode: BytecodeProgram = BytecodeProgram::compile(&lir);
-    let resources: ResourceCatalog = ResourceCatalog::discover(Path::new(game_path))
-        .map_err(|error| HostErrorDto::new("tui_host.resource", error.to_string()))?;
-    let config: ProjectConfig = ProjectConfig::load(game_path)
-        .map_err(|error| HostErrorDto::new("tui_host.config", error.to_string()))?;
     let mut state: State = State::new();
     let script: std::rc::Rc<EcmaBinding> = EcmaBinding::load(
-        &sources,
-        &resources,
+        sources,
+        resources,
         mir.i18n(),
         &config.game.default_locale,
         &mut state,
@@ -200,6 +215,16 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         &bytecode,
     )?;
     sequence = sequence.saturating_add(1);
+    append_sidebar(
+        &mut update,
+        &script,
+        &hir,
+        &mut interactions,
+        &state,
+        &story,
+        &bytecode,
+        &mut sequence,
+    )?;
 
     let stdin = io::stdin();
     loop {
@@ -248,10 +273,52 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     Ok(())
 }
 
-/// 从开发目录发现源码；发行包（`game.nar`）支持留待后续。
-fn load_game(game_path: &str) -> Result<SourceList, HostErrorDto> {
-    SourceList::discover(game_path)
-        .map_err(|error| HostErrorDto::new("tui_host.source", error.to_string()))
+/// 已装载游戏：发行包（`game.nar`）或开发目录。
+enum LoadedGame {
+    Release {
+        sources: SourceList,
+        resources: ResourceCatalog,
+        config_toml: String,
+    },
+    Development {
+        sources: SourceList,
+        resources: ResourceCatalog,
+    },
+}
+
+const PACKAGE_LIMIT: usize = 64 << 20;
+
+/// 装载游戏：优先 `game.nar` 发行包（校验 NAR 魔数与哈希），否则发现开发目录。
+fn load_game(game_path: &str) -> Result<LoadedGame, HostErrorDto> {
+    let nar_path = Path::new(game_path).join("game.nar");
+    if nar_path.exists() {
+        let bytes = std::fs::read(&nar_path)
+            .map_err(|error| HostErrorDto::new("tui_host.package_read", error.to_string()))?;
+        let zip_bytes = bytes.strip_prefix(NAR_MAGIC).ok_or_else(|| {
+            HostErrorDto::new("tui_host.package_magic", "game.nar 缺少 NAR 魔数头")
+        })?;
+        let files = package_zip::decode(zip_bytes, PACKAGE_LIMIT)
+            .map_err(|error| HostErrorDto::new("tui_host.package_zip", error))?;
+        let package = NarPackage::from_files(files)
+            .map_err(|error| HostErrorDto::new("tui_host.package", error.to_string()))?;
+        let config_toml = package
+            .config_toml()
+            .ok_or_else(|| HostErrorDto::new("tui_host.config", "game.nar 缺少 config.toml"))?
+            .to_owned();
+        let package = package
+            .validate()
+            .map_err(|error| HostErrorDto::new("tui_host.package", error.to_string()))?;
+        return Ok(LoadedGame::Release {
+            sources: package.sources().clone(),
+            resources: package.resources().clone(),
+            config_toml,
+        });
+    }
+    let sources = SourceList::discover(game_path)
+        .map_err(|error| HostErrorDto::new("tui_host.source", error.to_string()))?;
+    let resources = ResourceCatalog::discover(Path::new(game_path))
+        .map_err(|error| HostErrorDto::new("tui_host.resource", error.to_string()))?;
+    Ok(LoadedGame::Development { sources, resources })
 }
 
 /// 激活导航/按钮交互：经 `HostApi` 推进 Engine 事务并驱动到可渲染更新。
@@ -352,6 +419,76 @@ fn activate<'hir, 'source>(
         story,
         bytecode,
     )
+}
+
+/// 用隔离的 State/Story 视图渲染 `Bar`/`BarStowed` 特殊 Passage，并追加到当前更新。
+#[allow(clippy::too_many_arguments)]
+fn append_sidebar<'hir, 'source>(
+    update: &mut HostUpdate,
+    script: &EcmaBinding,
+    hir: &'hir HirStory<'source>,
+    interactions: &mut MacroInteractions<'hir, 'source>,
+    state: &State,
+    story: &Story<'hir, 'source>,
+    bytecode: &BytecodeProgram,
+    sequence: &mut u64,
+) -> Result<(), HostErrorDto> {
+    for (name, region) in [
+        (BAR_PASSAGE, RegionId::bar()),
+        (BAR_STOWED_PASSAGE, RegionId::bar_stowed()),
+    ] {
+        if !story.has(name) {
+            continue;
+        }
+        let mut view_state: State = state.fork_view();
+        let mut view_story: Story<'hir, 'source> = story.fork_view();
+        let mut pending: HostPendingExecutions<
+            EngineMirContinuation<'hir, 'source, ScriptPending>,
+        > = HostPendingExecutions::new();
+        let mut scheduled: Option<ScriptPending> = None;
+        let params: Value = Value::Null;
+        let result = HostApi::render_special_mir(
+            &mut pending,
+            &mut view_state,
+            &mut view_story,
+            bytecode,
+            name,
+            HostMirRequest {
+                params: &params,
+                identity: RuntimeExecutionIdentity::new(2, *sequence),
+                limits: limits(),
+                language: None,
+            },
+            |_phase, _context, _state| Ok::<(), Diagnostic>(()),
+            |invocation, state, requests, scopes| {
+                dispatch_macro(
+                    script,
+                    hir,
+                    interactions,
+                    &mut scheduled,
+                    invocation,
+                    state,
+                    requests,
+                    scopes,
+                )
+            },
+        )
+        .map_err(|error| HostErrorDto::diagnostic(error.diagnostic.clone()));
+        let rendered: HostUpdate = drive_to_update(
+            result,
+            script,
+            &mut scheduled,
+            &mut pending,
+            hir,
+            interactions,
+            &mut view_state,
+            &mut view_story,
+            bytecode,
+        )?;
+        update.append_region(region, rendered.surface().clone());
+        *sequence = sequence.saturating_add(1);
+    }
+    Ok(())
 }
 
 /// 把输入控件值写回 Worker State（checkbox/radiobutton/textbox）。

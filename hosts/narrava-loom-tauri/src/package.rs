@@ -26,7 +26,15 @@ fn load_release_files(game_path: &Path) -> Result<Option<PackageFiles>, HostErro
             format!("无法读取 {}：{error}", path.display()),
         )
     })?;
-    package_zip::decode(&bytes, PACKAGE_LIMIT)
+    let zip_bytes = bytes
+        .strip_prefix(narrava_loom_core::nar::NAR_MAGIC)
+        .ok_or_else(|| {
+            HostErrorDto::new(
+                "tauri_host.package_magic",
+                "game.nar 缺少 NAR 魔数头，不是有效的游戏包",
+            )
+        })?;
+    package_zip::decode(zip_bytes, PACKAGE_LIMIT)
         .map(Some)
         .map_err(|error| HostErrorDto::new("tauri_host.package_zip", error))
 }

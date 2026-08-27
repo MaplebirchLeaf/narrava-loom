@@ -24,6 +24,11 @@ use crate::{
 
 /// 当前 `.nar` 容器格式版本；校验时与 manifest 中的版本比较。
 pub const NAR_FORMAT_VERSION: u16 = 1;
+/// `.nar` 字节容器的魔数头：位于 ZIP 负载之前，Host 加载时校验。
+/// 魔数让 `.nar` 不再是“改后缀的 ZIP”，杜绝把任意 ZIP 伪装成游戏包。
+pub const NAR_MAGIC: &[u8] = b"NAR1";
+/// 魔数头的字节长度。
+pub const NAR_MAGIC_LEN: usize = NAR_MAGIC.len();
 /// `.nar` manifest 声明的包类型。
 const NAR_PACKAGE_TYPE: &str = "narrava-game";
 /// `.nar` 内 manifest 文件名。

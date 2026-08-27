@@ -91,7 +91,7 @@ NarravaProject/
 [game]
 id = "example.forest"
 name = "Forest"
-version = "0.3.0"
+version = "0.3.1"
 default_locale = "zh-CN"
 ```
 
@@ -147,7 +147,7 @@ I18n 是发布数据，不属于 `.twee` 或 `.ts/.js` 源码。每种语言由 
 
 ### 4.1 包容器
 
-`.nar`、`.nmod` 和 `.nres` 第一阶段统一使用 ZIP 容器，由 Narrava 构建工具生成。任意 ZIP 文件不能只修改后缀就视为合法包；加载器必须验证包类型、清单和内容哈希。
+`.nar`、`.nmod` 和 `.nres` 第一阶段统一使用 ZIP 容器，由 Narrava 构建工具生成。`.nar` 在 ZIP 负载前携带 `NAR1` 魔数头（`nar::NAR_MAGIC`）：普通 zip 工具仍可按 ZIP 规范跳过前导字节解压，但 Host 加载时会校验魔数并拒绝无头文件，任意 ZIP 不能只修改后缀就视为合法游戏包；加载器还会验证包类型、清单和内容哈希。
 
 `.nmod` 使用自己的 `mod.toml` 描述模组身份、版本、目标游戏和依赖，不复用 `.nlang` 的语言 manifest。实际内容修改固定发生在 I18n 应用之后；提前解析清单和依赖只用于建立候选顺序，不代表已经修改 Story。
 

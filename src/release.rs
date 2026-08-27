@@ -5,7 +5,7 @@ use std::{fs, path::Path};
 use crate::{
     ProjectConfig, SourceList,
     i18n::{NlangPackageEntry, NlangPackageInput},
-    nar::NarPackage,
+    nar::{NAR_MAGIC, NarPackage},
     package_zip,
     resource::{NresPackage, ResourceCatalog, ResourceInput},
 };
@@ -39,7 +39,8 @@ pub fn build_directory(project: &Path, output: &Path, host_binary: &Path) -> Res
     }
     let nar = NarPackage::build_release(&config, &sources, &resources, &config_text)
         .map_err(|error| error.to_string())?;
-    let nar_bytes = package_zip::encode(nar.into_files())?;
+    let mut nar_bytes = NAR_MAGIC.to_vec();
+    nar_bytes.extend(package_zip::encode(nar.into_files())?);
     let resource_bytes = if resources.is_empty() {
         None
     } else {

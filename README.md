@@ -7,7 +7,7 @@ Expression、Macro、State、Story、I18n、Save、VM 和事务化 Engine；画�
 游戏交付物是可移动的 `NarravaGame/` 目录，不要求作者维护 Rust 源码。文档从
 [文档总入口](docs/README.md) 开始。
 
-当前版本为 `0.3.0`：可构建、可测试的开发基线。它用于继续完善引擎和 Host，尚不承诺
+当前版本为 `0.3.1`：可构建、可测试的开发基线。它用于继续完善引擎和 Host，尚不承诺
 面向最终游戏作者的稳定兼容性。版本变化见 [CHANGELOG](CHANGELOG.md)。
 
 ## 快速开始

@@ -69,7 +69,7 @@ NarravaGame/
 └─ save/
 ```
 
-构建器不会覆盖已存在的输出目录。把整个目录复制到别处后，直接双击或运行 `narrava`；不传
+`game.nar` 是带 `NAR1` 魔数头的 ZIP 容器（普通 zip 工具可直接解压查看内部，但 Host 会校验魔数拒绝无头文件）。构建器不会覆盖已存在的输出目录。把整个目录复制到别处后，直接双击或运行 `narrava`；不传
 参数时，它会把自身所在目录当作游戏根目录。游戏作者和玩家都不需要安装 Rust。开发阶段的
 `languages/<locale>/` 会被验证并打成一个 `.nlang`；`resources/` 会打成 `base.nres`，同时纳入
 `game.nar` 的完整性校验；已有的 `mods/*.nmod` 会原样复制，`save/` 初始为空。

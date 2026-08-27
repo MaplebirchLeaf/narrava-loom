@@ -1,6 +1,6 @@
 [package]
 name = "narrava-loom-protocol" # 跨 Host 的 Surface 传输协议
-version = "0.3.0"              # 当前版本
+version = "0.3.1"              # 当前版本
 edition = "2024"               # Rust 2024 Edition
 description = "Narrava Loom host-neutral surface transport protocol (DTOs and script bridge)"
 

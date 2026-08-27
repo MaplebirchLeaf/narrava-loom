@@ -521,11 +521,9 @@ fn packaged_game_starts_without_development_sources() {
     let sources = SourceList::discover(&project).unwrap();
     let resources = ResourceCatalog::discover(&project).unwrap();
     let package = NarPackage::build_release(&config, &sources, &resources, &config_text).unwrap();
-    fs::write(
-        root_path.join("game.nar"),
-        package_zip::encode(package.into_files()).unwrap(),
-    )
-    .unwrap();
+    let mut nar_bytes = narrava_loom_core::nar::NAR_MAGIC.to_vec();
+    nar_bytes.extend(package_zip::encode(package.into_files()).unwrap());
+    fs::write(root_path.join("game.nar"), nar_bytes).unwrap();
 
     let host = TauriHost::spawn(&root).unwrap();
     let update: HostUpdateDto = host.start().unwrap();

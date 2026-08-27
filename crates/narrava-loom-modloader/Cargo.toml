@@ -1,6 +1,6 @@
 [package]
 name = "narrava-loom-modloader" # Core 的模组加载器附属 crate
-version = "0.3.0"          # 当前版本
+version = "0.3.1"          # 当前版本
 edition = "2024"           # Rust 2024 Edition
 
 [dependencies]
