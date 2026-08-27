@@ -37,7 +37,7 @@ use narrava_loom_core::{
 use narrava_loom_protocol::{HostErrorDto, Surface, SurfaceValue};
 use narrava_loom_script::{
     EcmaBinding, ScriptPending,
-    dispatch::{dispatch_macro, macro_value_execution},
+    dispatch::{dispatch_macro, emit_passage_event, macro_value_execution},
 };
 
 use crate::{TuiFrame, TuiRenderer, write_frame};
@@ -151,9 +151,15 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         HirStory::lower(&ast).map_err(|error| HostErrorDto::diagnostic(error.diagnostic))?;
     let mir: MirStory<'_, '_> = MirStory::lower(&hir)
         .map_err(|error| HostErrorDto::new("tui_host.mir", error.kind.to_string()))?;
-    let lir: LirProgram<'_, '_, '_> = LirProgram::lower(&mir)
-        .map_err(|error| HostErrorDto::new("tui_host.lir", format!("{:?}", error.kind())))?;
-    let bytecode: BytecodeProgram = BytecodeProgram::compile(&lir);
+    let bytecode: BytecodeProgram = match &loaded {
+        LoadedGame::Release { bytecode, .. } => bytecode.as_ref().clone(),
+        LoadedGame::Development { .. } => {
+            let lir: LirProgram<'_, '_, '_> = LirProgram::lower(&mir).map_err(|error| {
+                HostErrorDto::new("tui_host.lir", format!("{:?}", error.kind()))
+            })?;
+            BytecodeProgram::compile(&lir)
+        }
+    };
     let mut state: State = State::new();
     let script: std::rc::Rc<EcmaBinding> = EcmaBinding::load(
         sources,
@@ -188,7 +194,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         |_passage, _state, _requests, _limits| {
             Ok::<BodyExecution, Diagnostic>(BodyExecution::default())
         },
-        |_phase, _context, _state| Ok::<(), Diagnostic>(()),
+        |phase, context, _state| emit_passage_event(&script, phase, context),
         |invocation, state, requests, scopes| {
             dispatch_macro(
                 &script,
@@ -203,7 +209,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         },
     )
     .map_err(|error| HostErrorDto::diagnostic(error.diagnostic.clone()));
-    let mut update: HostUpdate = drive_to_update(
+    let update: HostUpdate = drive_to_update(
         start,
         &script,
         &mut scheduled,
@@ -215,8 +221,8 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         &bytecode,
     )?;
     sequence = sequence.saturating_add(1);
-    append_sidebar(
-        &mut update,
+    let mut update: HostUpdate = finish_update(
+        update,
         &script,
         &hir,
         &mut interactions,
@@ -249,7 +255,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             crate::TuiOperation::Redraw => continue,
             crate::TuiOperation::Quit => break,
             crate::TuiOperation::Activate { id } => {
-                update = activate(
+                let next: HostUpdate = activate(
                     &update,
                     &id,
                     &script,
@@ -263,6 +269,16 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
                     sequence,
                 )?;
                 sequence = sequence.saturating_add(1);
+                update = finish_update(
+                    next,
+                    &script,
+                    &hir,
+                    &mut interactions,
+                    &state,
+                    &story,
+                    &bytecode,
+                    &mut sequence,
+                )?;
             }
             crate::TuiOperation::Input { id, value } => {
                 input(&update, &id, value, &mut state)?;
@@ -279,6 +295,7 @@ enum LoadedGame {
         sources: SourceList,
         resources: ResourceCatalog,
         config_toml: String,
+        bytecode: Box<BytecodeProgram>,
     },
     Development {
         sources: SourceList,
@@ -312,6 +329,7 @@ fn load_game(game_path: &str) -> Result<LoadedGame, HostErrorDto> {
             sources: package.sources().clone(),
             resources: package.resources().clone(),
             config_toml,
+            bytecode: Box::new(package.bytecode().clone()),
         });
     }
     let sources = SourceList::discover(game_path)
@@ -370,7 +388,7 @@ fn activate<'hir, 'source>(
                     output: SemanticOutput::default(),
                 })
             },
-            |_phase, _context, _state| Ok::<(), Diagnostic>(()),
+            |phase, context, _state| emit_passage_event(script, phase, context),
             |invocation, state, requests, scopes| {
                 dispatch_macro(
                     script,
@@ -393,7 +411,7 @@ fn activate<'hir, 'source>(
             story,
             bytecode,
             request,
-            |_phase, _context, _state| Ok::<(), Diagnostic>(()),
+            |phase, context, _state| emit_passage_event(script, phase, context),
             |invocation, state, requests, scopes| {
                 dispatch_macro(
                     script,
@@ -419,6 +437,33 @@ fn activate<'hir, 'source>(
         story,
         bytecode,
     )
+}
+
+/// 为每一份可展示更新补齐作者拥有的特殊区域。
+///
+/// 启动与后续交互共用这个收尾点，避免 Bar/BarStowed 停留在首帧状态。
+#[allow(clippy::too_many_arguments)]
+fn finish_update<'hir, 'source>(
+    mut update: HostUpdate,
+    script: &EcmaBinding,
+    hir: &'hir HirStory<'source>,
+    interactions: &mut MacroInteractions<'hir, 'source>,
+    state: &State,
+    story: &Story<'hir, 'source>,
+    bytecode: &BytecodeProgram,
+    sequence: &mut u64,
+) -> Result<HostUpdate, HostErrorDto> {
+    append_sidebar(
+        &mut update,
+        script,
+        hir,
+        interactions,
+        state,
+        story,
+        bytecode,
+        sequence,
+    )?;
+    Ok(update)
 }
 
 /// 用隔离的 State/Story 视图渲染 `Bar`/`BarStowed` 特殊 Passage，并追加到当前更新。
@@ -512,7 +557,8 @@ fn input(
         ));
     }
     let json: serde_json::Value = json_from_surface(&value);
-    let core_value: Value = narrava_loom_script::json_to_value(&json)?;
+    let core_value: Value = narrava_loom_script::json_to_value(&json)
+        .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
     let expression = parse_expression(binding.receiver.as_str())
         .map_err(|error| HostErrorDto::new("tui_host.input_receiver", format!("{error:?}")))?;
     let checkpoint: StateCheckpoint = state.checkpoint();

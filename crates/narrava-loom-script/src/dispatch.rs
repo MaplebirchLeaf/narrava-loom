@@ -6,7 +6,10 @@
 
 use narrava_loom_core::{
     diagnostic::{Diagnostic, DiagnosticSeverity},
-    engine::{EngineMirMacroCallbackFailure, EngineMirMacroInvocation},
+    engine::{
+        EngineMirMacroCallbackFailure, EngineMirMacroInvocation, PassageLifecycleContext,
+        PassageLifecyclePhase,
+    },
     expression::{
         evaluator::{assign_value_with_mut, evaluate_with_mut, value_to_text},
         parse as parse_expression,
@@ -27,7 +30,39 @@ use narrava_loom_core::{
 
 use narrava_loom_protocol::{Surface, SurfaceNode};
 
-use narrava_loom_protocol::HostErrorDto;
+use crate::ScriptError;
+
+/// 把 Core 已确认的 Passage 生命周期事实投递给游戏脚本。
+///
+/// 映射属于共享 Native Script Binding，而不是某一种 Host；Tauri 与 TUI 必须调用同一实现，
+/// 才能保证同一游戏在不同前端收到相同的内建事件序列。
+pub fn emit_passage_event(
+    script: &crate::EcmaBinding,
+    phase: PassageLifecyclePhase,
+    context: PassageLifecycleContext<'_, '_, '_, '_>,
+) -> Result<(), Diagnostic> {
+    let name: &str = match phase {
+        PassageLifecyclePhase::Init => "passage:init",
+        PassageLifecyclePhase::Start => "passage:start",
+        PassageLifecyclePhase::Render => "passage:render",
+        PassageLifecyclePhase::Display => "passage:display",
+        PassageLifecyclePhase::End => "passage:end",
+    };
+    let passage = context.entry().passage();
+    script
+        .emit_builtin_event(
+            name,
+            &serde_json::json!({ "passage": passage.name, "tags": passage.tags }),
+        )
+        .map(|_| ())
+        .map_err(|error| {
+            Diagnostic::new(
+                "script.passage_event",
+                DiagnosticSeverity::Error,
+                &error.message,
+            )
+        })
+}
 
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_macro<'hir, 'source>(
@@ -410,7 +445,7 @@ pub(crate) fn find_hir_macro_in_body<'hir, 'source>(
     })
 }
 
-pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
+pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, ScriptError> {
     // 脚本 bridge 产生协议 Surface；Core 宏执行输出需要语义表示，做同构反向转换。
     let surface: Surface = match narrava_loom_protocol::protocol_bridge::output(value)? {
         Some(output) => output,

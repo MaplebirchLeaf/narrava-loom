@@ -109,7 +109,7 @@ Macro.add("delayedAnswer", {
 是 0 到 86400000 毫秒。一个 Macro 同时只能等待一个 Host 操作，但恢复后可以继续等待下一次。
 
 不要自己构造永不完成的 Promise；没有受管 Host 操作的未决 Promise 会得到
-`tauri_host.script_macro_unmanaged_promise`。Worker 没有 `fetch`、DOM、浏览器计时器或任意
+`script.macro_unmanaged_promise`。Worker 没有 `fetch`、DOM、浏览器计时器或任意
 Tauri 调用。文件选择与网络也尚未成为公开能力，因为它们需要各自的权限和结果契约。
 
 当前 Host 自定义 Macro 可以返回可显示标量，也可以返回下节介绍的 `Surface` 语义片段。

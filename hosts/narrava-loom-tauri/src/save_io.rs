@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use narrava_loom_core::{ProjectConfig, save::SaveDocument, state::State, story::Story};
 
-use crate::HostErrorDto;
+use crate::{HostErrorDto, script_host_error};
 use narrava_loom_script::EcmaBinding;
 
 /// 取出脚本登记的 Save 请求并执行；import 成功后同步脚本变量，再回传完成钩子。
@@ -15,21 +15,23 @@ pub(crate) fn process_save(
     state: &mut State,
     story: &mut Story<'_, '_>,
 ) -> Result<(), HostErrorDto> {
-    let Some((operation, target)) = script.take_save()? else {
+    let Some((operation, target)) = script.take_save().map_err(script_host_error)? else {
         return Ok(());
     };
     let outcome = process_save_operation(game_path, config, state, story, &operation, &target);
     if outcome.is_ok() && operation == "import" {
-        script.sync_variables(state)?;
+        script.sync_variables(state).map_err(script_host_error)?;
     }
-    script.complete_save(
-        &operation,
-        &target,
-        outcome
-            .as_ref()
-            .map(|_| ())
-            .map_err(|error| error.message.as_str()),
-    )?;
+    script
+        .complete_save(
+            &operation,
+            &target,
+            outcome
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| error.message.as_str()),
+        )
+        .map_err(script_host_error)?;
     outcome
 }
 

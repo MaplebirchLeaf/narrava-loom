@@ -28,6 +28,11 @@ pub use narrava_loom_protocol::{HostErrorDto, HostNodeDto, HostReplaceTargetDto,
 
 use package::{load_release_package, load_tauri_config};
 
+/// 在 Tauri IPC 边界把共享脚本错误编码为 Host DTO。
+pub(crate) fn script_host_error(error: narrava_loom_script::ScriptError) -> HostErrorDto {
+    HostErrorDto::new(&error.code, error.message)
+}
+
 /// Host 管理面板展示的一条有界日志（只含级别与可显示消息）。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct HostLogDto {

@@ -17,8 +17,10 @@ narrava-loom-core         语义执行（semantic::SemanticOutput 等内部输�
        ↑
 narrava-loom-protocol     Surface 协议语义（surface）+ 双向同构转换（conversion）+ 传输 DTO
        ↑
-hosts/* 与 modloader      Tauri、TUI 与 ModLoader 同时依赖 Core 与 Protocol
+hosts/*                   Tauri、TUI 同时依赖 Core、Protocol 与 Script Binding
 ```
+
+独立 ModLoader 只依赖 Core 的游戏身份、源码、资源与模组契约，不消费 Surface Protocol。
 
 `Surface` 文本继续使用 Core 的 `TextValue`（与 Expression、State、Save 一致的 UTF-16 值），
 避免退化为有损的 Rust `String`。Core 内部执行直接构造 `semantic::SemanticOutput`（不依赖

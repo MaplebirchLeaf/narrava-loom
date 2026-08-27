@@ -18,9 +18,9 @@
 - 保留输入允许值，并把玩家命令解析为 `Activate`、`Input` 或 `Dismiss`；
 - 提供可恢复错误的输入循环，以及帮助、重绘和退出命令。
 
-`run_terminal` 不拥有游戏 Runtime；调用方把已验证的 `TuiOperation` 提交给 Core worker，再返回
-下一帧。当前 crate 尚未提供加载完整游戏目录的脚本 Worker、存档菜单或语言菜单，因此不能把
-交互前端完成写成“与 Tauri 游戏能力完全等价”。
+`run_terminal` 是可复用的纯输入／输出循环；`host::run` 负责装载开发目录或发行 `game.nar`、
+执行 ECMAScript Binding、驱动 Core 并返回下一帧。当前 TUI 尚无 Save／I18n 菜单和终端尺寸
+自适应布局，因此不能写成“与 Tauri 游戏能力完全等价”。
 
 ## 快速验证
 
@@ -79,6 +79,6 @@ printf 'help\nquit\n' | cargo run --locked -p narrava-loom-tui -- examples
 
 ## 当前完成标准
 
-TUI 已能实际读取命令并产生经验证的 Host 操作，但完整游戏目录仍需要 Runtime 驱动、ECMAScript
-Binding、异步唤醒、Save／I18n 文件能力。它们应抽成可复用 Native Binding，不应复制 Tauri
-Worker 或让 TUI 依赖 Tauri crate。
+TUI 已能加载完整开发目录或发行包、执行 ECMAScript Binding、处理 `Host.delay` 并产生经验证的
+Host 操作。仍缺 Save／I18n 文件菜单和非阻塞式终端唤醒；后续应继续收束共享 Native Runtime
+驱动，不让 TUI 依赖 Tauri crate。

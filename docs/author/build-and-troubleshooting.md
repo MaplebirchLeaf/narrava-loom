@@ -108,8 +108,8 @@ tauri_host.twee
 tauri_host.hir
 tauri_host.mir
 tauri_host.lir
-tauri_host.script_parse
-tauri_host.script_execute
+script.parse
+script.execute
 tauri_host.resource
 ```
 

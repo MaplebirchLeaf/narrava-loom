@@ -379,7 +379,11 @@ fn ecma_binding_reports_promises_that_need_external_async_work() {
     let error = binding
         .call_macro("waiting", "", &mut state)
         .expect_err("未完成的 Promise 不能被伪装成普通值");
-    assert_eq!(error.code, "tauri_host.script_macro_unmanaged_promise");
+    assert_eq!(error.code, "script.macro_unmanaged_promise");
+    assert!(
+        !error.code.contains("tauri_host") && !error.code.contains("script.script_"),
+        "共享 Script Binding 不得泄漏 Host 身份或重复 script 前缀"
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 

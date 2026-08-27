@@ -141,7 +141,7 @@ fn state_replace(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> J
     };
     let values = values
         .iter()
-        .map(|(name, value)| Ok((name.clone(), json_to_value(value).map_err(host_error)?)))
+        .map(|(name, value)| Ok((name.clone(), json_to_value(value).map_err(script_error)?)))
         .collect::<JsResult<Vec<_>>>()?;
     with_active(context, |state| replace(state, &namespace, values))?;
     Ok(JsValue::undefined())
@@ -269,7 +269,7 @@ fn js_to_core(value: &JsValue, context: &mut Context) -> JsResult<Value> {
             narrava_loom_core::expression::value::ScriptCallable::new(id, name.to_owned()),
         ));
     }
-    json_to_value(&json).map_err(host_error)
+    json_to_value(&json).map_err(script_error)
 }
 
 /// 取指定位置的字符串参数。
@@ -280,8 +280,8 @@ fn string_argument(arguments: &[JsValue], index: usize, context: &mut Context) -
         .map(|value| value.to_std_string_escaped())
 }
 
-/// Host 错误 → JS 类型错误。
-fn host_error(error: narrava_loom_protocol::HostErrorDto) -> boa_engine::JsError {
+/// Script Binding 错误 → JS 类型错误。
+fn script_error(error: crate::ScriptError) -> boa_engine::JsError {
     type_error(error.message)
 }
 

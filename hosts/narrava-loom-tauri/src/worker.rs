@@ -41,12 +41,13 @@ use narrava_loom_core::{
 
 use narrava_loom_protocol::convert;
 
-use narrava_loom_script::dispatch::{dispatch_macro, macro_value_execution};
+use narrava_loom_script::dispatch::{dispatch_macro, emit_passage_event, macro_value_execution};
 
 use crate::{
     HostErrorDto, HostLogDto, HostUpdateDto,
     package::{load_language_packages, load_release_config_text, load_release_package},
     save_io::{process_save, process_save_operation},
+    script_host_error,
 };
 
 pub(crate) type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
@@ -152,25 +153,31 @@ pub(crate) fn run_worker(
             );
         }
     };
-    let lir: LirProgram<'_, '_, '_> = match LirProgram::lower(&mir) {
-        Ok(lir) => lir,
-        Err(error) => {
-            let instruction = error
-                .instruction()
-                .map_or_else(String::new, |index| format!("，指令 {index}"));
-            return fail_worker(
-                requests,
-                "lir.lower_failed",
-                format!(
-                    "Passage `{}`{} 无法生成可执行程序：{:?}",
-                    error.passage(),
-                    instruction,
-                    error.kind()
-                ),
-            );
-        }
+    // 开发目录执行刚编译的程序；发行目录必须执行 `game.nar` 内已经完成哈希与格式
+    // 校验的拥有型 Bytecode，不能把它校验后丢弃并悄悄改为执行重编译结果。
+    let bytecode: BytecodeProgram = if let Some(package) = &release {
+        package.bytecode().clone()
+    } else {
+        let lir: LirProgram<'_, '_, '_> = match LirProgram::lower(&mir) {
+            Ok(lir) => lir,
+            Err(error) => {
+                let instruction = error
+                    .instruction()
+                    .map_or_else(String::new, |index| format!("，指令 {index}"));
+                return fail_worker(
+                    requests,
+                    "lir.lower_failed",
+                    format!(
+                        "Passage `{}`{} 无法生成可执行程序：{:?}",
+                        error.passage(),
+                        instruction,
+                        error.kind()
+                    ),
+                );
+            }
+        };
+        BytecodeProgram::compile(&lir)
     };
-    let bytecode: BytecodeProgram = BytecodeProgram::compile(&lir);
     let language_packages = match load_language_packages(Path::new(&game_path), &config) {
         Ok(packages) => packages,
         Err(error) => return fail_worker(requests, &error.code, error.message),
@@ -463,7 +470,8 @@ pub(crate) fn run_worker(
                                 format!("输入 receiver 无效：{error:?}"),
                             )
                         })?;
-                    let value: Value = narrava_loom_script::json_to_value(&value)?;
+                    let value: Value =
+                        narrava_loom_script::json_to_value(&value).map_err(script_host_error)?;
                     let checkpoint: StateCheckpoint = state.checkpoint();
                     if let Err(error) = assign_value_with_mut(&expression, value, &mut state) {
                         state.restore_checkpoint(checkpoint);
@@ -503,7 +511,7 @@ pub(crate) fn run_worker(
                     && operation == "import"
                     && let Err(error) = script.sync_variables(&state)
                 {
-                    let _sent = reply.send(Err(error));
+                    let _sent = reply.send(Err(script_host_error(error)));
                     continue;
                 }
                 let level = if result.is_ok() { "info" } else { "error" };
@@ -537,7 +545,7 @@ pub(crate) fn run_worker(
                         HostErrorDto::new("tauri_host.language_select", error.to_string())
                     });
                 let result: CommandResult = selected.and_then(|selected| {
-                    script.select_locale(&locale)?;
+                    script.select_locale(&locale).map_err(script_host_error)?;
                     runtime_language = selected;
                     Ok(())
                 });
@@ -553,39 +561,7 @@ pub(crate) fn run_worker(
     }
 }
 
-/// 将 Engine 的事务生命周期映射为稳定的作者可订阅事件名。
-///
-/// 事件在对应阶段同步写入 Worker 队列；任何绑定错误都会作为生命周期错误触发
-/// Engine 回滚，避免出现“导航已提交但生命周期事实丢失”的半成功状态。
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_passage_event(
-    script: &narrava_loom_script::EcmaBinding,
-    phase: narrava_loom_core::engine::PassageLifecyclePhase,
-    context: narrava_loom_core::engine::PassageLifecycleContext<'_, '_, '_, '_>,
-) -> Result<(), Diagnostic> {
-    let name = match phase {
-        narrava_loom_core::engine::PassageLifecyclePhase::Init => "passage:init",
-        narrava_loom_core::engine::PassageLifecyclePhase::Start => "passage:start",
-        narrava_loom_core::engine::PassageLifecyclePhase::Render => "passage:render",
-        narrava_loom_core::engine::PassageLifecyclePhase::Display => "passage:display",
-        narrava_loom_core::engine::PassageLifecyclePhase::End => "passage:end",
-    };
-    let passage = context.entry().passage();
-    script
-        .emit_builtin_event(
-            name,
-            &serde_json::json!({ "passage": passage.name, "tags": passage.tags }),
-        )
-        .map(|_| ())
-        .map_err(|error| {
-            Diagnostic::new(
-                "tauri_host.passage_event",
-                DiagnosticSeverity::Error,
-                &error.message,
-            )
-        })
-}
-
+/// 使用隔离的 State/Story 视图渲染作者侧栏，并追加到当前 Host 更新。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn append_sidebar_regions<'hir, 'source>(
     update: &mut HostUpdate,

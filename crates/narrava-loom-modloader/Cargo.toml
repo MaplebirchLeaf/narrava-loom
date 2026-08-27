@@ -5,7 +5,6 @@ edition = "2024"           # Rust 2024 Edition
 
 [dependencies]
 narrava-loom-core = { path = "../.." }     # 独立 ModLoader 单向依赖 Core
-narrava-loom-protocol = { path = "../narrava-loom-protocol" } # 模组传输沿用同一 Surface 协议，依赖顺序：modloader → protocol → core
 semver = "1" # 语义化版本处理
 serde = { version = "1", features = ["derive"] } # 序列化/反序列化
 toml = "0.9" # TOML 解析

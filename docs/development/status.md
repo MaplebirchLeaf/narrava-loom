@@ -31,8 +31,8 @@
 下一阶段只接受能够形成完整纵向用例的工作，优先级如下：
 
 1. 用真实 Tauri 窗口完成发行目录的视觉、输入、Resource、I18n 与 Save 回归；
-2. 抽取可供 Tauri 与 TUI 共用的 Native ECMAScript／Runtime 驱动，避免复制 Worker；
-3. 根据实际游戏用例稳定 0.2.x 的公开 API 与诊断，不预先扩张平台能力；
+2. 在已共享的 `narrava-loom-script` 上继续抽取 Native Runtime Session，统一 Host 的装载、推进、生命周期事件与特殊区域收尾；
+3. 根据实际游戏用例稳定 0.3.x 的公开 API 与诊断，不预先扩张平台能力；
 4. Core 稳定后，再单独设计 `narrava-loom-modloader` 的最小 `.nmod` 纵向链。
 
 ## 发布门禁

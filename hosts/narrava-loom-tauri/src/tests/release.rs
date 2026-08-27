@@ -9,6 +9,14 @@ use narrava_loom_core::{
 use crate::save_io::save_file_name;
 use crate::{HostNodeDto, HostUpdateDto, TauriHost};
 
+/// 发行 Worker 必须执行 `game.nar` 中已经验证的 Bytecode，而不是只校验后重新编译源码。
+#[test]
+fn release_worker_uses_the_validated_package_bytecode() {
+    let worker: &str = include_str!("../worker.rs");
+
+    assert!(worker.contains("package.bytecode().clone()"));
+}
+
 /// 脚本宏 `Host.delay` 会挂起 Engine 事务，Host 睡满后恢复并继续渲染。
 #[test]
 fn host_delay_suspends_and_resumes_the_engine_transaction() {
