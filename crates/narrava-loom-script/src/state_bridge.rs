@@ -281,7 +281,7 @@ fn string_argument(arguments: &[JsValue], index: usize, context: &mut Context) -
 }
 
 /// Host 错误 → JS 类型错误。
-fn host_error(error: crate::HostErrorDto) -> boa_engine::JsError {
+fn host_error(error: narrava_loom_protocol::HostErrorDto) -> boa_engine::JsError {
     type_error(error.message)
 }
 

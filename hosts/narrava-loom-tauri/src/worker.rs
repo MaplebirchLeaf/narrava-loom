@@ -46,7 +46,6 @@ use crate::{
     dispatch::{dispatch_macro, macro_value_execution},
     package::{load_language_packages, load_release_config_text, load_release_package},
     save_io::{process_save, process_save_operation},
-    script_runtime,
 };
 
 pub(crate) type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
@@ -185,7 +184,7 @@ pub(crate) fn run_worker(
     available_languages.dedup();
     let mut runtime_language: Option<I18nRuntimeLanguage> = None;
     let mut state: State = State::new();
-    let script = match script_runtime::EcmaBinding::load(
+    let script = match narrava_loom_script::EcmaBinding::load(
         sources,
         &resources,
         mir.i18n(),
@@ -199,7 +198,7 @@ pub(crate) fn run_worker(
     let mut story: Story<'_, '_> = Story::new(&hir);
     let mut interactions: MacroInteractions<'_, '_> = MacroInteractions::new();
     let mut pending: HostPendingExecutions<
-        EngineMirContinuation<'_, '_, script_runtime::ScriptPending>,
+        EngineMirContinuation<'_, '_, narrava_loom_script::ScriptPending>,
     > = HostPendingExecutions::new();
     let mut presented: Option<HostUpdate> = None;
     let mut sequence: u64 = 1;
@@ -212,7 +211,7 @@ pub(crate) fn run_worker(
         match request {
             WorkerRequest::Start(reply) => {
                 let params: Value = Value::Null;
-                let mut scheduled: Option<script_runtime::ScriptPending> = None;
+                let mut scheduled: Option<narrava_loom_script::ScriptPending> = None;
                 let result = HostApi::start_mir(
                     &mut pending,
                     &mut state,
@@ -299,7 +298,7 @@ pub(crate) fn run_worker(
                     continue;
                 };
                 let params: Value = Value::Null;
-                let mut scheduled: Option<script_runtime::ScriptPending> = None;
+                let mut scheduled: Option<narrava_loom_script::ScriptPending> = None;
                 let interaction_id = match InteractionId::parse(interaction) {
                     Ok(id) => id,
                     Err(error) => {
@@ -463,7 +462,7 @@ pub(crate) fn run_worker(
                                 format!("输入 receiver 无效：{error:?}"),
                             )
                         })?;
-                    let value: Value = script_runtime::json_to_value(&value)?;
+                    let value: Value = narrava_loom_script::json_to_value(&value)?;
                     let checkpoint: StateCheckpoint = state.checkpoint();
                     if let Err(error) = assign_value_with_mut(&expression, value, &mut state) {
                         state.restore_checkpoint(checkpoint);
@@ -559,7 +558,7 @@ pub(crate) fn run_worker(
 /// Engine 回滚，避免出现“导航已提交但生命周期事实丢失”的半成功状态。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_passage_event(
-    script: &script_runtime::EcmaBinding,
+    script: &narrava_loom_script::EcmaBinding,
     phase: narrava_loom_core::engine::PassageLifecyclePhase,
     context: narrava_loom_core::engine::PassageLifecycleContext<'_, '_, '_, '_>,
 ) -> Result<(), Diagnostic> {
@@ -589,7 +588,7 @@ pub(crate) fn emit_passage_event(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn append_sidebar_regions<'hir, 'source>(
     update: &mut HostUpdate,
-    script: &script_runtime::EcmaBinding,
+    script: &narrava_loom_script::EcmaBinding,
     hir: &'hir HirStory<'source>,
     interactions: &mut MacroInteractions<'hir, 'source>,
     state: &State,
@@ -608,9 +607,9 @@ pub(crate) fn append_sidebar_regions<'hir, 'source>(
         let mut view_state: State = state.fork_view();
         let mut view_story: Story<'hir, 'source> = story.fork_view();
         let mut pending: HostPendingExecutions<
-            EngineMirContinuation<'hir, 'source, script_runtime::ScriptPending>,
+            EngineMirContinuation<'hir, 'source, narrava_loom_script::ScriptPending>,
         > = HostPendingExecutions::new();
-        let mut scheduled: Option<script_runtime::ScriptPending> = None;
+        let mut scheduled: Option<narrava_loom_script::ScriptPending> = None;
         let params: Value = Value::Null;
         let result = HostApi::render_special_mir(
             &mut pending,
@@ -664,10 +663,10 @@ pub(crate) fn append_sidebar_regions<'hir, 'source>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn finish_drive<'hir, 'source>(
     mut result: Result<HostDriveResult, HostErrorDto>,
-    script: &script_runtime::EcmaBinding,
-    scheduled: &mut Option<script_runtime::ScriptPending>,
+    script: &narrava_loom_script::EcmaBinding,
+    scheduled: &mut Option<narrava_loom_script::ScriptPending>,
     pending: &mut HostPendingExecutions<
-        EngineMirContinuation<'hir, 'source, script_runtime::ScriptPending>,
+        EngineMirContinuation<'hir, 'source, narrava_loom_script::ScriptPending>,
     >,
     hir: &'hir HirStory<'source>,
     interactions: &mut MacroInteractions<'hir, 'source>,
@@ -695,12 +694,12 @@ pub(crate) fn finish_drive<'hir, 'source>(
             bytecode,
             execution,
             |handle, state, _requests, _scopes| match script.resume_macro(handle, state) {
-                Ok(script_runtime::ScriptMacroOutcome::Complete(value)) => {
+                Ok(narrava_loom_script::ScriptMacroOutcome::Complete(value)) => {
                     macro_value_execution(&value)
                         .map(MacroHandlerOutcome::Complete)
                         .map_err(|error| error.to_string())
                 }
-                Ok(script_runtime::ScriptMacroOutcome::Pending(next)) => {
+                Ok(narrava_loom_script::ScriptMacroOutcome::Pending(next)) => {
                     *scheduled = Some(next.clone());
                     Ok(MacroHandlerOutcome::Pending(next))
                 }

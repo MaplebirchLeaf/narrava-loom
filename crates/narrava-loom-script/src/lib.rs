@@ -1,8 +1,12 @@
-//! Boa 驱动的游戏脚本运行时边界：TypeScript 转译、State/Resource 桥接与异步 Macro 协调。
+//! Narrava 游戏的 ECMAScript 脚本执行。
+//!
+//! 宿主无关：本 crate 提供 `EcmaBinding`（Boa 引擎 + Oxc 转译）、State/Resource
+//! 桥与 Macro/Save/Event 桥，Host（Tauri/TUI）只需提供脚本源码与资源目录。
 
 use std::{cell::RefCell, path::Path, rc::Rc, time::Duration};
 
 use boa_engine::{Context, JsValue, Source};
+
 use narrava_loom_core::{
     SourceList,
     expression::{
@@ -654,7 +658,7 @@ fn macro_outcome(context: &mut Context) -> Result<ScriptMacroOutcome, HostErrorD
 }
 
 /// JSON → Core 值（供 Input 与宏返回值转换）。
-pub(crate) fn json_to_value(value: &serde_json::Value) -> Result<Value, HostErrorDto> {
+pub fn json_to_value(value: &serde_json::Value) -> Result<Value, HostErrorDto> {
     match value {
         serde_json::Value::Null => Ok(Value::Null),
         serde_json::Value::Bool(value) => Ok(Value::Boolean(*value)),

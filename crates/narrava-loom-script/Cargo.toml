@@ -1,0 +1,13 @@
+[package]
+name = "narrava-loom-script" # ECMAScript 游戏脚本执行（Boa + Oxc）
+version = "0.3.0"            # 当前版本
+edition = "2024"             # Rust 2024 Edition
+description = "Host-neutral ECMAScript script runtime for Narrava games (Boa engine, Oxc transpiler)"
+
+[dependencies]
+narrava-loom-core = { path = "../.." }         # 语义与 State/Resource 边界
+narrava-loom-protocol = { path = "../narrava-loom-protocol" } # 稳定错误与传输类型
+boa_engine = "0.21.1"
+boa_gc = "0.21.1"
+oxc = { version = "0.137.0", features = ["transformer", "codegen", "semantic"] }
+serde_json = "1"

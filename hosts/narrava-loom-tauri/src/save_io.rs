@@ -4,7 +4,8 @@ use std::{fs, path::Path};
 
 use narrava_loom_core::{ProjectConfig, save::SaveDocument, state::State, story::Story};
 
-use crate::{HostErrorDto, script_runtime::EcmaBinding};
+use crate::HostErrorDto;
+use narrava_loom_script::EcmaBinding;
 
 /// 取出脚本登记的 Save 请求并执行；import 成功后同步脚本变量，再回传完成钩子。
 pub(crate) fn process_save(

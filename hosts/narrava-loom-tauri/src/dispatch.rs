@@ -26,20 +26,20 @@ use narrava_loom_core::{
 
 use narrava_loom_protocol::{Surface, SurfaceNode};
 
-use crate::{HostErrorDto, script_runtime};
+use crate::HostErrorDto;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_macro<'hir, 'source>(
-    script: &script_runtime::EcmaBinding,
+    script: &narrava_loom_script::EcmaBinding,
     hir: &'hir HirStory<'source>,
     interactions: &mut MacroInteractions<'hir, 'source>,
-    scheduled: &mut Option<script_runtime::ScriptPending>,
+    scheduled: &mut Option<narrava_loom_script::ScriptPending>,
     invocation: EngineMirMacroInvocation<'_>,
     state: &mut State,
     requests: &mut StoryRuntimeRequests<'_, 'hir, 'source>,
     mut scopes: MacroLocalScopes<Value>,
 ) -> Result<
-    MacroResumeOutcome<RuntimeMacroExecution, script_runtime::ScriptPending>,
+    MacroResumeOutcome<RuntimeMacroExecution, narrava_loom_script::ScriptPending>,
     EngineMirMacroCallbackFailure<String>,
 > {
     let call: HirMacro<'_> = invocation.call.as_hir();
@@ -289,8 +289,8 @@ pub(crate) fn dispatch_macro<'hir, 'source>(
             }
         })?;
         let value: Value = match outcome {
-            script_runtime::ScriptMacroOutcome::Complete(value) => value,
-            script_runtime::ScriptMacroOutcome::Pending(handle) => {
+            narrava_loom_script::ScriptMacroOutcome::Complete(value) => value,
+            narrava_loom_script::ScriptMacroOutcome::Pending(handle) => {
                 scopes.enter_call(Vec::new());
                 *scheduled = Some(handle.clone());
                 let suspended =

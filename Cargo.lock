@@ -2221,6 +2221,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "narrava-loom-script"
+version = "0.3.0"
+dependencies = [
+ "boa_engine",
+ "boa_gc",
+ "narrava-loom-core",
+ "narrava-loom-protocol",
+ "oxc",
+ "serde_json",
+]
+
+[[package]]
 name = "narrava-loom-tauri"
 version = "0.3.0"
 dependencies = [
@@ -2228,6 +2240,7 @@ dependencies = [
  "boa_gc",
  "narrava-loom-core",
  "narrava-loom-protocol",
+ "narrava-loom-script",
  "oxc",
  "serde",
  "serde_json",

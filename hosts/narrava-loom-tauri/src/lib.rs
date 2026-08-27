@@ -9,7 +9,6 @@ mod config;
 mod package;
 mod resource_protocol;
 mod save_io;
-mod script_runtime;
 
 use std::{
     path::{Path, PathBuf},
