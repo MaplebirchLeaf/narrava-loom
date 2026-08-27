@@ -52,7 +52,7 @@ maximized = false
 
 `game.name`（或显式的 `host.tauri.title`）用于系统窗口标题，不会被 Host 硬编码到侧栏中。
 侧栏展开内容由 `:: Bar` 决定，收起后的窄栏内容由 `:: BarStowed` 决定。游戏不写 `styles/`
-也会自动获得侧栏、正文、Header／Footer、弹窗、表单、图片、64 级 tone 和全部 8 种语义字形；
+也会自动获得侧栏、正文、Header／Footer、弹窗、表单、图片、64 级 color 和全部 8 种语义字形；
 自定义 CSS 只用于品牌主题覆盖，不是制作游戏的必需文件。
 
 开发者模式开启后，在游戏窗口按 F12 可以开关 WebView DevTools。控制台通过
@@ -72,7 +72,7 @@ namespace 只能是 `global`、`variables` 或 `temporary`。`state()` 对标量
 还可以使用：
 
 ```js
-window.narrava.current()       // 最近一次 Presentation DTO 的副本
+window.narrava.current()       // 最近一次 Surface DTO 的副本
 await window.narrava.assets()  // CSS 和 Resource 清单
 await window.narrava.activate("交互ID")
 await window.narrava.devtools()

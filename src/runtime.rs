@@ -15,7 +15,7 @@ pub use widget::*;
 
 pub(crate) use logic::{collection_iteration_values, finite_range_number};
 
-use crate::{hir::HirBodyNode, presentation::PresentationOutput};
+use crate::{hir::HirBodyNode, protocol::Surface};
 
 /// 一个节点对当前正文剩余执行产生的控制信号。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub enum BodyControl {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BodyExecution {
     pub control: BodyControl,
-    pub output: PresentationOutput,
+    pub output: Surface,
 }
 
 /// 单次动态 Macro 的完成结果及其在内部展开的 Passage 数量。
@@ -46,7 +46,7 @@ impl Default for BodyExecution {
     fn default() -> Self {
         Self {
             control: BodyControl::Continue,
-            output: PresentationOutput::default(),
+            output: Surface::default(),
         }
     }
 }
@@ -71,7 +71,7 @@ pub fn execute_hir_body_with_output<'source, Error>(
     body: &[HirBodyNode<'source>],
     mut execute_node: impl FnMut(&HirBodyNode<'source>) -> Result<BodyExecution, Error>,
 ) -> Result<BodyExecution, Error> {
-    let mut output: PresentationOutput = PresentationOutput::default();
+    let mut output: Surface = Surface::default();
     for node in body {
         let execution: BodyExecution = execute_node(node)?;
         output.append(execution.output);

@@ -27,12 +27,12 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `set` | `<<set $name = value>>` | 赋值；也接受 `to` 写法 |
 | `unset` | `<<unset $name>>` | 删除可写目标 |
 | `run` | `<<run expression>>` | 求值并丢弃结果，保留副作用 |
-| `print` | `<<print expression [tone] [style...]>>` 或 `<<print expression {tone, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、tone、delay 与结构性标题的 StyledText |
+| `print` | `<<print expression [color] [style...]>>` 或 `<<print expression {color, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、color、delay 与结构性标题的 StyledText |
 | `include` | `<<include "Passage">>` | 在当前位置执行另一 Passage，不发生导航 |
 | `goto` | `<<goto "Passage">>` | 请求导航并停止当前 Passage |
 | `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
 | `button` | `<<button [[文本\|Passage]]>>...<</button>>` | 与 link 共享事务语义，但由 Host 呈现为按钮 |
-| `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Presentation key |
+| `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Surface key |
 | `slot` | `<<slot "status">>...<</slot>>` | 建立可由 `replace "status"` 定位的稳定内容槽 |
 | `silently` | `<<silently>>...<</silently>>` | 执行正文但抑制其直接输出 |
 | `exit` | `<<exit>>` | 停止当前执行正文 |
@@ -49,9 +49,9 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 > 实例状态完成前，点击后的 Host 输入不会伪造对 `@` 的写回。
 
 `replace` 不接受 CSS selector、HTML 字符串、DOM 节点或终端坐标。固定区域名由每个 Host 映射；
-普通 key 必须先由 `slot` 或 Script Presentation 建立。`slot` 放进 `silently` 后输出会被丢弃，
+普通 key 必须先由 `slot` 或 Script Surface 建立。`slot` 放进 `silently` 后输出会被丢弃，
 因此不会留下可替换目标。
-其他名称按稳定 Presentation key 解析。当前正文支持静态文本与 Core 逻辑节点；嵌套动态 `print`
+其他名称按稳定 Surface key 解析。当前正文支持静态文本与 Core 逻辑节点；嵌套动态 `print`
 的 I18n 身份和动态／异步脚本 Macro 尚未接通，遇到时会报错而不是忽略。
 
 > **书写约束**：结构容器（`if`/  `switch`/  `for`/  `while` 及其子句 `elseif`/  `else`/  `case`/  `default` 与
@@ -168,46 +168,46 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
   `text(path)`
 - `I18n.defaultLocale`、`I18n.locale`、`I18n.export()`
 
-### `Presentation`
+### `Surface`
 
-- `text(text, { key?, styles?, tone?, delay?, heading? })`
+- `text(text, { key?, styles?, color?, delay?, heading? })`
 - `image(resource, { key?, alt?, caption? })`
 - `region(region, children, { key? })`
 - `component(capability, version, properties, fallback, { key? })`
 - `action(label, "dismiss", { key?, role? })`
 - `fragment(...children)`
 
-Twee 的普通正文已经直接编译为 `Presentation Text`，动态普通文本使用 `<<print expression>>`，
-因此写故事正文不需要调用 `Presentation.text()`：
+Twee 的普通正文已经直接编译为 `Surface Text`，动态普通文本使用 `<<print expression>>`，
+因此写故事正文不需要调用 `Surface.text()`：
 
 ```twee
 :: Start
-这是普通 Presentation Text。
+这是普通 Surface Text。
 <<print $hero>>
 ```
 
-`Presentation.text()` 这个 builder 本身属于 Worker ECMAScript，不能放进 Twee Expression。
-需要在正文中穿插带语义样式或 tone 的短文字，直接使用 Core `print` Macro：
+`Surface.text()` 这个 builder 本身属于 Worker ECMAScript，不能放进 Twee Expression。
+需要在正文中穿插带语义样式或 color 的短文字，直接使用 Core `print` Macro：
 
 ```twee
 你获得了 <<print "关键道具" 30 "strong">>。
 <<print $status 40 "emphasis">>
 ```
 
-参数依次是内容、可选 tone、零到多个 style；内容可以是变量或其他 Twee Expression。它是
-Inline Macro，不使用闭合标签。也支持对象形式同时指定 tone、styles、delay 与结构性标题：
+参数依次是内容、可选 color、零到多个 style；内容可以是变量或其他 Twee Expression。它是
+Inline Macro，不使用闭合标签。也支持对象形式同时指定 color、styles、delay 与结构性标题：
 
 ```twee
-<<print $status {tone: 40, styles: ["strong", "code"]}>>
-<<print "两秒后出现" {tone: 20, delay: 2000}>>
+<<print $status {color: 40, styles: ["strong", "code"]}>>
+<<print "两秒后出现" {color: 20, delay: 2000}>>
 <<print "第一页" {heading: 2}>>
 ```
 
-### `print` 的 tone：0..=63 状态色阶
+### `print` 的 color：0..=63 标准调色板
 
-tone 是 0..=63 的色阶，**颜色由 Host 映射**（对齐二进制边界：灰阶 0-7（白`1`→亮灰`2`→浅灰`3`→灰`4`→深灰`5`→暗灰`6`→黑`7`），光谱 8-63（红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`，每色相 8 级）），0 为正文默认（不染色）。必须是 0..=63 的整数，否则报 `macro.print.invalid_arguments`。
+color 是 0..=63 的色阶，**颜色由 Host 映射**（对齐二进制边界：灰阶 0-7（白`1`→亮灰`2`→浅灰`3`→灰`4`→深灰`5`→暗灰`6`→黑`7`），光谱 8-63（红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`，每色相 8 级）），0 为正文默认（不染色）。必须是 0..=63 的整数，否则报 `macro.print.invalid_arguments`。
 Tauri 默认 Renderer 会计算并验证 0..63 的全部映射，游戏作者无需为色阶编写 64 条 CSS；
-只有希望覆盖品牌色时才使用 `[data-tone="N"]`。
+只有希望覆盖品牌色时才使用 `[data-color="N"]`。
 
 ### `print` 的 style：8 个语义字形
 
@@ -217,17 +217,16 @@ Tauri 默认 Renderer 会计算并验证 0..63 的全部映射，游戏作者无
 | `strong` | 重要 | 加粗 |
 | `code` | 代码/标识符/键位 | 等宽 |
 | `quote` | 引文/信件/留言 | 引用块 |
-| `marked` | 需要玩家注意 | 半透明高亮底色；与 tone 文字颜色相互独立 |
+| `marked` | 需要玩家注意 | 半透明高亮底色；与 color 文字颜色相互独立 |
 | `small` | 注释/脚注/次要信息 | 小字 |
 | `inserted` | 新增内容 | 下划线/加号（TUI `++…++`） |
 | `deleted` | 删除/废弃内容 | 删除线（TUI `~~…~~`） |
 
 Tauri 默认主题已经实现全部 8 种字形及 heading 排版；作者 CSS 只负责可选的品牌覆盖。
 
-### `print` 的 delay：延迟浮现
+### `print` 的 delay：可见延迟
 
-delay 是毫秒，`0..=86400000` 的整数。渲染器在此之前保持文本隐藏、到时淡入浮现
-（淡入时长由游戏 `styles/*.css` 的 `--narrava-reveal-duration` 控制，默认 300ms）；
+delay 是毫秒，`0..=86400000` 的整数。Host 在此之前不呈现内容；动画方式不属于协议；
 TUI 把延迟文本停放在 `frame.delayed`，由消费方按 `render_at` 到点显示，终端无平滑
 过渡但时序一致。
 
@@ -245,11 +244,11 @@ Macro.add("statusCard", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
-  handler: () => Presentation.text("状态正常", { styles: ["strong"], tone: 30 }),
+  handler: () => Surface.text("状态正常", { styles: ["strong"], color: 30 }),
 })
 ```
 
-这些 builder 不接受 HTML、CSS class 或 DOM 对象。文本 style、tone、Region、Component 和
+这些 builder 不接受 HTML、CSS class 或 DOM 对象。文本 style、color、Region、Component 和
 fallback 的完整枚举见 `bindings/typescript/narrava.d.ts`。
 
 ## 6. VS Code `.twee` 高亮

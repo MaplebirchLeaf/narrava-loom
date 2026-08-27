@@ -99,7 +99,7 @@ impl MirExecutionFrame {
         .expect("MIR I18n 身份和 placeholder 必须来自同一目录");
         if self.should_emit(MirOutputMode::Visible) {
             self.output
-                .push(PresentationNode::Text(TextValue::from(resolved.text())));
+                .push(SurfaceNode::Text(TextValue::from(resolved.text())));
         }
         for _part in 0..part_count {
             self.advance(passage.instructions().len())?;
@@ -124,14 +124,20 @@ impl MirExecutionFrame {
             BytecodeOperation::Text { text, output, .. } => {
                 if self.should_emit(*output) && !text.trim().is_empty() {
                     self.output
-                        .push(PresentationNode::Text(TextValue::from(text.as_str())));
+                        .push(SurfaceNode::Text(fold_source_line_whitespace(text)));
+                }
+                self.advance(instruction_count)?;
+            }
+            BytecodeOperation::HardBreak { output } => {
+                if self.should_emit(*output) {
+                    self.output.push(SurfaceNode::HardBreak);
                 }
                 self.advance(instruction_count)?;
             }
             BytecodeOperation::PrintLiteral { text, output, .. } => {
                 if self.should_emit(*output) {
                     self.output
-                        .push(PresentationNode::Text(TextValue::from(text.as_str())));
+                        .push(SurfaceNode::Text(TextValue::from(text.as_str())));
                 }
                 self.advance(instruction_count)?;
             }
@@ -142,7 +148,7 @@ impl MirExecutionFrame {
                 let text: TextValue =
                     value_to_text(&value).ok_or(MirExecutionError::InvalidText(expression.span))?;
                 if self.should_emit(*output) {
-                    self.output.push(PresentationNode::Text(text));
+                    self.output.push(SurfaceNode::Text(text));
                 }
                 self.advance(instruction_count)?;
             }
@@ -319,4 +325,27 @@ impl MirExecutionFrame {
         }
         Ok(MirStep::Running)
     }
+}
+
+/// Twee 自然换行是源码排版空白；显式 HardBreak 已在 HIR 中成为独立节点。
+fn fold_source_line_whitespace(text: &str) -> TextValue {
+    let mut output: String = String::with_capacity(text.len());
+    let mut pending_space: bool = false;
+    for character in text.chars() {
+        if matches!(character, '\r' | '\n') {
+            while output.ends_with([' ', '\t']) {
+                output.pop();
+            }
+            pending_space = !output.is_empty();
+        } else if pending_space && matches!(character, ' ' | '\t') {
+            continue;
+        } else {
+            if pending_space {
+                output.push(' ');
+                pending_space = false;
+            }
+            output.push(character);
+        }
+    }
+    TextValue::from(output)
 }

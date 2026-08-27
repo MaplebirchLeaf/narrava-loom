@@ -26,9 +26,9 @@ use crate::{
         HirMacro, HirMacroArguments, HirPassage, HirStory, HirSwitch, HirSwitchCase, HirWhile,
         HirWidget,
     },
-    presentation::{
-        InteractionId, NavigationRole, PresentationInputKind, PresentationNode, PresentationOutput,
-        PresentationRegion, PresentationTarget, PresentationValue, TextStyle, TextTone,
+    protocol::{
+        InteractionId, NavigationRole, RegionId, Surface, SurfaceInputKind, SurfaceNode,
+        SurfaceTarget, SurfaceValue, TextColor, TextStyle,
     },
     runtime::{
         AsyncNativeMacroCallbacks, BodyControl, BodyExecution, LogicNodeError,

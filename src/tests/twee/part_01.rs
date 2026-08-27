@@ -156,7 +156,7 @@ fn groups_declaration_and_text_into_passage() {
 }
 
 #[test]
-fn keeps_markup_like_content_as_text_without_native_presentation_semantics() {
+fn keeps_markup_like_content_as_text_without_native_surface_semantics() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),

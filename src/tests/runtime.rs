@@ -8,7 +8,7 @@ use crate::{
     lir::LirProgram,
     macro_runtime::{MacroHandlerOutcome, MacroLocalScopes, MacroSuspension},
     mir::{MirMacroBody, MirStory},
-    presentation::{PresentationNode, PresentationOutput},
+    protocol::{Surface, SurfaceNode},
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionIdentity, RuntimeMacroBodyContinuation,
         RuntimeMacroBodyContinuationResume, RuntimeMacroContinuation,
@@ -232,8 +232,8 @@ fn with_output_accumulates_nodes_in_order_until_control_stop() {
             } else {
                 crate::runtime::BodyControl::Continue
             };
-            let output: PresentationOutput =
-                PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from(text))]);
+            let output: Surface =
+                Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from(text))]);
             Ok::<crate::runtime::BodyExecution, &'static str>(crate::runtime::BodyExecution {
                 control,
                 output,
@@ -246,11 +246,11 @@ fn with_output_accumulates_nodes_in_order_until_control_stop() {
     assert_eq!(execution.output.len(), 2);
     assert_eq!(
         execution.output.nodes()[0],
-        PresentationNode::Text(TextValue::from("first"))
+        SurfaceNode::Text(TextValue::from("first"))
     );
     assert_eq!(
         execution.output.nodes()[1],
-        PresentationNode::Text(TextValue::from("goto"))
+        SurfaceNode::Text(TextValue::from("goto"))
     );
 }
 
@@ -262,7 +262,7 @@ fn with_output_returns_empty_when_all_nodes_continue() {
         crate::runtime::execute_hir_body_with_output(&body, |_: &HirBodyNode<'_>| {
             Ok::<crate::runtime::BodyExecution, &'static str>(crate::runtime::BodyExecution {
                 control: crate::runtime::BodyControl::Continue,
-                output: PresentationOutput::default(),
+                output: Surface::default(),
             })
         })
         .expect("应正常完成");
@@ -291,7 +291,7 @@ fn with_output_discards_accumulation_on_error() {
             }
             Ok(crate::runtime::BodyExecution {
                 control: crate::runtime::BodyControl::Continue,
-                output: PresentationOutput::default(),
+                output: Surface::default(),
             })
         });
 
@@ -333,9 +333,9 @@ fn runtime_macro_continuation_binds_vm_position_to_the_same_identity() {
             Ok::<_, &'static str>(MacroHandlerOutcome::Complete(RuntimeMacroExecution {
                 execution: BodyExecution {
                     control: BodyControl::Continue,
-                    output: PresentationOutput::from_nodes(vec![PresentationNode::Text(
-                        TextValue::from("异步完成"),
-                    )]),
+                    output: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from(
+                        "异步完成",
+                    ))]),
                 },
                 includes_entered: 2,
             }))

@@ -8,15 +8,15 @@ const story = document.querySelector("nv-story")
 const passageRoot = document.querySelector("nv-passage")
 const passage = document.querySelector("#passage-main")
 const passageHeader = document.querySelector(".passage-header")
-const passageFooter = document.querySelector("#passage-footer-presentation")
+const passageFooter = document.querySelector("#passage-footer-surface")
 const bar = document.querySelector("nv-ui-bar")
 const barToggle = document.querySelector("#ui-bar-toggle")
-const barPresentation = document.querySelector("#bar-presentation")
+const barSurface = document.querySelector("#bar-surface")
 const status = document.querySelector("#status")
 const dialog = document.querySelector("#nv-dialog")
 const dialogTabs = document.querySelector("#dialog-tabs")
 const dialogMessage = document.querySelector("#dialog-message")
-const dialogPresentation = document.querySelector("#dialog-presentation")
+const dialogSurface = document.querySelector("#dialog-surface")
 // 可变运行时状态：作者样式 Blob URL、Resource 路径集合、最近一次更新与侧栏区域缓存。
 const objectUrls = new Set()
 let resourcePaths = new Set()
@@ -30,7 +30,7 @@ function setBarStowed(stowed) {
   barToggle.setAttribute("aria-expanded", String(!stowed))
   barToggle.setAttribute("aria-label", stowed ? "展开侧栏" : "收起侧栏")
   barToggle.title = stowed ? "展开侧栏" : "收起侧栏"
-  reconcile(barPresentation, stowed ? barRegions.stowed : barRegions.expanded)
+  reconcile(barSurface, stowed ? barRegions.stowed : barRegions.expanded)
 }
 
 barToggle.addEventListener("click", () => setBarStowed(!bar.classList.contains("stowed")))
@@ -41,7 +41,7 @@ const help = () => ({
   state: "读取 global、variables、temporary 的安全摘要",
   set: "set(namespace, name, JSON值) 修改 Worker State",
   del: "del(namespace, name) 删除 Worker State 值",
-  current: "读取最近一次 Presentation 更新",
+  current: "读取最近一次 Surface 更新",
   assets: "读取游戏 CSS 与 Resource 清单",
   activate: "activate(interactionId) 触发当前表现中的交互",
   devtools: "开关 WebView DevTools",
@@ -73,11 +73,10 @@ function configureDeveloperMode(enabled) {
   )
 }
 
-/** 按 key 协调 Presentation DTO，保留仍存在的控件与焦点。 */
+/** 按 key 协调 Surface DTO，保留仍存在的控件与焦点。 */
 function render(update) {
   lastUpdate = structuredClone(update)
-  const focusedKey =
-    document.activeElement?.closest?.("[data-presentation-key]")?.dataset.presentationKey
+  const focusedKey = document.activeElement?.closest?.("[data-surface-key]")?.dataset.surfaceKey
   passageRoot.dataset.passage = update.current
   passageRoot.setAttribute("aria-label", update.current)
 
@@ -87,21 +86,23 @@ function render(update) {
     if (node.type === "region") regions.set(node.region, node.nodes)
     else main.push(node)
   }
+  const standardRegions = new Set(["header", "main", "footer", "bar", "bar-stowed", "dialog"])
+  const customRegionNodes = [...regions]
+    .filter(([region]) => !standardRegions.has(region))
+    .flatMap(([, nodes]) => nodes)
   reconcile(passageHeader, regions.get("header") ?? [])
-  reconcile(passage, [...(regions.get("main") ?? []), ...main])
+  // 自定义 Region 没有专用 DOM 插槽时回退到正文，内容不可静默丢失。
+  reconcile(passage, [...(regions.get("main") ?? []), ...main, ...customRegionNodes])
   reconcile(passageFooter, regions.get("footer") ?? [])
   barRegions = {
     expanded: regions.get("bar") ?? [],
     stowed: regions.get("bar-stowed") ?? [],
   }
-  reconcile(
-    barPresentation,
-    bar.classList.contains("stowed") ? barRegions.stowed : barRegions.expanded,
-  )
+  reconcile(barSurface, bar.classList.contains("stowed") ? barRegions.stowed : barRegions.expanded)
   resetDialogTabs()
-  reconcile(dialogPresentation, regions.get("dialog") ?? [])
+  reconcile(dialogSurface, regions.get("dialog") ?? [])
   applyReplacements()
-  if (dialogPresentation.childElementCount > 0) {
+  if (dialogSurface.childElementCount > 0) {
     const panels = buildDialogTabs()
     selectDialogTab(0, panels)
     dialogMessage.hidden = true
@@ -115,14 +116,14 @@ function render(update) {
   const restoredFocus =
     focusedKey === undefined
       ? null
-      : story.querySelector(`[data-presentation-key="${CSS.escape(focusedKey)}"]`)
+      : story.querySelector(`[data-surface-key="${CSS.escape(focusedKey)}"]`)
   if (restoredFocus instanceof HTMLElement) restoredFocus.focus({ preventScroll: true })
   else if (!passageRoot.contains(document.activeElement)) passageRoot.focus({ preventScroll: true })
 }
 
-/** 64 级色阶（0..=63）→ RGB；与 TUI 的 tone_rgb 使用同一映射。
+/** 64 级色阶（0..=63）→ RGB；与 TUI 的 palette_rgb 使用同一映射。
  *  灰阶 0-7（白 1 → 黑 7），光谱 8-63（红 8 → 橙 16 → 黄 24 → 绿 32 → 蓝 40 → 紫 48 → 深紫 63）。 */
-function toneColor(index) {
+function paletteColor(index) {
   if (!(index >= 1)) return ""
   const stops = [
     [1, [255, 255, 255]],
@@ -157,7 +158,7 @@ function toneColor(index) {
 
 /** 重绘前把页签 Panel 里的原节点放回 keyed reconcile 容器。 */
 function resetDialogTabs() {
-  for (const panel of dialogPresentation.querySelectorAll(":scope > .dialog-panel")) {
+  for (const panel of dialogSurface.querySelectorAll(":scope > .dialog-panel")) {
     panel.querySelector(".dialog-heading-source")?.classList.remove("dialog-heading-source")
     panel.replaceWith(...panel.childNodes)
   }
@@ -166,7 +167,7 @@ function resetDialogTabs() {
 
 /** 顶层语义标题划分页签，标题之后的节点归入对应页面。 */
 function buildDialogTabs() {
-  const headings = [...dialogPresentation.children].filter((element) => element.matches("h1, h2"))
+  const headings = [...dialogSurface.children].filter((element) => element.matches("h1, h2"))
   const pageHeadings = headings.length > 0 ? headings : [null]
   const panels = pageHeadings.map(() => {
     const panel = document.createElement("section")
@@ -175,7 +176,7 @@ function buildDialogTabs() {
     return panel
   })
   let panelIndex = 0
-  for (const node of Array.from(dialogPresentation.childNodes)) {
+  for (const node of Array.from(dialogSurface.childNodes)) {
     const headingIndex = headings.indexOf(node)
     if (headingIndex >= 0) {
       panelIndex = headingIndex
@@ -194,7 +195,7 @@ function buildDialogTabs() {
     tab.addEventListener("click", () => selectDialogTab(index, panels))
     dialogTabs.append(tab)
   })
-  dialogPresentation.append(...panels)
+  dialogSurface.append(...panels)
   return panels
 }
 
@@ -211,12 +212,12 @@ function selectDialogTab(activeIndex, panels) {
 /** 以 DTO key 为身份做最小 DOM 更新；key 类型变化时才替换元素。 */
 function reconcile(container, nodes) {
   const existing = new Map(
-    [...container.children].map((element) => [element.dataset.presentationKey, element]),
+    [...container.children].map((element) => [element.dataset.surfaceKey, element]),
   )
   let cursor = container.firstElementChild
   for (const node of nodes) {
     let element = existing.get(node.key)
-    if (element === undefined || element.dataset.presentationType !== nodeDomType(node)) {
+    if (element === undefined || element.dataset.surfaceType !== nodeDomType(node)) {
       const replacement = createNode(node)
       if (element === undefined) element = replacement
       else {
@@ -235,7 +236,9 @@ function reconcile(container, nodes) {
 /** 按 DTO 节点类型创建语义元素骨架并绑定交互事件；字段值由 updateNode 填充。 */
 function createNode(node) {
   let element
-  if (node.type === "image") {
+  if (node.type === "hardBreak") {
+    element = document.createElement("br")
+  } else if (node.type === "image") {
     element = document.createElement("figure")
     element.append(document.createElement("img"), document.createElement("figcaption"))
   } else if (node.type === "component") {
@@ -250,16 +253,16 @@ function createNode(node) {
     }
   } else if (node.type === "container") {
     element = document.createElement("div")
-    element.className = "presentation-slot"
+    element.className = "surface-slot"
   } else if (node.type === "replace") {
     element = document.createElement("div")
     element.hidden = true
-    element.dataset.presentationReplace = ""
+    element.dataset.surfaceReplace = ""
   } else if (node.type === "action") {
     element = document.createElement("button")
     element.type = "button"
     element.addEventListener("click", () => {
-      if (element.dataset.presentationAction === "dismiss") dialog.close()
+      if (element.dataset.surfaceAction === "dismiss") dialog.close()
     })
   } else if (node.type === "checkbox" || node.type === "radiobutton") {
     element = document.createElement("input")
@@ -313,8 +316,8 @@ function createNode(node) {
   } else {
     element = document.createElement(node.type === "styledText" ? styledTag(node) : "span")
   }
-  element.dataset.presentationKey = node.key
-  element.dataset.presentationType = nodeDomType(node)
+  element.dataset.surfaceKey = node.key
+  element.dataset.surfaceType = nodeDomType(node)
   return element
 }
 
@@ -344,21 +347,21 @@ function styledTag(node) {
 /** 把一个 DTO 的可变字段同步到已经创建的语义元素。 */
 function updateNode(element, node) {
   if (node.type === "text") {
-    element.className = "presentation-text"
+    element.className = "surface-text"
     element.textContent = node.text
     return
   }
   if (node.type === "styledText") {
-    element.className = `presentation-text ${node.styles.map((style) => `text-${style}`).join(" ")}`
-    element.dataset.tone = String(node.tone)
-    if (node.tone > 0) {
-      element.style.setProperty("--narrava-tone", toneColor(node.tone))
+    element.className = `surface-text ${node.styles.map((style) => `text-${style}`).join(" ")}`
+    element.dataset.color = String(node.color)
+    if (node.color > 0) {
+      element.style.setProperty("--narrava-color", paletteColor(node.color))
     } else {
-      element.style.removeProperty("--narrava-tone")
+      element.style.removeProperty("--narrava-color")
     }
     element.textContent = node.text
     if (node.delay > 0) {
-      // 延迟浮现：等待 delay 毫秒后淡入（时长由 --narrava-reveal-duration 控制，默认 300ms）。
+      // Protocol 只约束可见时机；本 Host 在到期后选择 300ms 淡入。
       element.style.animation = `narrava-reveal var(--narrava-reveal-duration, 300ms) ${node.delay}ms both`
     } else {
       element.style.animation = ""
@@ -402,7 +405,7 @@ function updateNode(element, node) {
   }
   if (node.type === "action") {
     element.textContent = node.label
-    element.dataset.presentationAction = node.action
+    element.dataset.surfaceAction = node.action
     element.dataset.actionRole = node.role
     return
   }
@@ -440,29 +443,27 @@ function finiteNumber(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
-/** 把 Core 的 Region 或 Presentation key 替换映射到 Tauri 页面。 */
+/** 把 Core 的 Region 或 Surface key 替换映射到 Tauri 页面。 */
 function applyReplacements() {
   const regions = new Map([
     ["header", passageHeader],
     ["main", passage],
     ["footer", passageFooter],
-    ["bar", barPresentation],
-    ["dialog", dialogPresentation],
+    ["bar", barSurface],
+    ["dialog", dialogSurface],
   ])
-  for (const command of story.querySelectorAll("[data-presentation-replace]")) {
+  for (const command of story.querySelectorAll("[data-surface-replace]")) {
     const target =
       command.dataset.targetKind === "region"
-        ? regions.get(command.dataset.targetValue)
-        : story.querySelector(
-            `[data-presentation-key="${CSS.escape(command.dataset.targetValue)}"]`,
-          )
+        ? (regions.get(command.dataset.targetValue) ?? passage)
+        : story.querySelector(`[data-surface-key="${CSS.escape(command.dataset.targetValue)}"]`)
     if (!(target instanceof Element) || target === command)
       throw new Error("replace 目标不存在或形成自引用")
     target.replaceChildren(...command.childNodes)
   }
 }
 
-/** 把交互 ID 送回 Worker 执行；成功后渲染并返回新的 Presentation 更新。 */
+/** 把交互 ID 送回 Worker 执行；成功后渲染并返回新的 Surface 更新。 */
 async function activate(interaction) {
   setBusy(true, "正在处理行动…")
   try {
@@ -485,7 +486,7 @@ async function submitInput(interaction, value) {
 function setBusy(isBusy, message = "") {
   story.setAttribute("aria-busy", String(isBusy))
   for (const control of story.querySelectorAll(
-    "button[data-interaction], button[data-presentation-action], input[data-interaction]",
+    "button[data-interaction], button[data-surface-action], input[data-interaction]",
   )) {
     control.disabled = isBusy
   }
@@ -497,8 +498,8 @@ function showError(error) {
   const code = typeof error?.code === "string" ? error.code : "tauri_host.unknown"
   const message = typeof error?.message === "string" ? error.message : String(error)
   resetDialogTabs()
-  reconcile(dialogPresentation, [])
-  dialogPresentation.hidden = true
+  reconcile(dialogSurface, [])
+  dialogSurface.hidden = true
   dialogTabs.replaceChildren()
   const errorTab = document.createElement("button")
   errorTab.type = "button"
@@ -540,7 +541,7 @@ function resourceUrl(path) {
   return `narrava-resource://localhost/${encoded}`
 }
 
-/** 并行取得只读资产、开发开关和首个 Presentation，再进行首次渲染。 */
+/** 并行取得只读资产、开发开关和首个 Surface，再进行首次渲染。 */
 async function start() {
   try {
     const [assets, developer, update] = await Promise.all([

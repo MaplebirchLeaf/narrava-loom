@@ -49,7 +49,7 @@ fn widget_body_with_visible_text_restores_the_outer_frame() {
         &mut story,
         &mut locals,
     )
-    .expect("可见文本由 Presentation 负责，不应破坏 Widget 逻辑帧");
+    .expect("可见文本由 Surface 负责，不应破坏 Widget 逻辑帧");
 
     assert_eq!(control, BodyControl::Continue);
     assert_eq!(locals.args(), Some([Value::string("outer")].as_slice()));
@@ -338,7 +338,7 @@ fn vm_pending_macro_can_run_through_the_shared_runtime_dispatcher() {
     );
     assert!(matches!(
         frame.output().nodes(),
-        [PresentationNode::Text(text)]
+        [SurfaceNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("宏输出")
     ));
 }
@@ -364,8 +364,8 @@ impl NativeMacroCallbacks<&'static str, LogicStoryContext> for TestNativeMacroCa
             .expect("Native Handler 应通过受控 Context 写入 State");
         Ok(BodyExecution {
             control: BodyControl::Continue,
-            output: crate::presentation::PresentationOutput::from_nodes(vec![
-                PresentationNode::Text(TextValue::from("Native")),
+            output: crate::protocol::Surface::from_nodes(vec![
+                SurfaceNode::Text(TextValue::from("Native")),
             ]),
         })
     }
@@ -408,7 +408,7 @@ fn runtime_dispatches_a_sync_native_macro_through_binding_callbacks() {
 
     assert_eq!(
         execution.output.nodes(),
-        &[PresentationNode::Text(TextValue::from("Native"))]
+        &[SurfaceNode::Text(TextValue::from("Native"))]
     );
     drop(runtime);
     assert_eq!(state.count, Value::Number(7.0));
@@ -514,8 +514,8 @@ impl AsyncNativeMacroCallbacks<&'static str, LogicStoryContext, u32>
         match self.result {
             TestAsyncNativeResult::Complete => Ok(MacroHandlerOutcome::Complete(BodyExecution {
                 control: BodyControl::Continue,
-                output: crate::presentation::PresentationOutput::from_nodes(vec![
-                    PresentationNode::Text(TextValue::from("立即完成")),
+                output: crate::protocol::Surface::from_nodes(vec![
+                    SurfaceNode::Text(TextValue::from("立即完成")),
                 ]),
             })),
             TestAsyncNativeResult::Pending(handle) => Ok(MacroHandlerOutcome::Pending(handle)),
@@ -632,11 +632,11 @@ impl MacroLifecycleCallbacks for AsyncNativeAfterLifecycle {
         &mut self,
         name: &str,
         arguments: &[Value],
-        mut output: crate::presentation::PresentationOutput,
-    ) -> Result<crate::presentation::PresentationOutput, Diagnostic> {
+        mut output: crate::protocol::Surface,
+    ) -> Result<crate::protocol::Surface, Diagnostic> {
         assert_eq!(name, "wait");
         assert_eq!(arguments, &[Value::Number(7.0)]);
-        output.push(PresentationNode::Text(TextValue::from("!")));
+        output.push(SurfaceNode::Text(TextValue::from("!")));
         Ok(output)
     }
 }

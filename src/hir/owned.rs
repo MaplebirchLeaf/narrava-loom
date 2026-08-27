@@ -20,6 +20,7 @@ pub struct OwnedHirBodyNode {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnedHirBodyKind {
     Text(String),
+    HardBreak,
     Print(OwnedHirPrint),
     Silently(Vec<OwnedHirBodyNode>),
     If(OwnedHirIf),
@@ -164,6 +165,7 @@ impl OwnedHirBodyKind {
     fn as_hir(&self) -> HirBodyKind<'_> {
         match self {
             Self::Text(text) => HirBodyKind::Text(text),
+            Self::HardBreak => HirBodyKind::HardBreak,
             Self::Print(value) => HirBodyKind::Print(value.as_hir()),
             Self::Silently(body) => HirBodyKind::Silently(borrow_body(body)),
             Self::If(value) => HirBodyKind::If(value.as_hir()),

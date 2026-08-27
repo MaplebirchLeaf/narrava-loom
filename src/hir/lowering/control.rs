@@ -13,7 +13,7 @@ use super::super::{
 use super::{
     LoweringContext,
     assignment::lower_action_expression,
-    lower_body_node, lower_body_nodes, lower_macro_arguments, lower_required_expression,
+    lower_body_nodes, lower_macro_arguments, lower_required_expression,
     source_map::{for_argument_location, macro_argument_span, node_location, parse_for_expression},
     syntax::{find_top_level_keyword, first_word, trim_start_index, trimmed_slice},
 };
@@ -155,7 +155,11 @@ pub(super) fn lower_if<'source>(
 
     for child in &macro_node.body {
         let BodyNodeKind::Macro(clause) = &child.kind else {
-            main_body.push(lower_body_node(passage, child, context)?);
+            main_body.extend(lower_body_nodes(
+                passage,
+                std::slice::from_ref(child),
+                context,
+            )?);
             continue;
         };
         match clause.name {
@@ -177,7 +181,11 @@ pub(super) fn lower_if<'source>(
                     .with_location(node_location(passage, child.span)),
                 });
             }
-            _ => main_body.push(lower_body_node(passage, child, context)?),
+            _ => main_body.extend(lower_body_nodes(
+                passage,
+                std::slice::from_ref(child),
+                context,
+            )?),
         }
     }
 

@@ -25,7 +25,7 @@
 - facade 只保留共享类型、依赖和稳定导出；实现放入按领域动作命名的子模块。跨子模块所需的
   内部入口使用 `pub(super)`，不得为了拆文件扩大公共 API。
 - 平台 Binding 与 Host Renderer 不进入 Core 模块。
-- 新增公开类型前先确认它属于 Core、Host API、Presentation、Binding 或 Host Renderer 中哪一层。
+- 新增公开类型前先确认它属于 Core、Host API、Surface、Binding 或 Host Renderer 中哪一层。
 - 局部变量显式标注类型；迭代闭包参数和类型已经完全清楚的字段访问不重复标注。
 - 可见性从私有开始：跨子模块使用 `pub(super)`，crate 内共享使用 `pub(crate)`，只有宿主需要的契约使用 `pub`。
 - 错误使用结构化类型；不得用日志替代错误返回，也不得在失败路径留下部分状态。

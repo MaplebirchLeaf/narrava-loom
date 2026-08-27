@@ -35,7 +35,7 @@ use crate::{
         register_story_widgets, register_widget,
     },
     mir::{MirMacroBody, MirStory},
-    presentation::{InteractionId, PresentationNode, PresentationOutput},
+    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionError,
         RuntimeExecutionIdentity, RuntimeMacroBodyContinuation, RuntimeMacroExecution,

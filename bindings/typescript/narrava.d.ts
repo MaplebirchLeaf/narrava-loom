@@ -30,7 +30,7 @@ declare global {
     | "deleted"
   /** 64 级色阶（0..=63）：灰阶 0-7（白1→亮灰2→浅灰3→灰4→深灰5→暗灰6→黑7），
    *  光谱 8-63（红8→橙16→黄24→绿32→蓝40→紫48→深紫56→63）；0 为正文默认。 */
-  type NarravaTextTone =
+  type NarravaTextColor =
     | 0
     | 1
     | 2
@@ -95,28 +95,30 @@ declare global {
     | 61
     | 62
     | 63
-  /** 语义展示区域：作者用 Presentation.region 把内容放进 Host 的稳定容器。 */
-  type NarravaPresentationRegion = "header" | "main" | "footer" | "bar" | "bar-stowed" | "dialog"
-  /** Presentation 树节点；由 Presentation.* 工厂创建，Host 只按语义渲染。 */
-  interface NarravaPresentationNode {
-    readonly __narravaPresentation: string
+  /** 语义展示区域：作者用 Surface.region 把内容放进 Host 的稳定容器。 */
+  type NarravaRegionId = string
+  /** Surface 树节点；由 Surface.* 工厂创建，Host 只按语义渲染。 */
+  interface NarravaSurfaceNode {
+    readonly __narravaSurface: string
     readonly key?: string
   }
   /** 作者侧语义展示 API：只表达语义，颜色与字形由 Host 决定。 */
-  interface NarravaPresentation {
-    /** 普通文本；styles 为语义字形，tone 为 0..=63 状态色阶。 */
+  interface NarravaSurface {
+    /** 普通文本；styles 为语义字形，color 为 0..=63 标准调色板索引。 */
     text(
       text: string,
       options?: {
         readonly key?: string
         readonly styles?: readonly NarravaTextStyle[]
-        readonly tone?: NarravaTextTone
-        /** 显示延迟（毫秒）：渲染器在此之前保持文本不可见，到时淡入浮现。 */
+        readonly color?: NarravaTextColor
+        /** 可见延迟（毫秒）；具体动画由 Host 决定。 */
         readonly delay?: number
         /** 结构性标题级别（1 或 2）：用于页面划分（如弹窗页签的页面标题），不是字形样式。 */
         readonly heading?: 1 | 2
       },
-    ): NarravaPresentationNode
+    ): NarravaSurfaceNode
+    /** 结构化硬换行。 */
+    hardBreak(options?: { readonly key?: string }): NarravaSurfaceNode
     /** 引用 Resource 逻辑路径的图片；alt/caption 可选。 */
     image(
       resource: string,
@@ -125,21 +127,21 @@ declare global {
         readonly alt?: string
         readonly caption?: string
       },
-    ): NarravaPresentationNode
-    /** 把子节点放入指定语义区域（header/main/footer/bar/dialog）。 */
+    ): NarravaSurfaceNode
+    /** 把子节点放入开放逻辑区域；内建值包括 main/header/footer/bar/bar-stowed/dialog。 */
     region(
-      region: NarravaPresentationRegion,
-      children: readonly (string | NarravaPresentationNode)[],
+      region: NarravaRegionId,
+      children: readonly (string | NarravaSurfaceNode)[],
       options?: { readonly key?: string },
-    ): NarravaPresentationNode
+    ): NarravaSurfaceNode
     /** 请求 Host 渲染能力组件（capability + version）；Host 不认识时显示 fallback。 */
     component(
       capability: string,
       version: number,
       properties: Readonly<Record<string, NarravaData>>,
-      fallback: readonly (string | NarravaPresentationNode)[],
+      fallback: readonly (string | NarravaSurfaceNode)[],
       options?: { readonly key?: string },
-    ): NarravaPresentationNode
+    ): NarravaSurfaceNode
     /** 可交互按钮；action 目前仅支持 dismiss（关闭打开的 Dialog）。 */
     action(
       label: string,
@@ -148,11 +150,11 @@ declare global {
         readonly key?: string
         readonly role?: "default" | "primary" | "secondary" | "danger"
       },
-    ): NarravaPresentationNode
+    ): NarravaSurfaceNode
     /** 组合多个节点为一段分组，常用于宏一次返回多段内容。 */
-    fragment(...children: readonly (string | NarravaPresentationNode)[]): NarravaPresentationNode
+    fragment(...children: readonly (string | NarravaSurfaceNode)[]): NarravaSurfaceNode
   }
-  const Presentation: NarravaPresentation
+  const Surface: NarravaSurface
 
   /** State.extend 的批量写入统计：新增与覆盖的键数量。 */
   interface NarravaImportReport {
@@ -196,7 +198,7 @@ declare global {
     readonly execution: "sync" | "async"
     readonly handler: (
       call: NarravaMacroCall,
-    ) => NarravaData | NarravaPresentationNode | Promise<NarravaData | NarravaPresentationNode>
+    ) => NarravaData | NarravaSurfaceNode | Promise<NarravaData | NarravaSurfaceNode>
   }
   /** 作者宏注册表：脚本用 Macro.add 定义的新宏可在 .twee 中调用。 */
   interface NarravaMacro {

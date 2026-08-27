@@ -29,7 +29,7 @@ mod resource_bridge;
 mod state_bridge;
 
 /// 注入到 Boa 的绑定启动脚本：定义 State/Macro/Event/Host/Engine/Story/Save/Resource/
-/// I18n/Presentation 全局 API，并把跨语言数据经 `__narrava*` 桥接函数交还给 Rust。
+/// I18n/Surface 全局 API，并把跨语言数据经 `__narrava*` 桥接函数交还给 Rust。
 const BOOTSTRAP: &str = r#"
 (() => {
   const functions = new Map();
@@ -210,31 +210,32 @@ const BOOTSTRAP: &str = r#"
     get locale() { return configuration.locale },
     export: () => configuration.i18nExport,
   });
-  const presentationNode = (kind, value) => Object.freeze({ __narravaPresentation: kind, ...value });
-  globalThis.Presentation = Object.freeze({
-    text: (text, options = {}) => presentationNode("text", {
+  const surfaceNode = (kind, value) => Object.freeze({ __narravaSurface: kind, ...value });
+  globalThis.Surface = Object.freeze({
+    text: (text, options = {}) => surfaceNode("text", {
       text: String(text),
       key: options.key,
       styles: Object.freeze([...(options.styles ?? [])]),
-      tone: options.tone ?? 0,
+      color: options.color ?? 0,
       delay: options.delay,
       heading: options.heading,
     }),
-    image: (resource, options = {}) => presentationNode("image", {
+    hardBreak: (options = {}) => surfaceNode("hard-break", { key: options.key }),
+    image: (resource, options = {}) => surfaceNode("image", {
       resource: String(resource), key: options.key,
       alt: options.alt ?? "", caption: options.caption,
     }),
-    region: (region, children, options = {}) => presentationNode("region", {
+    region: (region, children, options = {}) => surfaceNode("region", {
       region, key: options.key, children: Object.freeze([...children]),
     }),
-    component: (capability, version, properties, fallback, options = {}) => presentationNode("component", {
+    component: (capability, version, properties, fallback, options = {}) => surfaceNode("component", {
       capability, version, properties: Object.freeze({ ...properties }),
       children: Object.freeze([...fallback]), key: options.key,
     }),
-    action: (label, action, options = {}) => presentationNode("action", {
+    action: (label, action, options = {}) => surfaceNode("action", {
       label: String(label), action, role: options.role ?? "default", key: options.key,
     }),
-    fragment: (...children) => presentationNode("fragment", { children: Object.freeze(children) }),
+    fragment: (...children) => surfaceNode("fragment", { children: Object.freeze(children) }),
   });
   globalThis.__narrava = {
     engine: null, save: null, events, logs, macros,

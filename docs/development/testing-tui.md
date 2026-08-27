@@ -2,15 +2,15 @@
 
 ## 当前定位
 
-`hosts/narrava-loom-tui` 是 Core Presentation 的终端适配器与阻塞式输入前端，用来证明同一
+`hosts/narrava-loom-tui` 是 Core Surface 的终端适配器与阻塞式输入前端，用来证明同一
 语义输出和交互协议不依赖 DOM、CSS 或 Tauri。它不使用 alternate screen，普通标准输入／输出
 即可操作，也便于管道测试和嵌入其他 Native Host。
 
 当前适配器负责：
 
 - 把 Header、Main、Footer、Bar、BarStowed、Dialog 映射为六组终端文本；
-- 保留稳定 Presentation Key，并执行 Region／Key `replace`；
-- 把文本样式降级为 Markdown 风格的终端表示，并按 `TextTone` 色阶染色；
+- 保留稳定 Surface Key，并执行 Region／Key `replace`；
+- 把文本样式降级为 Markdown 风格的终端表示，并按 `TextColor` 色阶染色；
 - 把带 `delay` 的 StyledText 停放在 `frame.delayed`，由消费方用 `render_at(elapsed)` 到点显示；
 - 把图片降级为包含替代文字和 Resource 路径的文本；
 - 为未知 Component 显示语义 fallback；
@@ -54,7 +54,7 @@ cargo tree -p narrava-loom-tui
 cargo run --locked -p narrava-loom-tui --example visual_demo
 ```
 
-它会把同一份 `PresentationOutput` 打印为 Header、Main、Bar、Dialog 和操作列表，并等待玩家
+它会把同一份 `Surface` 打印为 Header、Main、Bar、Dialog 和操作列表，并等待玩家
 输入。输入 `1` 切换复选框，`set 2 游侠` 修改文本框，输入 `3` 激活“返回大厅”；`help` 显示
 命令，`redraw` 重绘，`quit` 退出。示例同时建立
 `status` slot，再用 `replace` 替换，因此 Main 中应只出现“替换完成”，不出现“等待替换”。
@@ -67,7 +67,7 @@ printf 'help\n1\nset 2 游侠\n3\nquit\n' | cargo run --locked -p narrava-loom-t
 
 ## 修改 Renderer 时必须覆盖什么
 
-每次新增或修改 Presentation 节点映射，至少检查：
+每次新增或修改 Surface 节点映射，至少检查：
 
 1. 节点进入正确的终端区域，而不是全部落入 Main；
 2. 同一个稳定 Key 被替换时不增加重复 Block；

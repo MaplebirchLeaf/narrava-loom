@@ -1,14 +1,14 @@
 //! Narrava Core 与 Tauri IPC 之间的最小 Host Binding。
 //!
 //! `TauriHost` 把 Core 的 Engine 事务（start/activate/input/save/语言/开发者能力）
-//! 投递给常驻 Runtime Worker 线程，并把语义 Presentation 转换为 WebView 的 JSON DTO。
+//! 投递给常驻 Runtime Worker 线程，并把语义 Surface 转换为 WebView 的 JSON DTO。
 
 mod assets;
 mod config;
 mod developer;
 mod package;
-mod presentation_bridge;
-mod presentation_dto;
+mod protocol_bridge;
+mod protocol_dto;
 mod resource_protocol;
 mod save_io;
 mod script_runtime;
@@ -50,9 +50,7 @@ use narrava_loom_core::{
         prepare_argument_values, print, radiobutton, replace, slot, textbox,
     },
     mir::MirStory,
-    presentation::{
-        InteractionId, PresentationNode, PresentationOutput, PresentationRegion, PresentationValue,
-    },
+    protocol::{InteractionId, RegionId, Surface, SurfaceNode, SurfaceValue},
     resource::ResourceCatalog,
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionIdentity,
@@ -70,13 +68,13 @@ use serde::Serialize;
 pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
 pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
 pub use developer::DeveloperValueDto;
-pub use presentation_dto::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
+pub use protocol_dto::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
 use developer::{developer_delete, developer_disabled, developer_set, developer_state};
 use package::{
     load_language_packages, load_release_config_text, load_release_package, load_tauri_config,
 };
-use presentation_dto::convert;
+use protocol_dto::convert;
 use save_io::{process_save, process_save_operation};
 
 type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
@@ -768,7 +766,7 @@ fn run_worker(
                 if let Ok(update) = &result {
                     presented = Some(update.clone());
                 }
-                // save 失败不撤销已渲染的 Presentation：把错误记入日志，保持
+                // save 失败不撤销已渲染的 Surface：把错误记入日志，保持
                 // presented 与 WebView 一致，避免后续点击报 host.unknown_interaction。
                 if result.is_ok()
                     && let Err(error) = process_save(
@@ -835,7 +833,7 @@ fn run_worker(
                                 })?;
                             Ok(BodyExecution {
                                 control,
-                                output: PresentationOutput::default(),
+                                output: Surface::default(),
                             })
                         },
                         |phase, context, _state| emit_passage_event(&script, phase, context),
@@ -909,7 +907,7 @@ fn run_worker(
                 if let Ok(update) = &result {
                     presented = Some(update.clone());
                 }
-                // save 失败不撤销已渲染的 Presentation：把错误记入日志，保持
+                // save 失败不撤销已渲染的 Surface：把错误记入日志，保持
                 // presented 与 WebView 一致，避免后续点击报 host.unknown_interaction。
                 if result.is_ok()
                     && let Err(error) = process_save(
@@ -939,13 +937,13 @@ fn run_worker(
                     let id: InteractionId = InteractionId::parse(interaction).map_err(|error| {
                         HostErrorDto::new("tauri_host.input_interaction", error.to_string())
                     })?;
-                    let binding = previous.presentation().input_binding(&id).ok_or_else(|| {
+                    let binding = previous.surface().input_binding(&id).ok_or_else(|| {
                         HostErrorDto::new(
                             "tauri_host.unknown_input",
-                            "输入身份未出现在上一份 Presentation 中",
+                            "输入身份未出现在上一份 Surface 中",
                         )
                     })?;
-                    let semantic: PresentationValue = json_to_presentation_value(&value)?;
+                    let semantic: SurfaceValue = json_to_surface_value(&value)?;
                     if !binding.accepts(&semantic) {
                         return Err(HostErrorDto::new(
                             "tauri_host.input_value",
@@ -1127,8 +1125,8 @@ fn append_sidebar_regions<'hir, 'source>(
     sequence: &mut u64,
 ) -> Result<(), HostErrorDto> {
     for (name, region) in [
-        (BAR_PASSAGE, PresentationRegion::Bar),
-        (BAR_STOWED_PASSAGE, PresentationRegion::BarStowed),
+        (BAR_PASSAGE, RegionId::bar()),
+        (BAR_STOWED_PASSAGE, RegionId::bar_stowed()),
     ] {
         if !story.has(name) {
             continue;
@@ -1178,7 +1176,7 @@ fn append_sidebar_regions<'hir, 'source>(
             &mut view_story,
             bytecode,
         )?;
-        update.append_region(region, rendered.presentation().clone());
+        update.append_region(region, rendered.surface().clone());
         *sequence = sequence.saturating_add(1);
     }
     Ok(())
@@ -1309,29 +1307,27 @@ fn worker_stopped() -> HostErrorDto {
     HostErrorDto::new("tauri_host.worker_stopped", "Narrava Runtime Worker 已停止")
 }
 
-/// 把 Input 的 JSON 值转换为 Core PresentationValue（非有限数拒绝）。
-fn json_to_presentation_value(
-    value: &serde_json::Value,
-) -> Result<PresentationValue, HostErrorDto> {
+/// 把 Input 的 JSON 值转换为 Core SurfaceValue（非有限数拒绝）。
+fn json_to_surface_value(value: &serde_json::Value) -> Result<SurfaceValue, HostErrorDto> {
     match value {
-        serde_json::Value::Null => Ok(PresentationValue::Null),
-        serde_json::Value::Bool(value) => Ok(PresentationValue::Boolean(*value)),
+        serde_json::Value::Null => Ok(SurfaceValue::Null),
+        serde_json::Value::Bool(value) => Ok(SurfaceValue::Boolean(*value)),
         serde_json::Value::Number(value) => value
             .as_f64()
             .filter(|value: &f64| value.is_finite())
-            .map(PresentationValue::Number)
+            .map(SurfaceValue::Number)
             .ok_or_else(|| HostErrorDto::new("tauri_host.input_value", "输入数值超出范围")),
-        serde_json::Value::String(value) => Ok(PresentationValue::Text(value.clone())),
+        serde_json::Value::String(value) => Ok(SurfaceValue::Text(value.clone())),
         serde_json::Value::Array(values) => values
             .iter()
-            .map(json_to_presentation_value)
+            .map(json_to_surface_value)
             .collect::<Result<Vec<_>, _>>()
-            .map(PresentationValue::List),
+            .map(SurfaceValue::List),
         serde_json::Value::Object(values) => values
             .iter()
-            .map(|(name, value)| Ok((name.clone(), json_to_presentation_value(value)?)))
+            .map(|(name, value)| Ok((name.clone(), json_to_surface_value(value)?)))
             .collect::<Result<std::collections::BTreeMap<_, _>, HostErrorDto>>()
-            .map(PresentationValue::Map),
+            .map(SurfaceValue::Map),
     }
 }
 
@@ -1731,14 +1727,14 @@ fn find_hir_macro_in_body<'hir, 'source>(
     })
 }
 
-/// 把脚本宏返回的 Core 值转成 Presentation 输出执行；无 Presentation 时退化为纯文本。
+/// 把脚本宏返回的 Core 值转成 Surface 输出执行；无 Surface 时退化为纯文本。
 fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
-    let output: PresentationOutput = match presentation_bridge::output(value)? {
+    let output: Surface = match protocol_bridge::output(value)? {
         Some(output) => output,
         None => {
-            let mut output = PresentationOutput::default();
+            let mut output = Surface::default();
             if let Some(text) = value_to_text(value) {
-                output.push(PresentationNode::Text(text));
+                output.push(SurfaceNode::Text(text));
             }
             output
         }
@@ -1802,10 +1798,10 @@ mod release_tests {
 
     /// 示例项目经 Host 全流程后，语义节点（region/image/component/replace/表单）到达 DTO。
     #[test]
-    fn example_presentation_builder_reaches_tauri_semantic_dtos() {
+    fn example_surface_builder_reaches_tauri_semantic_dtos() {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let root = format!(
-            "target/test-projects/presentation-example-{}",
+            "target/test-projects/surface-example-{}",
             std::process::id()
         );
         let root_path = Path::new(&root);
@@ -1845,7 +1841,7 @@ mod release_tests {
             .nodes
             .iter()
             .find_map(|node| match node {
-                HostNodeDto::Navigation { id, target, .. } if target == "PresentationGallery" => {
+                HostNodeDto::Navigation { id, target, .. } if target == "SurfaceGallery" => {
                     Some(id)
                 }
                 _ => None,
@@ -1858,7 +1854,7 @@ mod release_tests {
             gallery
                 .nodes
                 .iter()
-                .any(|node| matches!(node, HostNodeDto::Region { region: "bar", .. }))
+                .any(|node| matches!(node, HostNodeDto::Region { region, .. } if region == "bar"))
         );
         assert!(gallery.nodes.iter().any(|node| matches!(
             node,
@@ -1980,13 +1976,13 @@ mod release_tests {
         assert!(replace_gallery.nodes.iter().any(|node| matches!(
             node,
             HostNodeDto::Replace { target, nodes, .. }
-                if matches!(target, super::HostReplaceTargetDto::Region("header"))
+                if matches!(target, super::HostReplaceTargetDto::Region(region) if region == "header")
                     && nodes.iter().any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("替换后的页眉")))
         )));
         fs::remove_dir_all(root_path).unwrap();
     }
 
-    /// 作者能力（存档/读档/日志/语言）与 print Macro 的 tone/style/delay 语义到达 DTO。
+    /// 作者能力（存档/读档/日志/语言）与 print Macro 的 color/style/delay 语义到达 DTO。
     #[test]
     fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -2106,7 +2102,7 @@ mod release_tests {
             .expect("save 失败不应阻塞导航");
         assert_eq!(hall.current, "Hall");
 
-        // Twee 内 Presentation：print Macro 的 tone/style 组合与对象形式
+        // Twee 内 Surface：print Macro 的 color/style 组合与对象形式
         let text_gallery_id = hall
             .nodes
             .iter()
@@ -2118,13 +2114,13 @@ mod release_tests {
         let text_gallery = host.activate(text_gallery_id).unwrap();
         assert!(text_gallery.nodes.iter().any(|node| matches!(
             node,
-            HostNodeDto::StyledText { text, tone, styles, .. }
-                if text.contains("正面加粗") && *tone == 32 && styles.contains(&"strong")
+            HostNodeDto::StyledText { text, color, styles, .. }
+                if text.contains("正面加粗") && *color == 32 && styles.contains(&"strong")
         )));
         assert!(text_gallery.nodes.iter().any(|node| matches!(
             node,
-            HostNodeDto::StyledText { text, tone, styles, .. }
-                if text.contains("警告对象形式") && *tone == 24 && styles.contains(&"code")
+            HostNodeDto::StyledText { text, color, styles, .. }
+                if text.contains("警告对象形式") && *color == 24 && styles.contains(&"code")
         )));
         assert!(text_gallery.nodes.iter().any(|node| matches!(
             node,
@@ -2132,7 +2128,7 @@ mod release_tests {
         )));
         assert!(text_gallery.nodes.iter().any(|node| matches!(
             node,
-            HostNodeDto::StyledText { text, tone, .. } if text.contains("63") && *tone == 63
+            HostNodeDto::StyledText { text, color, .. } if text.contains("63") && *color == 63
         )));
 
         // 弹窗页签：dialog 区域按结构性标题（heading: 2）划分页面
@@ -2302,7 +2298,7 @@ mod release_tests {
         assert!(
             update.nodes.iter().any(|node| matches!(
                 node,
-                HostNodeDto::Region { region: "bar", nodes, .. } if !nodes.is_empty()
+                HostNodeDto::Region { region, nodes, .. } if region == "bar" && !nodes.is_empty()
             )),
             "启动更新必须包含游戏作者定义的 Bar 内容"
         );
@@ -2364,7 +2360,7 @@ mod release_tests {
         let html: &str = include_str!("../frontend/index.html");
         let javascript: &str = include_str!("../frontend/main.js");
 
-        assert!(!html.contains("id=\"host-dialog-presentation\""));
+        assert!(!html.contains("id=\"host-dialog-surface\""));
         assert!(!javascript.contains("openHostPanel"));
         assert!(!javascript.contains("buildSavePanel"));
         assert!(!javascript.contains("buildLanguagePanel"));
@@ -2463,18 +2459,18 @@ mod release_tests {
 
     /// Host 默认主题覆盖全部语义字形，作者无需为基本可读性另写 CSS。
     #[test]
-    fn host_theme_styles_every_presentation_text_semantic() {
+    fn host_theme_styles_every_surface_text_semantic() {
         let css: &str = include_str!("../frontend/main.css");
 
         for style in [
             "emphasis", "strong", "code", "quote", "marked", "small", "inserted", "deleted",
         ] {
             assert!(
-                css.contains(&format!(".presentation-text.text-{style}")),
+                css.contains(&format!(".surface-text.text-{style}")),
                 "默认主题缺少 {style} 语义字形"
             );
         }
-        assert!(css.contains("color: var(--narrava-tone, var(--narrava-positive));"));
-        assert!(css.contains("color: var(--narrava-tone, var(--narrava-negative));"));
+        assert!(css.contains("color: var(--narrava-color, var(--narrava-positive));"));
+        assert!(css.contains("color: var(--narrava-color, var(--narrava-negative));"));
     }
 }

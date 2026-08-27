@@ -328,14 +328,14 @@ pub(super) fn commit_halted_transaction<'hir, 'source, LifecycleError>(
         ));
     }
 
-    let mut passage_output: PresentationOutput = frame.into_output();
+    let mut passage_output: Surface = frame.into_output();
     story.record_navigation(passage_output.has_navigation());
     let current: StoryHistoryEntry<'hir, 'source> = progress.current;
     if !current.passage().has_tag("exit") {
         if !passage_output.has_navigation()
             && let Some(target) = story.safe_return_target()
         {
-            passage_output.push(PresentationNode::SafeReturn {
+            passage_output.push(SurfaceNode::SafeReturn {
                 id: InteractionId::from_key(format!("safe-return:{}", target.name)),
                 target: target.name.to_owned(),
             });

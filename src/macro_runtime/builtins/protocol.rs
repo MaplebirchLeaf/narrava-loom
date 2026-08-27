@@ -1,4 +1,4 @@
-//! 产生宿主无关 Presentation 语义的 Core Macro。
+//! 产生宿主无关 Surface 语义的 Core Macro。
 
 use std::fmt::Write;
 
@@ -12,10 +12,10 @@ use crate::{
     macro_runtime::{
         CapturedMacroLocals, MacroInteraction, MacroInteractionError, MacroInteractions,
     },
-    presentation::{
-        HeadingLevel, InputGroupId, InteractionId, NavigationRole, PresentationInputBinding,
-        PresentationInputKind, PresentationNode, PresentationOutput, PresentationRegion,
-        PresentationTarget, PresentationValue, TextStyle, TextTone,
+    protocol::{
+        HeadingLevel, InputGroupId, InteractionId, NavigationRole, RegionId, Surface,
+        SurfaceInputBinding, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue, TextColor,
+        TextStyle,
     },
     runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity},
 };
@@ -25,10 +25,10 @@ use crate::{
 /// 单参数（无样式选项）输出纯 Text，与编译器固有 `<<print expression>>` 一致；
 /// 带选项时由 `print` 直接构造 StyledText：
 /// - `value`：内容，可来自变量或其他 Twee Expression；
-/// - `options?`：可为 tone 字符串（随后可跟多个 style 字符串），或对象
-///   `{ tone, styles, delay, heading }`；
-/// - `tone`：0..=63 的状态色阶；`styles`：8 个语义字形之一；
-/// - `delay`：毫秒，渲染器在此之前隐藏文本、到时浮现（见 `PresentationNode::StyledText`）；
+/// - `options?`：可为 color 字符串（随后可跟多个 style 字符串），或对象
+///   `{ color, styles, delay, heading }`；
+/// - `color`：0..=63 的标准调色板索引；`styles`：8 个语义字形之一；
+/// - `delay`：毫秒，渲染器在此之前不呈现文本，不约定到期后的动画；
 /// - `heading`：1 或 2 的结构性标题级别，用于页面划分（如弹窗页签标题），不是字形样式。
 pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
     let Some(value) = arguments.first() else {
@@ -40,37 +40,37 @@ pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
         None | Some(Value::Undefined | Value::Null) => PrintOptions::default(),
         Some(Value::Object(options)) => print_options(&options.snapshot())?,
         Some(value) => {
-            let tone: TextTone = print_tone(value)?;
+            let color: TextColor = print_color(value)?;
             let styles: Vec<TextStyle> = arguments[2..]
                 .iter()
                 .map(print_style)
                 .collect::<Result<Vec<_>, _>>()?;
             PrintOptions {
                 styles,
-                tone,
+                color,
                 delay: None,
                 heading: None,
             }
         }
     };
-    let node: PresentationNode = if options.styles.is_empty()
-        && options.tone == TextTone::DEFAULT
+    let node: SurfaceNode = if options.styles.is_empty()
+        && options.color == TextColor::DEFAULT
         && options.delay.is_none()
         && options.heading.is_none()
     {
-        PresentationNode::Text(text)
+        SurfaceNode::Text(text)
     } else {
-        PresentationNode::StyledText {
+        SurfaceNode::StyledText {
             text,
             styles: options.styles,
-            tone: options.tone,
+            color: options.color,
             delay: options.delay,
             heading: options.heading,
         }
     };
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: PresentationOutput::from_nodes(vec![node]),
+        output: Surface::from_nodes(vec![node]),
     })
 }
 
@@ -78,7 +78,7 @@ pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
 #[derive(Default)]
 struct PrintOptions {
     styles: Vec<TextStyle>,
-    tone: TextTone,
+    color: TextColor,
     delay: Option<u64>,
     heading: Option<HeadingLevel>,
 }
@@ -97,7 +97,7 @@ fn print_options(properties: &[(String, Value)]) -> Result<PrintOptions, Diagnos
                     .map(print_style)
                     .collect::<Result<Vec<_>, _>>()?;
             }
-            "tone" => options.tone = print_tone(value)?,
+            "color" => options.color = print_color(value)?,
             "delay" => options.delay = Some(print_delay(value)?),
             "heading" => options.heading = Some(print_heading(value)?),
             name => return Err(print_error(&format!("`print` 不认识 options.{name}"))),
@@ -150,26 +150,26 @@ fn print_style(value: &Value) -> Result<TextStyle, Diagnostic> {
     }
 }
 
-/// 解析 `tone`：0..=63 的整数状态色阶；不接收颜色或语义字符串名。
-fn print_tone(value: &Value) -> Result<TextTone, Diagnostic> {
+/// 解析 `color`：0..=63 的整数标准色号；不接收颜色或语义字符串名。
+fn print_color(value: &Value) -> Result<TextColor, Diagnostic> {
     let Value::Number(index) = value else {
-        return Err(print_error("`print` tone 必须是 0 到 63 的整数"));
+        return Err(print_error("`print` color 必须是 0 到 63 的整数"));
     };
     let index: f64 = *index;
     if !index.is_finite() || !(0.0..=63.0).contains(&index) || index.fract() != 0.0 {
-        return Err(print_error("`print` tone 必须是 0 到 63 的整数"));
+        return Err(print_error("`print` color 必须是 0 到 63 的整数"));
     }
-    TextTone::from_index(index as u8)
-        .ok_or_else(|| print_error("`print` tone 必须是 0 到 63 的整数"))
+    TextColor::from_index(index as u8)
+        .ok_or_else(|| print_error("`print` color 必须是 0 到 63 的整数"))
 }
 
 fn text_name(value: &Value) -> Result<String, Diagnostic> {
     let Value::String(value) = value else {
-        return Err(print_error("TextStyle 与 TextTone 必须是文字"));
+        return Err(print_error("TextStyle 与 TextColor 必须是文字"));
     };
     value
         .to_unicode_string()
-        .ok_or_else(|| print_error("TextStyle 与 TextTone 必须是有效 Unicode"))
+        .ok_or_else(|| print_error("TextStyle 与 TextColor 必须是有效 Unicode"))
 }
 
 /// 构造 `print` 参数错误的统一稳定 Diagnostic。
@@ -257,7 +257,7 @@ fn prepare_link(
 fn link_output(prepared: PreparedLink, role: NavigationRole) -> BodyExecution {
     BodyExecution {
         control: BodyControl::Continue,
-        output: PresentationOutput::from_nodes(vec![PresentationNode::Navigation {
+        output: Surface::from_nodes(vec![SurfaceNode::Navigation {
             id: prepared.id,
             label: prepared.label,
             target: prepared.target,
@@ -329,15 +329,15 @@ pub fn checkbox(
     identity: RuntimeExecutionIdentity,
     occurrence: usize,
 ) -> Result<BodyExecution, Diagnostic> {
-    let unchecked: PresentationValue = input_value(unchecked)?;
-    let checked: PresentationValue = input_value(checked)?;
+    let unchecked: SurfaceValue = input_value(unchecked)?;
+    let checked: SurfaceValue = input_value(checked)?;
     let selected: bool = input_value(current)? == checked;
     input_output(
         receiver,
         "checkbox",
         identity,
         occurrence,
-        PresentationInputKind::Checkbox {
+        SurfaceInputKind::Checkbox {
             unchecked,
             checked,
             selected,
@@ -353,7 +353,7 @@ pub fn radiobutton(
     identity: RuntimeExecutionIdentity,
     occurrence: usize,
 ) -> Result<BodyExecution, Diagnostic> {
-    let value: PresentationValue = input_value(value)?;
+    let value: SurfaceValue = input_value(value)?;
     let selected: bool = input_value(current)? == value;
     let group: InputGroupId = InputGroupId::from_key(format!(
         "radio-group:{}:{}:{receiver}",
@@ -364,7 +364,7 @@ pub fn radiobutton(
         "radiobutton",
         identity,
         occurrence,
-        PresentationInputKind::Radio {
+        SurfaceInputKind::Radio {
             group,
             value,
             selected,
@@ -386,7 +386,7 @@ pub fn textbox(
         "textbox",
         identity,
         occurrence,
-        PresentationInputKind::Text { value: text },
+        SurfaceInputKind::Text { value: text },
     )
 }
 
@@ -396,7 +396,7 @@ fn input_output(
     control: &str,
     identity: RuntimeExecutionIdentity,
     occurrence: usize,
-    kind: PresentationInputKind,
+    kind: SurfaceInputKind,
 ) -> Result<BodyExecution, Diagnostic> {
     if receiver.starts_with('@') {
         return Err(input_error(
@@ -412,9 +412,9 @@ fn input_output(
     ));
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: PresentationOutput::from_nodes(vec![PresentationNode::Input {
+        output: Surface::from_nodes(vec![SurfaceNode::Input {
             id,
-            binding: PresentationInputBinding {
+            binding: SurfaceInputBinding {
                 receiver: receiver.to_owned(),
                 kind,
             },
@@ -423,28 +423,28 @@ fn input_output(
 }
 
 /// 把运行时值递归转换为可呈现的输入值；函数与命名空间被拒绝。
-fn input_value(value: &Value) -> Result<PresentationValue, Diagnostic> {
+fn input_value(value: &Value) -> Result<SurfaceValue, Diagnostic> {
     match value {
-        Value::Undefined | Value::Null => Ok(PresentationValue::Null),
-        Value::Boolean(value) => Ok(PresentationValue::Boolean(*value)),
-        Value::Number(value) if value.is_finite() => Ok(PresentationValue::Number(*value)),
+        Value::Undefined | Value::Null => Ok(SurfaceValue::Null),
+        Value::Boolean(value) => Ok(SurfaceValue::Boolean(*value)),
+        Value::Number(value) if value.is_finite() => Ok(SurfaceValue::Number(*value)),
         Value::Number(_) => Err(input_error("输入值必须是有限数值")),
         Value::String(value) => value
             .to_unicode_string()
-            .map(PresentationValue::Text)
+            .map(SurfaceValue::Text)
             .ok_or_else(|| input_error("输入值必须是有效 Unicode")),
         Value::Array(values) => values
             .snapshot()
             .iter()
             .map(input_value)
             .collect::<Result<Vec<_>, _>>()
-            .map(PresentationValue::List),
+            .map(SurfaceValue::List),
         Value::Object(values) => values
             .snapshot()
             .iter()
             .map(|(name, value)| Ok((name.clone(), input_value(value)?)))
             .collect::<Result<std::collections::BTreeMap<_, _>, Diagnostic>>()
-            .map(PresentationValue::Map),
+            .map(SurfaceValue::Map),
         Value::Callable(_) | Value::ScriptCallable(_) | Value::Namespace(_) => {
             Err(input_error("输入值不能包含函数或命名空间"))
         }
@@ -461,31 +461,31 @@ fn input_error(message: &str) -> Diagnostic {
 }
 
 /// 把容器正文包装为跨 Host 的区域或稳定 key 替换语义。
-pub fn replace(target: &str, content: PresentationOutput) -> Result<BodyExecution, Diagnostic> {
+pub fn replace(target: &str, content: Surface) -> Result<BodyExecution, Diagnostic> {
     let target: &str = target.trim();
     if target.is_empty() {
         return Err(replace_error("`replace` 目标不能为空"));
     }
-    let target: PresentationTarget = match target {
-        "header" => PresentationTarget::Region(PresentationRegion::Header),
-        "main" => PresentationTarget::Region(PresentationRegion::Main),
-        "footer" => PresentationTarget::Region(PresentationRegion::Footer),
-        "bar" => PresentationTarget::Region(PresentationRegion::Bar),
-        "bar-stowed" => PresentationTarget::Region(PresentationRegion::BarStowed),
-        "dialog" => PresentationTarget::Region(PresentationRegion::Dialog),
-        key => PresentationTarget::Key(
-            crate::presentation::PresentationKey::parse(key)
+    let target: SurfaceTarget = match target {
+        "header" => SurfaceTarget::Region(RegionId::header()),
+        "main" => SurfaceTarget::Region(RegionId::main()),
+        "footer" => SurfaceTarget::Region(RegionId::footer()),
+        "bar" => SurfaceTarget::Region(RegionId::bar()),
+        "bar-stowed" => SurfaceTarget::Region(RegionId::bar_stowed()),
+        "dialog" => SurfaceTarget::Region(RegionId::dialog()),
+        key => SurfaceTarget::Key(
+            crate::protocol::SurfaceKey::parse(key)
                 .map_err(|_| replace_error("`replace` key 无效"))?,
         ),
     };
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: PresentationOutput::from_nodes(vec![PresentationNode::Replace { target, content }]),
+        output: Surface::from_nodes(vec![SurfaceNode::Replace { target, content }]),
     })
 }
 
 /// 建立一个由稳定 key 标识的普通内容槽，供后续 `replace` 跨 Host 定位。
-pub fn slot(key: &str, content: PresentationOutput) -> Result<BodyExecution, Diagnostic> {
+pub fn slot(key: &str, content: Surface) -> Result<BodyExecution, Diagnostic> {
     let key: &str = key.trim();
     if key.is_empty() {
         return Err(slot_error("`slot` key 不能为空"));
@@ -493,11 +493,10 @@ pub fn slot(key: &str, content: PresentationOutput) -> Result<BodyExecution, Dia
     if matches!(key, "header" | "main" | "footer" | "bar" | "dialog") {
         return Err(slot_error("`slot` key 不能使用保留的 Region 名称"));
     }
-    let key = crate::presentation::PresentationKey::parse(key)
-        .map_err(|_| slot_error("`slot` key 无效"))?;
-    let mut output = PresentationOutput::default();
+    let key = crate::protocol::SurfaceKey::parse(key).map_err(|_| slot_error("`slot` key 无效"))?;
+    let mut output = Surface::default();
     output
-        .push_keyed(key, PresentationNode::Container { content })
+        .push_keyed(key, SurfaceNode::Container { content })
         .map_err(|error| slot_error(&error.to_string()))?;
     Ok(BodyExecution {
         control: BodyControl::Continue,

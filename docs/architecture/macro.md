@@ -156,7 +156,7 @@ Argument List 已建立独立解析结果，并按调用源码顺序保存 Expre
 
 参数准备层已把上述结果转换为有序 `Value`：Expression 使用 Runtime 注入的求值函数，Interaction Target 对 scripts Handler 表现为只有 `label`、`target` 两个字段的对象，不附加 `kind`。求值函数不固定为只读入口，后续可接入可写 Context、随机源或异步调度；失败时仍保留对应 Expression 的宏参数原文偏移。
 
-`InteractionTarget` 可由 `link`、`button`、`choice` 等交互 Macro 复用。Parser 只校验完整外壳、`|` 分隔符和两侧非空内容，并保留原文供后续求值。Core `link()` 把单个 Interaction Target 转换为 `PresentationNode::Navigation`；容器入口 `link_with_body()` 还会用同一 ID 原子登记延迟正文、目标与捕获值，不创建平台控件。Host 激活后由 `HostApi::take_macro_interaction()`、`advance_macro_interaction_mir()` 与 `drive_macro_interaction()` 恢复正文并进入目标 Passage（见 [/docs/architecture/host-presentation.md](/docs/architecture/host-presentation.md)）。
+`InteractionTarget` 可由 `link`、`button`、`choice` 等交互 Macro 复用。Parser 只校验完整外壳、`|` 分隔符和两侧非空内容，并保留原文供后续求值。Core `link()` 把单个 Interaction Target 转换为 `SurfaceNode::Navigation`；容器入口 `link_with_body()` 还会用同一 ID 原子登记延迟正文、目标与捕获值，不创建平台控件。Host 激活后由 `HostApi::take_macro_interaction()`、`advance_macro_interaction_mir()` 与 `drive_macro_interaction()` 恢复正文并进入目标 Passage（见 [/docs/architecture/protocol.md](/docs/architecture/protocol.md)）。
 
 `label` 与 `target` 已支持两种动态写法：整段 `$`、`_`、`@` 变量引用，以及普通文本中的 `${expression}`。两者共用 Runtime 注入的 Expression 求值函数和 Narrava 受控标量文本转换；`undefined`、`null`、Boolean、Number、String 可转换，Array、Object、Function 不会被隐式文本化。普通裸文本仍按字面值处理，因此 `Map` 不会被误读为 global。解析结果分别保存 `label`、`target` 在 Macro 参数原文中的字节起点，用于映射解析、求值和文本转换错误。
 
@@ -198,7 +198,7 @@ Widget 可以直接创建和修改 `@` 变量；离开当前调用后自动删�
 
 每条独立执行链拥有自己的 `MacroLocalScopes`，不能把一个全局作用域栈共享给同时等待的异步调用。Runtime continuation 将暂停位置、执行身份和局部域绑定到原执行链。
 
-Handler 通过 `MacroInvocation` 接收名称、原始参数、准备后的 `Value` 参数、正文和 Runtime 借出的 Context。正文用 `MacroInvocationBody::Inline`／`Container` 明确区分，不使用含义模糊的可选值。Context 的具体能力由 Runtime 决定，因此 Handler 可以获得受控的 State、Story 或 Presentation 写入能力，但不会取得这些领域的所有权。
+Handler 通过 `MacroInvocation` 接收名称、原始参数、准备后的 `Value` 参数、正文和 Runtime 借出的 Context。正文用 `MacroInvocationBody::Inline`／`Container` 明确区分，不使用含义模糊的可选值。Context 的具体能力由 Runtime 决定，因此 Handler 可以获得受控的 State、Story 或 Surface 写入能力，但不会取得这些领域的所有权。
 
 Handler 返回 `MacroHandlerOutcome::Complete(output)` 或 `MacroHandlerOutcome::Pending(handle)`。Pending handle 由调度器定义：Rust 内置实现可映射执行任务，scripts 桥可映射 JavaScript Promise；公共契约本身不依赖某一种异步模型。Handler 自身的错误继续使用外层 `Result` 表达，完成、暂停与失败不会混为同一种状态。
 
@@ -210,7 +210,7 @@ Macro 控制器可以为经过 Definitions 分派的名称注册简短的 `befor
 → before（可修改 @args）
 → Handler
 → after（可修改本次 Macro 输出）
-→ 合并进 Passage Presentation
+→ 合并进 Passage Surface
 ```
 
 `before` 看到的 `@args` 与 Handler 接收的参数必须是同一组值；修改完成后 Handler 才开始执行。`after` 只拥有本次 Macro 的独立输出缓冲区，可以检查、替换、追加或过滤其中的语义节点，不能修改后续 Twee 节点或其他 Macro 已产生的输出。
@@ -225,7 +225,7 @@ Macro 控制器可以为经过 Definitions 分派的名称注册简短的 `befor
 
 同步入口 `execute_prepared_sync_macro_with_lifecycle()` 已固定 `before → Handler → after` 顺序，并接收有序 Hook 序列。调用帧在 before 前建立，before 通过受控 `args_mut()` 修改的同一组值会成为 Handler 参数和 `@args`；多个 after 依次接收上一个 Hook 修改后的输出。任一阶段失败都会清理当前帧并保留明确阶段；Async Definition 由独立的可暂停入口处理。
 
-`RuntimeExecutionContext` 已通过最小 `MacroLifecycleCallbacks` 边界接入 Widget 和同步 Native 调用。before 在 Handler 前修改当前 `@args`，after 在成功后转换该 Macro 的隔离 `PresentationOutput`；任一 Hook 失败都会清理调用帧并丢弃本次半成品输出。`if`、`set`、`for` 等编译器固有节点不进入这条回调路径。订阅控制器已经实现该边界；Runtime 不直接保存 Rust 闭包、JavaScript Function 或平台对象。
+`RuntimeExecutionContext` 已通过最小 `MacroLifecycleCallbacks` 边界接入 Widget 和同步 Native 调用。before 在 Handler 前修改当前 `@args`，after 在成功后转换该 Macro 的隔离 `Surface`；任一 Hook 失败都会清理调用帧并丢弃本次半成品输出。`if`、`set`、`for` 等编译器固有节点不进入这条回调路径。订阅控制器已经实现该边界；Runtime 不直接保存 Rust 闭包、JavaScript Function 或平台对象。
 
 同步 Native／scripts Definition 已通过 `NativeMacroCallbacks` 进入统一 Runtime 分派。Binding 接收不透明 Handler 身份、结构化 `MacroInvocation` 和受控 `MacroLogicContext`，可以读取准备后的参数、访问 State／Story／`@` 能力并返回 `BodyExecution`。输出在成功前保持隔离；缺少 Binding Adapter、正文形态不符、参数失败或 Handler Diagnostic 都会显式返回错误。
 
@@ -265,7 +265,7 @@ VM 级恢复现已实现：`RuntimeMacroContinuation::resume()` 复用 `resume_m
 
 调用子系统已按职责拆分：`macro_runtime/call.rs` 只保留 Definition 查询、参数准备和首次 Handler 执行；`call/diagnostic.rs` 管准备错误映射；`call/lifecycle.rs` 管同步 before／Handler／after；`call/suspension.rs` 管执行身份、暂停对象和恢复生命周期。父模块继续原名重导出公开 API。
 
-内置逻辑 Macro 使用 `MacroLogicContext` 组合能力，而不是直接取得 State 或 Story 所有权。该 Context 借用 `WritableEvaluationContext`、`MacroStoryAccess` 和当前 `MacroLocalScopes`：Expression 的 global、setup、`$`、`_` 读写交给 State，`@` 与 `@args` 交给 Macro Local；`has/include/goto` 只通过 Story 请求接口调用。Presentation 与模组能力不进入逻辑 Context。
+内置逻辑 Macro 使用 `MacroLogicContext` 组合能力，而不是直接取得 State 或 Story 所有权。该 Context 借用 `WritableEvaluationContext`、`MacroStoryAccess` 和当前 `MacroLocalScopes`：Expression 的 global、setup、`$`、`_` 读写交给 State，`@` 与 `@args` 交给 Macro Local；`has/include/goto` 只通过 Story 请求接口调用。Surface 与模组能力不进入逻辑 Context。
 
 每层 `MacroLocalScopes` 现在是独立调用帧：包含局部绑定与完整的 `@args` 位置实参。嵌套调用退出后恢复外层帧。
 
@@ -304,7 +304,7 @@ Runtime 逻辑分派现已直接识别 HIR 的 `Run`、`Set`、`Unset`、`Includ
 
 小写 `<<for target range start to end>>` 与可选的 `step amount` 也已接入。Range 包含终点；起点、终点和步长只求值一次。默认步长根据方向选择 `1` 或 `-1`，显式步长必须是有限、非零且朝终点移动的 Number。
 
-Text 与 `silently` 已进入 Host-neutral Presentation 边界。`link` 已有 Navigation 语义，并能将容器正文原子登记到延迟动作所有权容器；Host 已能在同一检查点内执行同步或异步正文并导航。正文输出不做瞬时呈现，主要用于 State 与逻辑副作用；`button` 复用同一延迟正文语义，只要求 Host 呈现为按钮角色。`slot`／`replace` 已提供跨 Host 的稳定 Key 区域替换；`print` Macro 的 `delay` 选项由 Host 在渲染时延迟浮现（见 [/docs/reference/api-and-syntax.md](/docs/reference/api-and-syntax.md)）。`choice` 后续只有在形成不同于 `link` 的稳定跨 Host 语义时才扩展。
+Text 与 `silently` 已进入 Host-neutral Surface 边界。`link` 已有 Navigation 语义，并能将容器正文原子登记到延迟动作所有权容器；Host 已能在同一检查点内执行同步或异步正文并导航。正文输出不做瞬时呈现，主要用于 State 与逻辑副作用；`button` 复用同一延迟正文语义，只要求 Host 呈现为按钮角色。`slot`／`replace` 已提供跨 Host 的稳定 Key 区域替换；`print` Macro 的 `delay` 只规定内容在到期前不可见，不规定动画（见 [/docs/reference/api-and-syntax.md](/docs/reference/api-and-syntax.md)）。`choice` 后续只有在形成不同于 `link` 的稳定跨 Host 语义时才扩展。
 
 ## Capture
 
@@ -312,7 +312,7 @@ Text 与 `silently` 已进入 Host-neutral Presentation 边界。`link` 已有 N
 
 `capture` 创建独立的捕获域，使 `link`、计时器等延迟正文仍能读取捕获时的绑定。`MacroLocalScopes::capture()` 已能从当前可见作用域只复制明确列出的名称，并通过 `CapturedMacroLocals::into_scopes()` 建立不携带原 `@args` 的隔离执行帧。未列出的或捕获时不存在的 `@` 变量不会被隐式保存；对象值保留 Narrava 引用身份，不进行递归复制。
 
-`MacroInteractions` 是延迟 Macro 动作的 Core 所有者。每项 `MacroInteraction` 保存导航目标、HIR 容器正文与捕获值，并以 Presentation 的 `InteractionId` 定位。它提供明确的 `add`、`update`、`get`、`has`、`del`、`take` 与 `clear`：重复 `add` 不会覆盖旧动作，玩家激活使用 `take` 一次性取得所有权，避免同一链接正文重复执行。该容器不进入 State、Save 或平台 Presentation 数据。
+`MacroInteractions` 是延迟 Macro 动作的 Core 所有者。每项 `MacroInteraction` 保存导航目标、HIR 容器正文与捕获值，并以 Surface 的 `InteractionId` 定位。它提供明确的 `add`、`update`、`get`、`has`、`del`、`take` 与 `clear`：重复 `add` 不会覆盖旧动作，玩家激活使用 `take` 一次性取得所有权，避免同一链接正文重复执行。该容器不进入 State、Save 或平台 Surface 数据。
 
 HIR 已使用专用 Capture 节点保存有序且不重复的局部变量名与正文。参数至少包含一个变量，只接受以 `@` 开头的 Macro 局部变量。MIR 会把词法外层 Capture 的名称直接附到其内部动态 Macro 指令，VM 暂停时可读取这些名称；跳转不会遗留运行时捕获栈。Engine 分派时通过 `EngineMirMacroInvocation` 一次性交付 HIR 调用、执行身份与当前 Macro Local 形成的捕获值。Widget 递归执行也已在 Runtime 内维护词法捕获名称，并通过 `MacroInvocation.captures` 把 Value 快照交给嵌套 Native／scripts Macro。
 
@@ -333,8 +333,8 @@ HIR 已使用专用 Capture 节点保存有序且不重复的局部变量名与�
 | `include` | Runtime 已实现 | 否 | 在当前位置执行目标 Passage |
 | `goto` | Runtime 已实现 | 否 | 请求导航并结束当前 Passage 后续执行 |
 | `print` | Runtime 已实现 | 否 | 求值 Expression 或输出反引号字面文本，产生语义 Text |
-| `silently` | Runtime 已实现 | 否 | 保留正文副作用与控制信号，丢弃本块 Presentation 输出 |
-| `slot` | Runtime 与 Host 已实现 | 否 | 建立带稳定 Presentation Key 的普通内容容器 |
+| `silently` | Runtime 已实现 | 否 | 保留正文副作用与控制信号，丢弃本块 Surface 输出 |
+| `slot` | Runtime 与 Host 已实现 | 否 | 建立带稳定 Surface Key 的普通内容容器 |
 | `replace` | Runtime 与 Host 已实现 | 否 | 替换固定 Region 或已存在的稳定 Key |
 | `link` | Runtime 与 Host 已实现 | 否 | 产生导航；激活后执行容器正文并进入目标 Passage |
 | `button` | Runtime 与 Host 已实现 | 否 | 使用按钮角色呈现同一延迟正文导航语义 |

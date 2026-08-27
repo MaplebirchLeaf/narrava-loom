@@ -19,7 +19,7 @@ pub mod macro_runtime;
 pub mod mir;
 pub mod nar;
 pub mod package_zip;
-pub mod presentation;
+pub mod protocol;
 pub mod release;
 pub mod resource;
 pub mod runtime;

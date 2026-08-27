@@ -11,10 +11,10 @@ fn print_builtin_builds_styled_text_from_flat_twee_arguments() {
 
     assert_eq!(
         execution.output.nodes(),
-        [PresentationNode::StyledText {
+        [SurfaceNode::StyledText {
             text: TextValue::from("关键道具"),
             styles: vec![TextStyle::Strong],
-            tone: TextTone::GREEN,
+            color: TextColor::GREEN,
             delay: None,
             heading: None,
         }]
@@ -28,17 +28,17 @@ fn print_builtin_without_options_emits_plain_text() {
 
     assert_eq!(
         execution.output.nodes(),
-        [PresentationNode::Text(TextValue::from("普通文本"))]
+        [SurfaceNode::Text(TextValue::from("普通文本"))]
     );
 }
 
 #[test]
 fn print_builtin_tone_error_names_the_current_macro() {
     let error: Diagnostic =
-        print(&[Value::string("x"), Value::Number(64.0)]).expect_err("超出色阶范围的 tone 应报错");
+        print(&[Value::string("x"), Value::Number(64.0)]).expect_err("超出色阶范围的 color 应报错");
 
     assert_eq!(error.code, "macro.print.invalid_arguments");
-    assert!(error.message.contains("`print` tone"));
+    assert!(error.message.contains("`print` color"));
     assert!(!error.message.contains("`text`"));
 }
 
@@ -47,7 +47,7 @@ fn print_builtin_object_form_parses_delay_and_validates_range() {
     let execution: BodyExecution = print(&[
         Value::string("延迟文本"),
         Value::object(vec![
-            (String::from("tone"), Value::Number(24.0)),
+            (String::from("color"), Value::Number(24.0)),
             (
                 String::from("styles"),
                 Value::array(vec![Value::string("strong")]),
@@ -59,10 +59,10 @@ fn print_builtin_object_form_parses_delay_and_validates_range() {
 
     assert_eq!(
         execution.output.nodes(),
-        [PresentationNode::StyledText {
+        [SurfaceNode::StyledText {
             text: TextValue::from("延迟文本"),
             styles: vec![TextStyle::Strong],
-            tone: TextTone::YELLOW,
+            color: TextColor::YELLOW,
             delay: Some(800),
             heading: None,
         }]
@@ -96,12 +96,12 @@ fn print_builtin_object_form_parses_heading_and_validates_level() {
 
     assert_eq!(
         execution.output.nodes(),
-        [PresentationNode::StyledText {
+        [SurfaceNode::StyledText {
             text: TextValue::from("第一页"),
             styles: vec![TextStyle::Strong],
-            tone: TextTone::DEFAULT,
+            color: TextColor::DEFAULT,
             delay: None,
-            heading: Some(crate::presentation::HeadingLevel::H2),
+            heading: Some(crate::protocol::HeadingLevel::H2),
         }]
     );
 
@@ -130,7 +130,7 @@ fn link_builtin_converts_prepared_interaction_into_navigation_semantics() {
     assert_eq!(execution.control, BodyControl::Continue);
     assert!(matches!(
         execution.output.nodes(),
-        [PresentationNode::Navigation { id, label, target, .. }]
+        [SurfaceNode::Navigation { id, label, target, .. }]
             if !id.as_str().is_empty()
                 && label.as_units() == TextValue::from("进入森林").as_units()
                 && target == "Forest"
@@ -163,7 +163,7 @@ fn dynamic_fragment_execution_accumulates_markup_and_text_output() {
     assert_eq!(execution.output.len(), 1);
     assert_eq!(
         execution.output.nodes()[0],
-        PresentationNode::Text(TextValue::from("你好，${$count}！"))
+        SurfaceNode::Text(TextValue::from("你好，${$count}！"))
     );
 }
 
@@ -191,7 +191,7 @@ fn public_fragment_api_parses_and_executes() {
     assert_eq!(execution.output.len(), 1);
     assert_eq!(
         execution.output.nodes()[0],
-        PresentationNode::Text(TextValue::from("你好，${$count}！"))
+        SurfaceNode::Text(TextValue::from("你好，${$count}！"))
     );
 }
 
@@ -227,10 +227,8 @@ fn print_is_the_only_explicit_text_evaluation_boundary() {
         .output
         .nodes()
         .iter()
-        .map(|node: &PresentationNode| match node {
-            PresentationNode::Text(text) => {
-                text.to_unicode_string().expect("测试文本不含孤立代理项")
-            }
+        .map(|node: &SurfaceNode| match node {
+            SurfaceNode::Text(text) => text.to_unicode_string().expect("测试文本不含孤立代理项"),
             _ => panic!("print 示例只应产生 Text"),
         })
         .collect();
@@ -271,10 +269,8 @@ fn silently_discards_text_but_keeps_state_changes() {
         .output
         .nodes()
         .iter()
-        .map(|node: &PresentationNode| match node {
-            PresentationNode::Text(text) => {
-                text.to_unicode_string().expect("测试文本应为有效 Unicode")
-            }
+        .map(|node: &SurfaceNode| match node {
+            SurfaceNode::Text(text) => text.to_unicode_string().expect("测试文本应为有效 Unicode"),
             _ => panic!("silently 示例只应产生 Text"),
         })
         .collect();
@@ -324,11 +320,11 @@ fn passage_execution_accumulates_text_and_print_output() {
     assert_eq!(execution.output.len(), 2);
     assert_eq!(
         execution.output.nodes()[0],
-        PresentationNode::Text(TextValue::from("你好，"))
+        SurfaceNode::Text(TextValue::from("你好，"))
     );
     assert_eq!(
         execution.output.nodes()[1],
-        PresentationNode::Text(TextValue::from("42"))
+        SurfaceNode::Text(TextValue::from("42"))
     );
 }
 
@@ -367,7 +363,7 @@ fn passage_output_survives_stop_control_and_is_cleared_between_executions() {
     assert_eq!(first.output.len(), 1);
     assert_eq!(
         first.output.nodes()[0],
-        PresentationNode::Text(TextValue::from("before"))
+        SurfaceNode::Text(TextValue::from("before"))
     );
 
     let second: BodyExecution = runtime
@@ -399,23 +395,23 @@ fn input_builtins_create_state_bound_semantic_controls() {
     let text_output: BodyExecution =
         textbox("$name", &Value::string("Maple"), identity, 3).expect("textbox 应接受文字状态");
 
-    let PresentationNode::Input { binding, .. } = &checkbox_output.output.nodes()[0] else {
+    let SurfaceNode::Input { binding, .. } = &checkbox_output.output.nodes()[0] else {
         panic!("checkbox 应产生 Input")
     };
     assert_eq!(binding.receiver, "$enabled");
     assert_eq!(
         binding.kind,
-        PresentationInputKind::Checkbox {
-            unchecked: PresentationValue::Boolean(false),
-            checked: PresentationValue::Boolean(true),
+        SurfaceInputKind::Checkbox {
+            unchecked: SurfaceValue::Boolean(false),
+            checked: SurfaceValue::Boolean(true),
             selected: true,
         }
     );
     assert!(matches!(
         radio_output.output.nodes()[0],
-        PresentationNode::Input {
-            binding: crate::presentation::PresentationInputBinding {
-                kind: PresentationInputKind::Radio { selected: true, .. },
+        SurfaceNode::Input {
+            binding: crate::protocol::SurfaceInputBinding {
+                kind: SurfaceInputKind::Radio { selected: true, .. },
                 ..
             },
             ..
@@ -423,9 +419,9 @@ fn input_builtins_create_state_bound_semantic_controls() {
     ));
     assert!(matches!(
         text_output.output.nodes()[0],
-        PresentationNode::Input {
-            binding: crate::presentation::PresentationInputBinding {
-                kind: PresentationInputKind::Text { .. },
+        SurfaceNode::Input {
+            binding: crate::protocol::SurfaceInputBinding {
+                kind: SurfaceInputKind::Text { .. },
                 ..
             },
             ..

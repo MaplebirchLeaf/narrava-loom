@@ -12,9 +12,9 @@
 ## 我在开发 Host 或 Core
 
 - [总体架构](architecture/overview.md)：项目定位、核心原则与编译管线。
-- [运行时](architecture/runtime.md)：Engine、State、Macro、Story、Presentation、scripts 与 Resource/Event 契约。
+- [运行时](architecture/runtime.md)：Engine、State、Macro、Story、Surface、scripts 与 Resource/Event 契约。
 - [Macro](architecture/macro.md)、[Expression](architecture/expression.md)、[Twee 编译器](architecture/twee.md)、[I18n](architecture/i18n.md)、[Save](architecture/save.md) 设计说明。
-- [Tauri Host](architecture/tauri-host.md)、[Host Presentation](architecture/host-presentation.md)、[源码记录](architecture/source-record.md)、[Mod](architecture/modloader.md)。
+- [Tauri Host](architecture/tauri-host.md)、[Host Surface](architecture/protocol.md)、[源码记录](architecture/source-record.md)、[Mod](architecture/modloader.md)。
 - [仓库布局](development/repository-layout.md)、[源码规范](development/code-style.md)、[诊断与日志](development/diagnostics-and-logger.md)、[公开 API 和依赖锁定](development/public-api-and-dependencies.md)。
 - [仓库命令](development/commands.md)：游戏检查、桌面 Host、质量门禁、Bun 与发行命令。
 - [TUI 开发测试](development/testing-tui.md)、[Tauri 开发测试](development/testing-tauri.md)、[项目状态](development/status.md)。

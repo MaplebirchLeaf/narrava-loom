@@ -30,7 +30,7 @@ use crate::{
         MacroHandlerOutcome, MacroInteraction, MacroInteractions, MacroLocalScopes,
         MacroResumeOutcome,
     },
-    presentation::{InteractionId, PresentationOutput},
+    protocol::{InteractionId, Surface},
     runtime::{
         BodyExecution, RuntimeExecutionIdentity, RuntimeExecutionLocation,
         RuntimeMacroContinuationError, RuntimeMacroExecution,
@@ -48,7 +48,7 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HostInput {
-    /// 玩家激活上一份 Presentation 中的交互（导航或按钮）。
+    /// 玩家激活上一份 Surface 中的交互（导航或按钮）。
     Activate { interaction: InteractionId },
     /// 恢复 Host 先前保存的异步执行。
     Resume { execution: HostExecutionToken },
@@ -57,7 +57,7 @@ pub enum HostInput {
 }
 
 impl HostInput {
-    /// 回送 Core 在上一份 Presentation 中提供的交互身份。
+    /// 回送 Core 在上一份 Surface 中提供的交互身份。
     pub fn activate(interaction: InteractionId) -> Self {
         Self::Activate { interaction }
     }
@@ -314,16 +314,15 @@ impl<'state> HostStateView<'state> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostUpdate {
     current: String,
-    presentation: PresentationOutput,
+    surface: Surface,
 }
 
 impl HostUpdate {
     /// 用当前 Passage 名与语义输出建立更新；仅 crate 内部使用。
-    pub(crate) fn new(current: &str, mut presentation: PresentationOutput) -> Self {
-        presentation.normalize_visible_line_breaks();
+    pub(crate) fn new(current: &str, surface: Surface) -> Self {
         Self {
             current: current.to_owned(),
-            presentation,
+            surface,
         }
     }
 
@@ -333,19 +332,14 @@ impl HostUpdate {
     }
 
     /// 本次调用按执行顺序产生的宿主无关语义输出。
-    pub fn presentation(&self) -> &PresentationOutput {
-        &self.presentation
+    pub fn surface(&self) -> &Surface {
+        &self.surface
     }
 
     /// 把独立渲染的 Host 区域附加到本次正文更新。
-    pub fn append_region(
-        &mut self,
-        region: crate::presentation::PresentationRegion,
-        mut content: PresentationOutput,
-    ) {
-        content.normalize_visible_line_breaks();
-        self.presentation
-            .push(crate::presentation::PresentationNode::Region { region, content });
+    pub fn append_region(&mut self, region: crate::protocol::RegionId, content: Surface) {
+        self.surface
+            .push(crate::protocol::SurfaceNode::Region { region, content });
     }
 }
 

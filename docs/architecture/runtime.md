@@ -4,7 +4,7 @@
 >
 > 更新日期：2026-08-23
 
-本文描述 Core 的运行时所有权与已实现行为；表现层边界见 [/docs/architecture/host-presentation.md](/docs/architecture/host-presentation.md)。
+本文描述 Core 的运行时所有权与已实现行为；表现层边界见 [/docs/architecture/protocol.md](/docs/architecture/protocol.md)。
 
 ## 公开能力与内部所有权
 
@@ -36,7 +36,7 @@ Engine 是 Core 的执行协调入口。它不保存 State 数据、Story histor
 
 Runtime 的 goto 先形成经过验证的请求。只有当前 Passage 返回 `StopPassage` 且存在一个 pending goto 时，Engine 才确认目标并继续执行。include 在原节点位置展开，不创建 history；未被 Runtime 消费的 include 请求不能静默提交。
 
-`Engine::navigate_mir_chain()` 现在接收从 MIR 降低得到的 `LirProgram`，并把 VM 接入同一事务边界。每个 Engine Passage 执行建立一条 VM 调用链；Halt 提交累计 Presentation，NavigationPending 转换为经过 Story 验证的 goto 请求。VM、Expression、目标映射或 include 预算失败均通过原有 `StateCheckpoint + StorySnapshot` 回滚，不建立第二套事务实现。
+`Engine::navigate_mir_chain()` 现在接收从 MIR 降低得到的 `LirProgram`，并把 VM 接入同一事务边界。每个 Engine Passage 执行建立一条 VM 调用链；Halt 提交累计 Surface，NavigationPending 转换为经过 Story 验证的 goto 请求。VM、Expression、目标映射或 include 预算失败均通过原有 `StateCheckpoint + StorySnapshot` 回滚，不建立第二套事务实现。
 
 `Engine::navigate_mir_chain_with_macros()` 在同一循环中注入同步 Macro 控制器。Engine 只负责读取稳定暂停、调用控制器、校验 `BodyControl`、合并输出和提交或回滚；Definition、生命周期与 Binding 仍归 Macro Runtime。剩余 include 预算会传给控制器，`RuntimeMacroExecution` 再报告 Macro 内实际展开量，使 VM include 与 Widget include 共用一次 Engine 预算。未提供控制器的原入口保持明确 `MacroPending` 错误。
 
@@ -91,7 +91,7 @@ PassageInit → PassageStart → PassageRender → PassageDisplay → PassageEnd
 
 - Init：建立本次访问上下文，允许 scripts 通过 State API 修改变量；
 - Start：开始执行 HIR、Expression 与 Macro；
-- Render：Core 已形成本跳 Presentation 输出；
+- Render：Core 已形成本跳 Surface 输出；
 - Display：Host 已完成本跳显示；
 - End：真正离开当前导航 Passage。
 
@@ -128,7 +128,7 @@ Macro 拥有 Macro Definitions、Widget HIR 正文、调用上下文、`@` 局�
 - Macro Local 的 `@` 与 `@args`；
 - Story 的 has、include、goto 请求。
 
-Presentation、Audio、Resource 与 Mod 能力不进入逻辑 Context。
+Surface、Audio、Resource 与 Mod 能力不进入逻辑 Context。
 
 Widget 调用建立独立 `@args` 帧；嵌套 Widget 各自隔离。`exit` 在最近的 Widget 或 Passage 边界消费，break／continue 只由最近循环消费，goto 的 StopPassage 继续传给 Engine。
 
@@ -151,13 +151,13 @@ Story 拥有编译后的 Passage 查询、当前位置、history、导航分支�
 
 精确名称 `StoryInit` 是特殊初始化 Passage，不能通过普通 goto 进入。`[widget]` Passage 只提供 Widget Definitions，不产生正文输出。其他 Tag 是作者数据；Core 只提供精确查询，不写死 `town`、`indoor` 等游戏语义。
 
-## Presentation
+## Surface
 
-Runtime 用 `BodyExecution` 同时返回 `BodyControl` 和有序 `PresentationOutput`。当前语义节点包括：
+Runtime 用 `BodyExecution` 同时返回 `BodyControl` 和有序 `Surface`。当前语义节点包括：
 
-- Text，以及可组合的 StyledText（`TextStyle + TextTone`，可选 `delay` 毫秒延迟浮现、结构性 `heading` 1/2 页面标题）；
+- Text、HardBreak，以及可组合的 StyledText（`TextStyle + TextColor`、可见延迟 `delay`、结构性 `heading`）；
 - Image 与 Region（Header／Main／Footer／Bar／BarStowed／Dialog）；
-- Container 与 Replace（稳定 Presentation Key）；
+- Container 与 Replace（稳定 Surface Key）；
 - Component（capability、properties 与 fallback）与 Dismiss Action；
 - 状态绑定 Input（checkbox／radiobutton／textbox）；
 - Navigation 与 SafeReturn。
@@ -166,7 +166,7 @@ Native Twee 正文整体产生字面 Text，`$name` 与 `${expression}` 都没�
 
 普通 Passage 完成后若没有作者 Navigation，Engine 可以追加指向最近安全 history 项的 SafeReturn。Core 只规定动作语义和目标；文字、布局以及按钮、链接、3D 对象或 TUI 选项等表现由 Host 决定。
 
-Navigation 与 SafeReturn 携带 `InteractionId`。Host 回送身份而不是自行构造 Passage 目标；Core 只从上一份 Presentation 中解析真实存在的动作。完整 Presentation Protocol 仍按跨宿主稳定用例增量扩展。
+Navigation 与 SafeReturn 携带 `InteractionId`。Host 回送身份而不是自行构造 Passage 目标；Core 只从上一份 Surface 中解析真实存在的动作。完整 Surface Protocol 仍按跨宿主稳定用例增量扩展。
 
 ## scripts、Callable 与 Prototype
 
@@ -258,7 +258,7 @@ Rust 原生库和 WASM 都是 Core 的部署形式；它们不改变 VM 的语�
 
 ## 当前下一步
 
-`src/lib.rs` 已建立可嵌入 Core。Host API 已支持启动、验证玩家动作、异步 Resume／Cancel、取得 Presentation 输出和只读访问 State，并统一以 Diagnostic 返回失败。执行链身份由 Runtime 的 `RuntimeExecutionIdentity` 所有，`RuntimeExecutionLocation` 将它与 `MirExecutionPosition` 组合；Host 令牌只传递身份，不携带 VM frame、检查点或平台句柄。
+`src/lib.rs` 已建立可嵌入 Core。Host API 已支持启动、验证玩家动作、异步 Resume／Cancel、取得 Surface 输出和只读访问 State，并统一以 Diagnostic 返回失败。执行链身份由 Runtime 的 `RuntimeExecutionIdentity` 所有，`RuntimeExecutionLocation` 将它与 `MirExecutionPosition` 组合；Host 令牌只传递身份，不携带 VM frame、检查点或平台句柄。
 
 `RuntimeMacroContinuation` 已把执行身份、停在 `InvokeMacro` 的完整 `MirExecutionFrame` 与 `MacroSuspension` 绑定为一个 VM 级所有权单元。构造时同时验证执行链身份和 MacroPending 位置；失败会返还 frame 与 suspension，不丢失调度句柄或局部作用域。它尚未拥有 Engine 检查点、Passage 生命周期和待确认导航，因此不能单独成为 Host Resume 输入。
 
@@ -276,11 +276,11 @@ NavigationPending 与携带 goto 请求的 StopPassage 已由 `continue_navigati
 
 恢复链遇到的下一 MacroPending 已可通过 `dispatch_macro()` 重新进入控制器。回调接收原 `HirMacro`、同一 `RuntimeExecutionIdentity`、State、重新附着的 Story 请求和外层 scopes；同步 Complete 会把输出交回 VM 并继续运行，Pending 会把新 `MacroSuspension` 重新封装为完整 `EngineMirContinuation`。错误会保留可回滚事务或无效 suspension 的全部所有权。
 
-Binding 通常不需要逐个消费上述边界。`HostApi::drive_stable()` 会循环处理后续 Macro、导航和 Halted 提交；`resume_and_drive()` 再把当前异步 Handler 的恢复纳入同一次调用。两者只在得到可呈现的 `HostUpdate` 或新的异步执行令牌时返回，平台 Pending 句柄始终由后端容器持有，不进入 Presentation 或前端。
+Binding 通常不需要逐个消费上述边界。`HostApi::drive_stable()` 会循环处理后续 Macro、导航和 Halted 提交；`resume_and_drive()` 再把当前异步 Handler 的恢复纳入同一次调用。两者只在得到可呈现的 `HostUpdate` 或新的异步执行令牌时返回，平台 Pending 句柄始终由后端容器持有，不进入 Surface 或前端。
 
 执行帧为每个 `MirIteratorSlot` 保存独立状态。集合 Prepare 建立键或值快照，暂停期间替换原 State 集合不会改变当前迭代顺序；range 保存 current、end、step 与错误位置，每次 NextIteration 只推进一个值。
 
-include 会先推进调用者位置，再压入目标 `MirPassageFrame`；被包含 Passage Halt 后弹栈并继续调用者，整条链共用同一 Presentation。goto 不压入 Passage，而是保存导航目标并进入稳定 `NavigationPending`；后续单步不会执行 goto 后正文或重复求值目标，等待 Engine 消费后以新的导航事务继续。
+include 会先推进调用者位置，再压入目标 `MirPassageFrame`；被包含 Passage Halt 后弹栈并继续调用者，整条链共用同一 Surface。goto 不压入 Passage，而是保存导航目标并进入稳定 `NavigationPending`；后续单步不会执行 goto 后正文或重复求值目标，等待 Engine 消费后以新的导航事务继续。
 
 MIR silently 不使用运行时开关栈。每个可能产生输出的指令携带 Visible／Suppressed 属性，静默 include 的子帧继承 Suppressed；因此控制跳转不会把静默状态泄漏到块后正文。表达式和 State 副作用仍执行。当前 ExitPassage 结束最近的 Passage/include 帧：被 include 的 Passage exit 后返回调用者，根 Passage exit 等同于当前根帧完成。
 

@@ -12,7 +12,7 @@ use crate::{
         MacroLogicContext, MacroResumeOutcome, MacroStoryAccess, MacroSuspension,
     },
     mir::MirMacroBody,
-    presentation::{InteractionId, PresentationNode, PresentationOutput},
+    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{
         BodyControl, RuntimeExecutionIdentity, RuntimeMacroBodyContinuation,
         RuntimeMacroBodyContinuationResume, RuntimeMacroBodyResumed, RuntimeMacroContinuation,

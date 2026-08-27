@@ -32,7 +32,7 @@ Engine.restart()
 |---|---|
 | `passage:init` | 确认进入 Passage、执行正文之前 |
 | `passage:start` | Passage 正文即将开始执行 |
-| `passage:render` | Core 已形成 Presentation 输出 |
+| `passage:render` | Core 已形成 Surface 输出 |
 | `passage:display` | 输出进入 Host 显示阶段 |
 | `passage:end` | 真正离开当前 Passage |
 

@@ -43,7 +43,7 @@ Event.emit("game:ready", { coins: 10 })
 ```
 
 `Engine`、`State`、`Macro`、`Story`、`Logger`、`Event`、`Host`、`Save`、`Resource`、`I18n`
-和 `Presentation` 是彼此独立的公开契约。Worker 中不存在 `narrava.Save` 或聚合对象
+和 `Surface` 是彼此独立的公开契约。Worker 中不存在 `narrava.Save` 或聚合对象
 `globalThis.narrava`。
 
 开发模式 DevTools 的 `window.narrava` 只属于 WebView 调试桥，提供 `state/set/del` 等开发工具；
@@ -113,26 +113,26 @@ Macro.add("delayedAnswer", {
 `tauri_host.script_macro_unmanaged_promise`。Worker 没有 `fetch`、DOM、浏览器计时器或任意
 Tauri 调用。文件选择与网络也尚未成为公开能力，因为它们需要各自的权限和结果契约。
 
-当前 Host 自定义 Macro 可以返回可显示标量，也可以返回下节介绍的 `Presentation` 语义片段。
+当前 Host 自定义 Macro 可以返回可显示标量，也可以返回下节介绍的 `Surface` 语义片段。
 容器正文、编译器 Expression 参数、完整 before/after 生命周期还不是可依赖的 Tauri 作者功能。
 
-## Presentation 语义渲染
+## Surface 语义渲染
 
-结构化输出使用冻结的 `Presentation` builder：
+结构化输出使用冻结的 `Surface` builder：
 
 ```ts
 Macro.add("statusCard", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
-  handler: () => Presentation.fragment(
-    Presentation.text("体力不足", {
+  handler: () => Surface.fragment(
+    Surface.text("体力不足", {
       key: "stamina-warning",
       styles: ["strong"],
-      tone: 40,
+      color: 40,
     }),
-    Presentation.text("第一页", { key: "page-one", heading: 2 }),
-    Presentation.image("images/hero.png", {
+    Surface.text("第一页", { key: "page-one", heading: 2 }),
+    Surface.image("images/hero.png", {
       key: "hero",
       alt: "站在森林入口的主角",
       caption: "图片来自 Resource。",
@@ -142,19 +142,19 @@ Macro.add("statusCard", {
 ```
 
 可组合的文本结构为 `emphasis`、`strong`、`code`、`quote`、`marked`、`small`、
-`inserted`、`deleted` 共 8 个。语气是 0..=63 的色阶（对齐二进制边界：灰阶 0-7（白`1`→亮灰`2`→浅灰`3`→灰`4`→深灰`5`→暗灰`6`→黑`7`），光谱 8-63（红`8`→橙`16`→黄`24`→绿`32`→蓝`40`→紫`48`→深紫`56`→`63`，每色相 8 级））。
-`Presentation.text()` 与 Twee 的 `<<print>>` 还可携带 `delay`（毫秒，0..=86400000）与
+`inserted`、`deleted` 共 8 个。`color` 是 0..=63 的 Narrava 标准调色板索引，Host 负责映射。
+`Surface.text()` 与 Twee 的 `<<print>>` 还可携带 `delay`（毫秒，0..=86400000）与
 结构性 `heading`（1 或 2，用于弹窗页签等页面划分，不属于字形样式）。delay 让渲染器在此之前
-保持文字隐藏、到时淡入浮现。
+保持文字不可见；具体动画由 Host 决定。
 
-`Presentation.region()` 可写入 `header`、`main`、`footer`、`bar`、`dialog`。Region 的 children
-只能是普通字符串或 Presentation 节点。`dialog` 中可以使用
-`Presentation.action("关闭", "dismiss")`，这是 Host 动作，不会伪造 Passage 导航。
+`Surface.region()` 可写入 `header`、`main`、`footer`、`bar`、`dialog`。Region 的 children
+只能是普通字符串或 Surface 节点。`dialog` 中可以使用
+`Surface.action("关闭", "dismiss")`，这是 Host 动作，不会伪造 Passage 导航。
 
 版本化组件必须有 fallback：
 
 ```ts
-Presentation.component(
+Surface.component(
   "meter",
   1,
   { label: "体力", value: 42, min: 0, max: 100 },
@@ -165,7 +165,7 @@ Presentation.component(
 
 Tauri 原生支持 `meter@1`。其他 Host 或未知版本显示 fallback。`properties` 只能包含有限纯数据，
 不能放函数、DOM、Tauri 对象或循环引用。稳定 `key` 应描述同一逻辑节点；同一输出内重复 key
-会报错。完整可运行示例见 `examples` 的 `PresentationGallery` Passage。
+会报错。完整可运行示例见 `examples` 的 `SurfaceGallery` Passage。
 
 ## Resource 资源
 

@@ -14,7 +14,7 @@ pub use vm::*;
 use crate::{
     expression::value::Value,
     hir::HirPassage,
-    presentation::{InteractionId, PresentationNode, PresentationOutput},
+    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{BodyControl, BodyExecution},
     state::{State, StateCheckpoint, StateReset},
     story::{
@@ -52,7 +52,7 @@ impl PassageLifecyclePhase {
 pub struct PassageLifecycleContext<'params, 'hir, 'source, 'output> {
     entry: StoryHistoryEntry<'hir, 'source>,
     params: &'params Value,
-    output: Option<&'output PresentationOutput>,
+    output: Option<&'output Surface>,
 }
 
 impl<'params, 'hir, 'source, 'output> PassageLifecycleContext<'params, 'hir, 'source, 'output> {
@@ -72,7 +72,7 @@ impl<'params, 'hir, 'source, 'output> PassageLifecycleContext<'params, 'hir, 'so
     pub fn with_output(
         entry: StoryHistoryEntry<'hir, 'source>,
         params: &'params Value,
-        output: &'output PresentationOutput,
+        output: &'output Surface,
     ) -> Self {
         PassageLifecycleContext {
             entry,
@@ -92,7 +92,7 @@ impl<'params, 'hir, 'source, 'output> PassageLifecycleContext<'params, 'hir, 'so
     }
 
     /// 本跳 Passage 的有序语义输出；仅在携带输出的阶段可用。
-    pub fn output(&self) -> Option<&'output PresentationOutput> {
+    pub fn output(&self) -> Option<&'output Surface> {
         self.output
     }
 }
@@ -114,7 +114,7 @@ pub struct EngineRequestedNavigation<'hir, 'source> {
     /// 执行停止后确认的至多一个 goto 目标；没有请求时为 `None`。
     pub requested: Option<StoryHistoryEntry<'hir, 'source>>,
     /// 本跳 Passage 执行产生的有序语义输出。
-    pub output: PresentationOutput,
+    pub output: Surface,
 }
 
 /// 一条连续执行并确认完成的 Passage 历史链。
@@ -123,7 +123,7 @@ pub struct EngineNavigationChain<'hir, 'source> {
     /// 按执行顺序确认的 Passage 历史链。
     pub entries: Vec<StoryHistoryEntry<'hir, 'source>>,
     /// 整条链按执行顺序累积的有序语义输出。
-    pub output: PresentationOutput,
+    pub output: Surface,
 }
 
 /// 单次 Engine 执行允许消耗的显式控制流预算。
@@ -142,7 +142,7 @@ pub struct EngineStart<'hir, 'source> {
     pub current: StoryHistoryEntry<'hir, 'source>,
     pub entries: Vec<StoryHistoryEntry<'hir, 'source>>,
     /// 启动链按执行顺序累积的有序语义输出。
-    pub output: PresentationOutput,
+    pub output: Surface,
 }
 
 /// 新游戏重置范围及重新启动结果。

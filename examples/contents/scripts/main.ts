@@ -1,6 +1,6 @@
 /// <reference types="@narrava-loom/types" />
 // 综合示例脚本：演示脚本全局（State/Resource/Story/Engine/Save/Logger/I18n/Event）
-// 与 Presentation 宏的用法；这些函数经 State.global 暴露后可在 .twee 中调用。
+// 与 Surface 宏的用法；这些函数经 State.global 暴露后可在 .twee 中调用。
 
 /** 记录客人名到 temporary 并返回欢迎语。 */
 function scriptedGreeting(name: string): string {
@@ -76,16 +76,22 @@ Macro.add("barDemo", {
   arguments: "raw",
   execution: "sync",
   handler: () =>
-    Presentation.fragment(
-      Presentation.text("大厅状态<br>", { key: "bar-heading", styles: ["strong"] }),
-      Presentation.text("天气：小雨 · 17°C<br>", { key: "bar-weather", tone: 34 }),
-      Presentation.text("人物：Maple<br>", { key: "bar-character", styles: ["strong"] }),
-      Presentation.text("状态：轻微疼痛<br>", { key: "bar-condition", tone: 34 }),
-      Presentation.text("提示：藏书室似乎有动静。<br>", { key: "bar-hint", tone: 3 }),
-      Presentation.text("管理界面由游戏脚本和 Twee 自行定义。<br>", {
+    Surface.fragment(
+      Surface.text("大厅状态", { key: "bar-heading", styles: ["strong"] }),
+      Surface.hardBreak(),
+      Surface.text("天气：小雨 · 17°C", { key: "bar-weather", color: 34 }),
+      Surface.hardBreak(),
+      Surface.text("人物：Maple", { key: "bar-character", styles: ["strong"] }),
+      Surface.hardBreak(),
+      Surface.text("状态：轻微疼痛", { key: "bar-condition", color: 34 }),
+      Surface.hardBreak(),
+      Surface.text("提示：藏书室似乎有动静。", { key: "bar-hint", color: 3 }),
+      Surface.hardBreak(),
+      Surface.text("管理界面由游戏脚本和 Twee 自行定义。", {
         key: "management-hint",
-        tone: 3,
+        color: 3,
       }),
+      Surface.hardBreak(),
     ),
 })
 
@@ -95,37 +101,37 @@ Macro.add("barStowedDemo", {
   arguments: "raw",
   execution: "sync",
   handler: () =>
-    Presentation.fragment(
-      Presentation.text("雨", { key: "bar-stowed-weather", tone: 34 }),
-      Presentation.text("痛", { key: "bar-stowed-condition", styles: ["strong"], tone: 34 }),
-      Presentation.text("!", { key: "bar-stowed-hint", styles: ["strong"], tone: 8 }),
+    Surface.fragment(
+      Surface.text("雨", { key: "bar-stowed-weather", color: 34 }),
+      Surface.text("痛", { key: "bar-stowed-condition", styles: ["strong"], color: 34 }),
+      Surface.text("!", { key: "bar-stowed-hint", styles: ["strong"], color: 8 }),
     ),
 })
 
-// 综合演示：region、component、image、语义字形与状态色阶。
-Macro.add("presentationDemo", {
+// 综合演示：region、component、image、语义字形与标准调色板。
+Macro.add("surfaceDemo", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
   handler: () =>
-    Presentation.fragment(
-      Presentation.region(
+    Surface.fragment(
+      Surface.region(
         "header",
         [
-          Presentation.text("Presentation V2", {
+          Surface.text("Surface V2", {
             key: "demo-title",
             styles: ["strong"],
-            // tone 只决定文字颜色；16 是 Host 色阶中的橙色。
-            tone: 16,
+            // color 只决定文字颜色；16 是 Host 色阶中的橙色。
+            color: 16,
           }),
         ],
         { key: "demo-header" },
       ),
-      Presentation.region(
+      Surface.region(
         "bar",
         [
-          Presentation.text("测试工具", { key: "bar-heading", styles: ["strong"] }),
-          Presentation.component(
+          Surface.text("测试工具", { key: "bar-heading", styles: ["strong"] }),
+          Surface.component(
             "meter",
             1,
             {
@@ -140,29 +146,31 @@ Macro.add("presentationDemo", {
         ],
         { key: "demo-bar" },
       ),
-      Presentation.text("强调文本。 ", { styles: ["emphasis"] }),
-      Presentation.text("重要文本。 ", { styles: ["strong"] }),
-      Presentation.text("const answer = 42<br>", { styles: ["code"], tone: 34 }),
-      Presentation.text("新增内容。 ", { styles: ["inserted"], tone: 32 }),
-      Presentation.text("删除内容。 ", { styles: ["deleted"], tone: 8 }),
-      // marked 自身表示高亮底色，不需要再叠加 tone。
-      Presentation.text("需要留意。 ", { styles: ["marked"] }),
-      Presentation.text("危险状态。<br>", { styles: ["strong"], tone: 8 }),
-      Presentation.image("images/loom.svg", {
+      Surface.text("强调文本。 ", { styles: ["emphasis"] }),
+      Surface.text("重要文本。 ", { styles: ["strong"] }),
+      Surface.text("const answer = 42", { styles: ["code"], color: 34 }),
+      Surface.hardBreak(),
+      Surface.text("新增内容。 ", { styles: ["inserted"], color: 32 }),
+      Surface.text("删除内容。 ", { styles: ["deleted"], color: 8 }),
+      // marked 自身表示高亮底色，不需要再叠加 color。
+      Surface.text("需要留意。 ", { styles: ["marked"] }),
+      Surface.text("危险状态。", { styles: ["strong"], color: 8 }),
+      Surface.hardBreak(),
+      Surface.image("images/loom.svg", {
         key: "loom-image",
         alt: "由经纬线组成的 Narrava Loom 示意图",
         caption: "图片由 Resource 逻辑路径加载。",
       }),
-      Presentation.component(
+      Surface.component(
         "future-card",
         1,
         { title: "未知组件" },
-        [Presentation.text("Host 不认识该组件，因此显示这段 fallback。", { tone: 3 })],
+        [Surface.text("Host 不认识该组件，因此显示这段 fallback。", { color: 3 })],
         { key: "fallback-demo" },
       ),
-      Presentation.region(
+      Surface.region(
         "footer",
-        [Presentation.text("当前示例：语义渲染与 Resource", { key: "demo-footer", tone: 3 })],
+        [Surface.text("当前示例：语义渲染与 Resource", { key: "demo-footer", color: 3 })],
         { key: "demo-footer-region" },
       ),
     ),
@@ -174,27 +182,27 @@ Macro.add("dialogDemo", {
   arguments: "raw",
   execution: "sync",
   handler: () =>
-    Presentation.fragment(
-      Presentation.region(
+    Surface.fragment(
+      Surface.region(
         "header",
-        [Presentation.text("Dialog 与按钮", { key: "dialog-page-title", styles: ["strong"] })],
+        [Surface.text("Dialog 与按钮", { key: "dialog-page-title", styles: ["strong"] })],
         { key: "dialog-page-header" },
       ),
-      Presentation.text("进入本页时会打开语义 Dialog。关闭后仍可阅读正文并返回大厅。"),
-      Presentation.region(
+      Surface.text("进入本页时会打开语义 Dialog。关闭后仍可阅读正文并返回大厅。"),
+      Surface.region(
         "dialog",
         [
-          Presentation.text("第一页", { key: "dialog-page-one", heading: 2 }),
-          Presentation.text("默认显示第一页。点击标题栏中的页签可以切换内容。"),
-          Presentation.action("默认按钮", "dismiss", { key: "default-action", role: "default" }),
-          Presentation.action("主要按钮", "dismiss", { key: "primary-action", role: "primary" }),
-          Presentation.text("第二页", { key: "dialog-page-two", heading: 2 }),
-          Presentation.text("第二页继续展示次要与危险动作。"),
-          Presentation.action("次要按钮", "dismiss", {
+          Surface.text("第一页", { key: "dialog-page-one", heading: 2 }),
+          Surface.text("默认显示第一页。点击标题栏中的页签可以切换内容。"),
+          Surface.action("默认按钮", "dismiss", { key: "default-action", role: "default" }),
+          Surface.action("主要按钮", "dismiss", { key: "primary-action", role: "primary" }),
+          Surface.text("第二页", { key: "dialog-page-two", heading: 2 }),
+          Surface.text("第二页继续展示次要与危险动作。"),
+          Surface.action("次要按钮", "dismiss", {
             key: "secondary-action",
             role: "secondary",
           }),
-          Presentation.action("危险按钮", "dismiss", { key: "danger-action", role: "danger" }),
+          Surface.action("危险按钮", "dismiss", { key: "danger-action", role: "danger" }),
         ],
         { key: "demo-dialog" },
       ),

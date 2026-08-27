@@ -1,5 +1,5 @@
 /* Narrava Tauri WebView 的 Host 主题。作者 CSS 只依赖 nv-story 上的 --narrava-* 语义 token、
-   [data-tone="N"] 与 .text-* 字形钩子；不要依赖这里的像素布局细节。 */
+   [data-color="N"] 与 .text-* 字形钩子；不要依赖这里的像素布局细节。 */
 :root {
   color-scheme: dark;
 }
@@ -132,7 +132,7 @@ nv-ui-bar.stowed #history-forward {
   scrollbar-gutter: stable;
 }
 
-#bar-presentation {
+#bar-surface {
   display: grid;
   gap: 0.75em;
 }
@@ -159,10 +159,10 @@ nv-ui-bar.stowed #ui-bar-body {
   scrollbar-width: none;
 }
 
-nv-ui-bar.stowed #bar-presentation {
+nv-ui-bar.stowed #bar-surface {
   gap: 0;
 }
-nv-ui-bar.stowed #bar-presentation > * {
+nv-ui-bar.stowed #bar-surface > * {
   display: grid;
   width: var(--narrava-control-size);
   min-width: var(--narrava-control-size);
@@ -212,14 +212,14 @@ nv-passage :is(tr, th, td, caption) {
 }
 
 .passage-header:empty,
-.passage-footer:not(:has(#passage-footer-presentation:not(:empty), #status:not(:empty))) {
+.passage-footer:not(:has(#passage-footer-surface:not(:empty), #status:not(:empty))) {
   display: none;
 }
 
 .passage-main {
   white-space: pre-wrap;
 }
-.presentation-slot {
+.surface-slot {
   display: contents;
 }
 .passage-header,
@@ -240,66 +240,66 @@ nv-ui-bar.stowed + nv-passage {
   margin-left: 4.5em;
 }
 
-/* 状态色阶 0..=63：颜色由渲染器按热度梯度写入 --narrava-tone（0 不染色）。
-   游戏 CSS 可用 [data-tone="N"] 规则覆盖任意色阶。 */
-.presentation-text {
-  color: var(--narrava-tone, inherit);
+/* 标准调色板 0..=63：Renderer 写入 --narrava-color（0 使用正文色）。
+   默认主题已经覆盖全部色号；游戏 CSS 只在需要自定义主题时覆盖 [data-color="N"]。 */
+.surface-text {
+  color: var(--narrava-color, inherit);
 }
-.presentation-text.text-strong {
+.surface-text.text-strong {
   font-weight: 700;
 }
-.presentation-text.text-emphasis {
+.surface-text.text-emphasis {
   font-style: italic;
 }
-.presentation-text.text-code {
+.surface-text.text-code {
   padding-inline: 0.2em;
   border-radius: 0.1em;
   background: var(--narrava-code-surface);
   font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
   font-size: 0.9375em;
 }
-.presentation-text.text-quote {
+.surface-text.text-quote {
   padding-inline-start: 0.5em;
   border-inline-start: 0.15em solid var(--narrava-quote-border);
-  color: var(--narrava-tone, var(--narrava-muted));
+  color: var(--narrava-color, var(--narrava-muted));
   font-style: italic;
 }
-.presentation-text.text-marked {
-  /* marked 是“需要注意”的语义底色；tone 仍只控制文字，不参与背景计算。 */
+.surface-text.text-marked {
+  /* marked 是“需要注意”的语义底色；color 仍只控制文字，不参与背景计算。 */
   padding-inline: 0.2em;
   border-radius: 0.1em;
   background: color-mix(in srgb, var(--narrava-warning) 28%, transparent);
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--narrava-warning) 72%, transparent);
 }
-.presentation-text.text-small {
+.surface-text.text-small {
   font-size: 0.875em;
 }
-.presentation-text.text-inserted {
-  color: var(--narrava-tone, var(--narrava-positive));
+.surface-text.text-inserted {
+  color: var(--narrava-color, var(--narrava-positive));
   text-decoration: underline;
   text-decoration-style: double;
   text-underline-offset: 0.15em;
 }
-.presentation-text.text-deleted {
-  color: var(--narrava-tone, var(--narrava-negative));
+.surface-text.text-deleted {
+  color: var(--narrava-color, var(--narrava-negative));
   text-decoration: line-through;
 }
 
 /* heading 是结构语义，不要求作者另写标题排版。 */
-.presentation-text:is(h1, h2) {
+.surface-text:is(h1, h2) {
   margin: 0 0 0.75em;
-  color: var(--narrava-tone, inherit);
+  color: var(--narrava-color, inherit);
   line-height: 1.25;
 }
-.presentation-text:is(h1) {
+.surface-text:is(h1) {
   font-size: 1.75em;
 }
-.presentation-text:is(h2) {
+.surface-text:is(h2) {
   font-size: 1.35em;
 }
 
-/* 延迟显示（浮现）：带 delay 的文本先隐藏，等待 delay 毫秒后淡入。
-   由渲染器按节点 delay 设置 animation；TUI 用 frame.delayed + render_at 实现同序。 */
+/* Protocol 的 delay 只要求到期前不可见；淡入是本 Host 的默认视觉选择。
+   TUI 不复用该动画，只按同一个可见时机显示内容。 */
 @keyframes narrava-reveal {
   from {
     opacity: 0;
@@ -309,24 +309,24 @@ nv-ui-bar.stowed + nv-passage {
   }
 }
 
-nv-story figure[data-presentation-type="image"] {
+nv-story figure[data-surface-type="image"] {
   margin: 1.25em 0;
 }
 
-nv-story figure[data-presentation-type="image"] img {
+nv-story figure[data-surface-type="image"] img {
   display: block;
   max-width: 100%;
   height: auto;
 }
 
-nv-story figure[data-presentation-type="image"] figcaption {
+nv-story figure[data-surface-type="image"] figcaption {
   margin-top: 0.4em;
   color: var(--narrava-muted);
   font-size: 0.875em;
 }
 
-#bar-presentation:empty,
-#dialog-presentation:empty {
+#bar-surface:empty,
+#dialog-surface:empty {
   display: none;
 }
 
@@ -438,7 +438,7 @@ nv-story input:focus-visible {
 }
 
 #nv-dialog {
-  /* Dialog 采用原生 top-layer；页签与内容仍由 Presentation 语义生成。 */
+  /* Dialog 采用原生 top-layer；页签与内容仍由 Surface 语义生成。 */
   display: none;
   width: min(calc(100% - var(--narrava-sidebar-offset) - 4em), 66em);
   height: calc(100dvh - 6em);
@@ -567,22 +567,22 @@ nv-story #dialog-close .ui-icon {
   overscroll-behavior: contain;
   scrollbar-color: var(--narrava-ui-750) var(--narrava-ui-850);
 }
-#dialog-presentation,
-#dialog-presentation[hidden],
-#dialog-presentation .presentation-text {
+#dialog-surface,
+#dialog-surface[hidden],
+#dialog-surface .surface-text {
   flex-basis: 100%;
 }
-#dialog-presentation .dialog-heading-source {
+#dialog-surface .dialog-heading-source {
   display: none;
 }
-#dialog-presentation .dialog-panel {
+#dialog-surface .dialog-panel {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75em;
   width: 100%;
 }
-#dialog-presentation .dialog-panel[hidden] {
+#dialog-surface .dialog-panel[hidden] {
   display: none;
 }
 

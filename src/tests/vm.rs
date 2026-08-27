@@ -18,7 +18,7 @@ use crate::{
     },
     lir::LirProgram,
     mir::{MirMacroBody, MirStory},
-    presentation::{PresentationNode, PresentationOutput},
+    protocol::{Surface, SurfaceNode},
     source::Source,
     state::State,
     twee::{MacroSyntaxKind, Span},
@@ -68,7 +68,7 @@ fn macro_body_frame_pauses_at_macro_and_continues_from_the_next_instruction() {
         Some("wait")
     );
     frame
-        .complete_macro_body(&macro_bytecode, PresentationOutput::default())
+        .complete_macro_body(&macro_bytecode, Surface::default())
         .expect("完成异步 Macro 后应推进位置");
     assert_eq!(
         frame.step_macro(&macro_bytecode, &mut state),
@@ -85,7 +85,7 @@ fn macro_body_frame_pauses_at_macro_and_continues_from_the_next_instruction() {
     );
     assert!(matches!(
         frame.output().nodes(),
-        [PresentationNode::Text(text)]
+        [SurfaceNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("完成")
     ));
 }
@@ -145,7 +145,7 @@ fn frame_steps_text_and_print_until_halt_without_losing_position() {
     assert_eq!(frame.output().len(), 1);
     assert!(matches!(
         &frame.output().nodes()[0],
-        PresentationNode::Text(text) if text.to_unicode_string().as_deref() == Some("数量：2")
+        SurfaceNode::Text(text) if text.to_unicode_string().as_deref() == Some("数量：2")
     ));
 }
 
@@ -220,8 +220,64 @@ fn frame_uses_validated_translation_to_reorder_and_translate_dynamic_values() {
     assert_eq!(frame.location().instruction().index(), 4);
     assert!(matches!(
         frame.output().nodes(),
-        [PresentationNode::Text(text)]
+        [SurfaceNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("2 个铁剑")
+    ));
+}
+
+#[test]
+fn translated_text_keeps_hard_break_as_protocol_structure() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("示例 Source 应可读取");
+    let hir: HirStory<'_> = HirStory {
+        passages: vec![HirPassage {
+            source: &source.path,
+            name: "Start",
+            tags: Vec::new(),
+            body: vec![
+                node(HirBodyKind::Text("a")),
+                node(HirBodyKind::HardBreak),
+                node(HirBodyKind::Text("b")),
+            ],
+        }],
+    };
+    let mir: MirStory<'_, '_> = MirStory::lower(&hir).expect("HardBreak 应进入 MIR");
+    let lir: LirProgram<'_, '_, '_> = LirProgram::lower(&mir).expect("MIR 应进入 LIR");
+    let bytecode: crate::bytecode::BytecodeProgram =
+        crate::bytecode::BytecodeProgram::compile(&lir);
+    let template: I18nTemplate = I18nTemplate::new(
+        "zh-CN",
+        BTreeMap::new(),
+        BTreeMap::from([
+            (
+                String::from("p5:Start:body.0"),
+                I18nTemplateMessage::new("a", "甲", BTreeMap::new()),
+            ),
+            (
+                String::from("p5:Start:body.2"),
+                I18nTemplateMessage::new("b", "乙", BTreeMap::new()),
+            ),
+        ]),
+    );
+    let language = I18nRuntimeLanguage::Translation(mir.i18n().validate(template).unwrap());
+    let passage = bytecode.passage("Start").unwrap();
+    let mut frame: MirExecutionFrame = MirExecutionFrame::new(passage);
+    let mut state: State = State::new();
+
+    for _ in 0..3 {
+        let _step = frame
+            .step_with_runtime_language(&bytecode, &language, &mut state)
+            .unwrap();
+    }
+
+    assert!(matches!(
+        frame.output().nodes(),
+        [SurfaceNode::Text(first), SurfaceNode::HardBreak, SurfaceNode::Text(second)]
+            if first.to_unicode_string().as_deref() == Some("甲")
+                && second.to_unicode_string().as_deref() == Some("乙")
     ));
 }
 
@@ -264,7 +320,7 @@ fn frame_uses_the_language_chain_before_falling_back_to_default_text() {
     );
     assert!(matches!(
         frame.output().nodes(),
-        [PresentationNode::Text(text)]
+        [SurfaceNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("后备文本")
     ));
 }
@@ -400,7 +456,7 @@ fn frame_executes_state_changes_and_strict_switch_control_flow() {
     assert_eq!(frame.output().len(), 1);
     assert!(matches!(
         &frame.output().nodes()[0],
-        PresentationNode::Text(text) if text.to_unicode_string().as_deref() == Some("匹配")
+        SurfaceNode::Text(text) if text.to_unicode_string().as_deref() == Some("匹配")
     ));
     assert_eq!(
         frame.step(&bytecode, &mut state),
@@ -566,7 +622,7 @@ fn include_pushes_a_passage_frame_and_returns_to_the_caller() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            PresentationNode::Text(text) => text.to_unicode_string(),
+            SurfaceNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -678,7 +734,7 @@ fn silently_discards_direct_and_included_text_but_keeps_state_changes() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            PresentationNode::Text(text) => text.to_unicode_string(),
+            SurfaceNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -737,7 +793,7 @@ fn exit_stops_only_the_current_included_passage() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            PresentationNode::Text(text) => text.to_unicode_string(),
+            SurfaceNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -792,7 +848,7 @@ fn dynamic_macro_stays_pending_at_the_same_vm_location() {
     frame
         .complete_macro(
             &bytecode,
-            PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from("完成"))]),
+            Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("完成"))]),
         )
         .expect("Macro 完成输出应回到 VM");
     assert_eq!(frame.location().instruction().index(), 1);
@@ -834,7 +890,7 @@ fn silently_suppresses_completed_macro_output() {
     frame
         .complete_macro(
             &bytecode,
-            PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from("隐藏"))]),
+            Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("隐藏"))]),
         )
         .expect("静默 Macro 仍应正常完成");
 

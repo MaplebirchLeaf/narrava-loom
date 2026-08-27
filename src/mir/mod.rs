@@ -25,6 +25,9 @@ pub enum MirInstruction<'hir, 'source> {
         span: Span,
         i18n: Option<MirI18nTextPart>,
     },
+    HardBreak {
+        output: MirOutputMode,
+    },
     PrintExpression {
         expression: &'hir Expression<'source>,
         output: MirOutputMode,
@@ -93,12 +96,14 @@ pub enum MirInstruction<'hir, 'source> {
         target: MirInstructionPointer,
     },
     /// 无条件把程序计数位置改为 target。
-    Jump { target: MirInstructionPointer },
+    Jump {
+        target: MirInstructionPointer,
+    },
     /// 当前指令序列的明确结束位置。
     Halt,
 }
 
-/// 当前指令产生的 Presentation 是否进入执行链输出。
+/// 当前指令产生的 Surface 是否进入执行链输出。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MirOutputMode {
     /// 指令结果进入执行链输出。

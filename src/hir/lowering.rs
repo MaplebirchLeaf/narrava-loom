@@ -1,7 +1,7 @@
 //! Twee AST → HIR 的 lowering 与校验。
 //!
 //! 只负责把已通过 Twee 编译边界的 Passage 转换到 HIR，并执行 Widget 等
-//! 结构化约束校验；不涉及 State、Macro Definitions 或 Presentation。
+//! 结构化约束校验；不涉及 State、Macro Definitions 或 Surface。
 
 mod assignment;
 mod control;
@@ -74,19 +74,14 @@ impl<'source> HirStory<'source> {
 fn lower_passage<'source>(
     passage: &twee::Passage<'source>,
 ) -> Result<HirPassage<'source>, HirError> {
-    let body: Result<Vec<HirBodyNode<'source>>, HirError> = passage
-        .body
-        .iter()
-        .map(|node: &twee::BodyNode<'source>| {
-            lower_body_node(passage, node, LoweringContext::default())
-        })
-        .collect();
+    let body: Vec<HirBodyNode<'source>> =
+        lower_body_nodes(passage, &passage.body, LoweringContext::default())?;
 
     Ok(HirPassage {
         source: passage.source,
         name: passage.name,
         tags: passage.tags.clone(),
-        body: body?,
+        body,
     })
 }
 
@@ -159,7 +154,7 @@ fn lower_body_node<'source>(
         }
         BodyNodeKind::Macro(macro_node) if macro_node.name == "print" => {
             if has_print_options(macro_node.arguments) {
-                // 带 tone/styles/delay/heading 选项时走动态宏路径（与脚本/Widget 宏同链路），
+                // 带 color/styles/delay/heading 选项时走动态宏路径（与脚本/Widget 宏同链路），
                 // 由 Host 求值参数并产生 StyledText；单参数仍是编译器固有 Print（纯 Text）。
                 HirBodyKind::Macro(HirMacro {
                     name: macro_node.name,
@@ -235,19 +230,12 @@ fn lower_body_node<'source>(
                 .with_location(node_location(passage, node.span)),
             });
         }
-        BodyNodeKind::Macro(macro_node) => {
-            let body: Result<Vec<HirBodyNode<'source>>, HirError> = macro_node
-                .body
-                .iter()
-                .map(|child: &twee::BodyNode<'source>| lower_body_node(passage, child, context))
-                .collect();
-            HirBodyKind::Macro(HirMacro {
-                name: macro_node.name,
-                arguments: lower_macro_arguments(passage, macro_node)?,
-                syntax_kind: macro_node.syntax_kind,
-                body: body?,
-            })
-        }
+        BodyNodeKind::Macro(macro_node) => HirBodyKind::Macro(HirMacro {
+            name: macro_node.name,
+            arguments: lower_macro_arguments(passage, macro_node)?,
+            syntax_kind: macro_node.syntax_kind,
+            body: lower_body_nodes(passage, &macro_node.body, context)?,
+        }),
     };
 
     Ok(HirBodyNode {
@@ -256,7 +244,7 @@ fn lower_body_node<'source>(
     })
 }
 
-/// `print` 的参数是否超过一个（出现 tone/styles/delay/heading 选项）。
+/// `print` 的参数是否超过一个（出现 color/styles/delay/heading 选项）。
 /// 顶层空白分割参数，忽略引号内与括号/中括号/大括号内部的空白。
 pub(super) fn has_print_options(arguments: &str) -> bool {
     split_print_arguments(arguments).len() > 1
@@ -396,10 +384,54 @@ fn lower_body_nodes<'source>(
     nodes: &[twee::BodyNode<'source>],
     context: LoweringContext,
 ) -> Result<Vec<HirBodyNode<'source>>, HirError> {
+    let mut lowered: Vec<HirBodyNode<'source>> = Vec::new();
+    for node in nodes {
+        if let BodyNodeKind::Text(text) = node.kind {
+            lowered.extend(lower_text_nodes(text, node.span));
+        } else {
+            lowered.push(lower_body_node(passage, node, context)?);
+        }
+    }
+    Ok(lowered)
+}
+
+/// `<br>` 是 Narrava 正文结构，进入 HIR 后不再作为可见字符串存在。
+fn lower_text_nodes<'source>(text: &'source str, span: twee::Span) -> Vec<HirBodyNode<'source>> {
+    let mut nodes: Vec<HirBodyNode<'source>> = Vec::new();
+    let mut start: usize = 0;
+    while let Some(relative) = text[start..].find("<br>") {
+        let end: usize = start + relative;
+        if end > start {
+            nodes.push(HirBodyNode {
+                kind: HirBodyKind::Text(&text[start..end]),
+                span: twee::Span {
+                    start: span.start + start,
+                    end: span.start + end,
+                    ..span
+                },
+            });
+        }
+        nodes.push(HirBodyNode {
+            kind: HirBodyKind::HardBreak,
+            span: twee::Span {
+                start: span.start + end,
+                end: span.start + end + 4,
+                ..span
+            },
+        });
+        start = end + 4;
+    }
+    if start < text.len() {
+        nodes.push(HirBodyNode {
+            kind: HirBodyKind::Text(&text[start..]),
+            span: twee::Span {
+                start: span.start + start,
+                end: span.end,
+                ..span
+            },
+        });
+    }
     nodes
-        .iter()
-        .map(|node: &twee::BodyNode<'source>| lower_body_node(passage, node, context))
-        .collect()
 }
 
 fn lower_required_expression<'source>(

@@ -29,7 +29,7 @@ CLI 不是 Core 的所有者。Compiler、Runtime、Engine 与状态模块都由
 | `lir.rs` | MIR 到 VM 程序的 Passage 索引、重复名称与指令地址验证 |
 | `bytecode.rs` | LIR 到可序列化拥有型 Bytecode；含格式校验、入口表、操作数与常量目录 |
 | `runtime/` | HIR 节点执行、逻辑控制、Widget、include 与执行链身份 |
-| `vm.rs` | Bytecode 位置、值／迭代状态、Passage 调用栈和累计 Presentation 的单步执行帧 |
+| `vm.rs` | Bytecode 位置、值／迭代状态、Passage 调用栈和累计 Surface 的单步执行帧 |
 | `engine/` | 导航事务、Passage 生命周期、启动、新游戏及 MIR VM 事务适配 |
 
 `State`、`Story` 与 Macro Definitions 分别保存各自领域的数据。Runtime 只借用这些能力；Engine 负责跨领域事务和回滚。VM 只接收 Bytecode，不反向拥有 State、Story 或平台对象；文件容器不进入运行时所有权。
@@ -42,7 +42,7 @@ CLI 不是 Core 的所有者。Compiler、Runtime、Engine 与状态模块都由
 |---|---|
 | `src/state.rs` | global、setup、variables、temporary 与检查点 |
 | `src/story.rs` | Passage 查询、导航时间线、history 与请求队列 |
-| `src/presentation.rs` | 当前最小宿主无关语义输出 |
+| `src/surface.rs` | 当前最小宿主无关语义输出 |
 | `src/host.rs` | Host 输入、Core 更新、最小启动／导航入口及统一 Diagnostic 边界 |
 | `src/diagnostic.rs` | 稳定 Diagnostic 与源码定位 |
 | `src/logger.rs` | 平台无关结构化日志 |
@@ -83,9 +83,9 @@ CLI 不是 Core 的所有者。Compiler、Runtime、Engine 与状态模块都由
 - 普通 Passage 没有作者导航动作时，Engine 可以追加 `SafeReturn` 语义。
 - `[exit]` Passage 执行逻辑但跳过 Render／Display，并排除在安全返回目标之外。
 
-### Presentation 与 Host
+### Surface 与 Host
 
-- Core 产生宿主无关语义节点：Text、StyledText（`TextStyle + TextTone`、可选 `delay`）、Image、Region、Container、Component、Replace、Action、状态绑定 Input、Navigation 与 SafeReturn。
+- Core 产生宿主无关语义节点：Text、StyledText（`TextStyle + TextColor`、可选 `delay`）、Image、Region、Container、Component、Replace、Action、状态绑定 Input、Navigation 与 SafeReturn。
 - Native 正文整体产生字面 Text；`$name` 与 `${expression}` 不自动求值，动态 Text 使用显式 `print` Macro。
 - 旧的 Twee AST／HIR Interpolation 正文通道已移除；`${...}` 边界扫描器仅保留给 Interaction 等显式 Macro 参数。
 - Navigation 与 SafeReturn 携带 `InteractionId`；Host 只能激活上一份 Core 输出中存在的动作。
@@ -98,7 +98,7 @@ CLI 不是 Core 的所有者。Compiler、Runtime、Engine 与状态模块都由
 - I18n 译文输入已校验语言标签形状、未知消息、placeholder 完整性和动态字典引用；`.nlang` 内使用 `manifest.json`、`translations.nmsg` 与 `dictionary.json` 分离配置、消息和动态字典。
 - I18n 已能用已验证译文、Runtime placeholder 值与动态字典解析最终文本；缺失译文明确回退默认语言，校验与解析共用同一模板语法。
 - `MirStory` 已持有同源 I18n 目录，普通 Passage 的 Text／Print MIR 指令已附加稳定消息 ID；表达式 Print 同时记录对应 placeholder。
-- VM 已将同一 I18n ID 的连续 Text／Print 聚合为一个 Presentation Text，并保持 `silently`／静默 include 的输出抑制；目标语言 fallback 会穿过 Engine 暂停、恢复与导航事务。
+- VM 已将同一 I18n ID 的连续 Text／Print 聚合为一个 Surface Text，并保持 `silently`／静默 include 的输出抑制；目标语言 fallback 会穿过 Engine 暂停、恢复与导航事务。
 - 发布结构使用 `languages/<locale>.nlang`。
 - Mod 修改 Core 能理解的 Source、IR、资源身份与语义配置，不依赖某一种 Host Renderer。
 - I18n 文本闭环、Save 文档／Host 请求边界与基础游戏 Resource 已实现；模组 Story／Resource 组合和玩家模组仍未实现，不能把语言切片描述成完整模组系统。

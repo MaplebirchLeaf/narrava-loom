@@ -1,9 +1,9 @@
-//! 不直接产生 Presentation 输出的原生逻辑 Macro。
+//! 不直接产生 Surface 输出的原生逻辑 Macro。
 
-mod presentation;
+mod protocol;
 mod story;
 
-pub use presentation::*;
+pub use self::protocol::*;
 pub use story::*;
 
 use crate::expression::{

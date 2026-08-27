@@ -4,10 +4,9 @@ use std::io;
 
 use narrava_loom_core::{
     expression::value::TextValue,
-    presentation::{
-        InteractionId, NavigationRole, PresentationInputBinding, PresentationInputKind,
-        PresentationKey, PresentationNode, PresentationOutput, PresentationRegion,
-        PresentationTarget, PresentationValue, TextStyle, TextTone,
+    protocol::{
+        InteractionId, NavigationRole, RegionId, Surface, SurfaceInputBinding, SurfaceInputKind,
+        SurfaceKey, SurfaceNode, SurfaceTarget, SurfaceValue, TextColor, TextStyle,
     },
 };
 use narrava_loom_tui::{TuiFrame, TuiOperation, TuiRenderer, run_terminal};
@@ -31,7 +30,7 @@ fn main() {
                 Ok::<Option<TuiFrame>, String>(Some(hall_frame()))
             }
             TuiOperation::Input { id, value } if id == "demo:marked" => {
-                let PresentationValue::Boolean(value) = value else {
+                let SurfaceValue::Boolean(value) = value else {
                     return Err(String::from("marked 只接受布尔值"));
                 };
                 marked = value;
@@ -40,7 +39,7 @@ fn main() {
                 ))
             }
             TuiOperation::Input { id, value } if id == "demo:name" => {
-                let PresentationValue::Text(value) = value else {
+                let SurfaceValue::Text(value) = value else {
                     return Err(String::from("name 只接受文字"));
                 };
                 name = value;
@@ -63,76 +62,74 @@ fn hall_frame() -> TuiFrame {
     }
 }
 
-fn demo_output(marked: bool, name: &str) -> PresentationOutput {
-    let mut output = PresentationOutput::default();
-    output.push(PresentationNode::Region {
-        region: PresentationRegion::Header,
-        content: PresentationOutput::from_nodes(vec![PresentationNode::StyledText {
+fn demo_output(marked: bool, name: &str) -> Surface {
+    let mut output = Surface::default();
+    output.push(SurfaceNode::Region {
+        region: RegionId::header(),
+        content: Surface::from_nodes(vec![SurfaceNode::StyledText {
             text: TextValue::from("Narrava Loom · TUI"),
             styles: vec![TextStyle::Strong],
-            tone: TextTone::ORANGE,
+            color: TextColor::ORANGE,
             delay: None,
             heading: None,
         }]),
     });
     output
         .push_keyed(
-            PresentationKey::parse("status").unwrap(),
-            PresentationNode::Container {
-                content: PresentationOutput::from_nodes(vec![PresentationNode::Text(
-                    TextValue::from("等待替换"),
-                )]),
+            SurfaceKey::parse("status").unwrap(),
+            SurfaceNode::Container {
+                content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("等待替换"))]),
             },
         )
         .unwrap();
-    output.push(PresentationNode::Replace {
-        target: PresentationTarget::Key(PresentationKey::parse("status").unwrap()),
-        content: PresentationOutput::from_nodes(vec![PresentationNode::StyledText {
+    output.push(SurfaceNode::Replace {
+        target: SurfaceTarget::Key(SurfaceKey::parse("status").unwrap()),
+        content: Surface::from_nodes(vec![SurfaceNode::StyledText {
             text: TextValue::from("替换完成"),
             styles: vec![TextStyle::Strong],
-            tone: TextTone::GREEN,
+            color: TextColor::GREEN,
             delay: None,
             heading: None,
         }]),
     });
-    output.push(PresentationNode::StyledText {
+    output.push(SurfaceNode::StyledText {
         text: TextValue::from("两秒后出现的状态提示"),
         styles: vec![TextStyle::Strong],
-        tone: TextTone::GREEN,
+        color: TextColor::GREEN,
         delay: Some(2000),
         heading: None,
     });
-    output.push(PresentationNode::Text(TextValue::from("标记状态：")));
-    output.push(PresentationNode::Input {
+    output.push(SurfaceNode::Text(TextValue::from("标记状态：")));
+    output.push(SurfaceNode::Input {
         id: InteractionId::parse("demo:marked").unwrap(),
-        binding: PresentationInputBinding {
+        binding: SurfaceInputBinding {
             receiver: String::from("$marked"),
-            kind: PresentationInputKind::Checkbox {
-                unchecked: PresentationValue::Boolean(false),
-                checked: PresentationValue::Boolean(true),
+            kind: SurfaceInputKind::Checkbox {
+                unchecked: SurfaceValue::Boolean(false),
+                checked: SurfaceValue::Boolean(true),
                 selected: marked,
             },
         },
     });
-    output.push(PresentationNode::Text(TextValue::from("玩家名：")));
-    output.push(PresentationNode::Input {
+    output.push(SurfaceNode::Text(TextValue::from("玩家名：")));
+    output.push(SurfaceNode::Input {
         id: InteractionId::parse("demo:name").unwrap(),
-        binding: PresentationInputBinding {
+        binding: SurfaceInputBinding {
             receiver: String::from("$name"),
-            kind: PresentationInputKind::Text {
+            kind: SurfaceInputKind::Text {
                 value: TextValue::from(name),
             },
         },
     });
-    output.push(PresentationNode::Navigation {
+    output.push(SurfaceNode::Navigation {
         id: InteractionId::parse("demo:hall").unwrap(),
         label: TextValue::from("返回大厅"),
         target: String::from("Hall"),
         role: NavigationRole::Link,
     });
-    output.push(PresentationNode::Region {
-        region: PresentationRegion::Dialog,
-        content: PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from(
+    output.push(SurfaceNode::Region {
+        region: RegionId::dialog(),
+        content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from(
             "终端 Host 可把 Dialog 映射为独立面板。",
         ))]),
     });

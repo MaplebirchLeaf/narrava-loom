@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::{expression::value::Value, hir::HirBodyNode, presentation::InteractionId};
+use crate::{expression::value::Value, hir::HirBodyNode, protocol::InteractionId};
 
 use super::CapturedMacroLocals;
 
@@ -59,7 +59,7 @@ pub enum MacroInteractionError {
     Missing,
 }
 
-/// 当前有效 Presentation 对应的延迟 Macro 动作。
+/// 当前有效 Surface 对应的延迟 Macro 动作。
 pub struct MacroInteractions<'hir, 'source> {
     entries: HashMap<InteractionId, MacroInteraction<'hir, 'source>>,
 }

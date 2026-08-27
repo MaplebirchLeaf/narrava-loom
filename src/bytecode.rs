@@ -55,6 +55,7 @@ impl Error for BytecodeDecodeError {}
 #[repr(u8)]
 pub enum Opcode {
     Text,
+    HardBreak,
     PrintExpression,
     PrintLiteral,
     EvaluateDiscard,
@@ -112,6 +113,7 @@ impl BytecodeConstants {
             MirInstruction::Text { text, .. } | MirInstruction::PrintLiteral { text, .. } => {
                 push_value(&mut self.strings, (*text).to_owned())
             }
+            MirInstruction::HardBreak { .. } => {}
             MirInstruction::PrintExpression { expression, .. }
             | MirInstruction::EvaluateDiscard(expression)
             | MirInstruction::Unset(expression)
@@ -462,6 +464,7 @@ impl BytecodeMacroBody {
 fn encode(source: &MirInstruction<'_, '_>) -> BytecodeInstruction {
     let opcode = match source {
         MirInstruction::Text { .. } => Opcode::Text,
+        MirInstruction::HardBreak { .. } => Opcode::HardBreak,
         MirInstruction::PrintExpression { .. } => Opcode::PrintExpression,
         MirInstruction::PrintLiteral { .. } => Opcode::PrintLiteral,
         MirInstruction::EvaluateDiscard(_) => Opcode::EvaluateDiscard,

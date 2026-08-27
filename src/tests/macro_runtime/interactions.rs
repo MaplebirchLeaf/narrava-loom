@@ -93,7 +93,7 @@ fn link_with_body_registers_body_target_and_selected_captures() {
         &mut interactions,
     )
     .expect("容器 link 应完成登记");
-    let [PresentationNode::Navigation { id, .. }] = execution.output.nodes() else {
+    let [SurfaceNode::Navigation { id, .. }] = execution.output.nodes() else {
         panic!("link 应只产生一个 Navigation");
     };
 
@@ -152,7 +152,7 @@ fn button_uses_button_role() {
     .expect("button 应登记延迟正文");
     assert!(matches!(
         button.output.nodes()[0],
-        PresentationNode::Navigation {
+        SurfaceNode::Navigation {
             role: NavigationRole::Button,
             ..
         }
@@ -161,22 +161,19 @@ fn button_uses_button_role() {
 
 #[test]
 fn replace_uses_host_neutral_region_or_key_targets() {
-    let content =
-        PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from("替换内容"))]);
+    let content = Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("替换内容"))]);
     let header: BodyExecution = replace("header", content.clone()).expect("固定区域应有效");
     assert!(matches!(
-        header.output.nodes()[0],
-        PresentationNode::Replace {
-            target: PresentationTarget::Region(PresentationRegion::Header),
-            ..
-        }
+        &header.output.nodes()[0],
+        SurfaceNode::Replace { target: SurfaceTarget::Region(region), .. }
+            if region == &RegionId::header()
     ));
 
     let keyed: BodyExecution = replace("status-panel", content).expect("稳定 key 应有效");
     assert!(matches!(
         keyed.output.nodes()[0],
-        PresentationNode::Replace {
-            target: PresentationTarget::Key(ref key),
+        SurfaceNode::Replace {
+            target: SurfaceTarget::Key(ref key),
             ..
         } if key.as_str() == "status-panel"
     ));
@@ -184,8 +181,7 @@ fn replace_uses_host_neutral_region_or_key_targets() {
 
 #[test]
 fn slot_creates_a_keyed_container_for_later_replace() {
-    let content =
-        PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from("初始内容"))]);
+    let content = Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("初始内容"))]);
     let execution: BodyExecution =
         crate::macro_runtime::slot("status-panel", content).expect("有效 key 应建立稳定替换槽");
 
@@ -195,6 +191,6 @@ fn slot_creates_a_keyed_container_for_later_replace() {
     );
     assert!(matches!(
         execution.output.nodes(),
-        [PresentationNode::Container { content }] if content.len() == 1
+        [SurfaceNode::Container { content }] if content.len() == 1
     ));
 }

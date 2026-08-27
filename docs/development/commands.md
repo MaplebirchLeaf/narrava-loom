@@ -36,7 +36,7 @@
 | `bun run lint` | 只运行 Oxlint |
 | `bun run format:check` | 检查 JS、TS、JSON 格式 |
 | `bun run format` | 写入 JS、TS、JSON 格式化结果 |
-| `bun run test:frontend` | 验证 Tauri Renderer 的 64 级 tone 等纯前端契约 |
+| `bun run test:frontend` | 验证 Tauri Renderer 的 64 级 color 等纯前端契约 |
 | `bun run test:vscode` | 验证 Twee 语法目录、grammar 与编辑器契约 |
 
 不要再使用 `npx tsc` 作为本仓库标准命令；根脚本已经固定 workspace、配置和 Bun 工具链。

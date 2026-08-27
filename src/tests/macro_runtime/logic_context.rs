@@ -370,7 +370,7 @@ fn logic_body_executes_native_nodes_and_stops_after_goto() {
 }
 
 #[test]
-fn logic_body_ignores_visible_text_owned_by_presentation_dispatch() {
+fn logic_body_ignores_visible_text_owned_by_surface_dispatch() {
     let body: Vec<HirBodyNode<'_>> = vec![logic_node(HirBodyKind::Text("visible"))];
     let mut state: LogicStateContext = LogicStateContext {
         count: Value::Number(1.0),
@@ -382,7 +382,7 @@ fn logic_body_ignores_visible_text_owned_by_presentation_dispatch() {
         MacroLogicContext::new(&mut state, &mut story, &mut locals);
 
     let control: BodyControl =
-        execute_logic_body(&body, &mut context).expect("Presentation 文本不应阻断延迟动作");
+        execute_logic_body(&body, &mut context).expect("Surface 文本不应阻断延迟动作");
 
     assert_eq!(control, BodyControl::Continue);
 }

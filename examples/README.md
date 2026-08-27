@@ -30,8 +30,8 @@ examples/
 Host 日志。开发模式直接校验并导入 `languages/en/`，发行构建则生成 `languages/en.nlang`；
 `save/manual-1.nsave` 与 `save/quick.nsave` 是可直接导入的示例存档。
 
-演示页入口都在 `Hall`：`PresentationGallery`/`DialogGallery` 展示脚本侧结构化
-Presentation；`TextGallery` 展示 Twee 内 `print` Macro 的 tone/style 输出；
+演示页入口都在 `Hall`：`SurfaceGallery`/`DialogGallery` 展示脚本侧结构化
+Surface；`TextGallery` 展示 Twee 内 `print` Macro 的 color/style 输出；
 `AuthorToolsGallery` 展示存档、读档、日志与语言如何经 `State.global` 暴露的脚本函数
 在 `.twee` 中调用；`MacroGallery` 展示控制流 Macro 的真实运行时输出：`switch` 严格
 匹配、`for` 的值／键／范围三种遍历、`while` 配合 `break`/`continue`、`unset`
@@ -57,8 +57,8 @@ Presentation；`TextGallery` 展示 Twee 内 `print` Macro 的 tone/style 输出
 要等持久 Widget 实例状态完成后再开放。
 
 “查看内容替换”先用 `slot "status-panel"` 建立稳定内容槽，再由 `replace "status-panel"` 替换；
-同页还把普通文本与 `print` 产生的 Presentation 写入 Passage Header。
-Core 接受 Header、Main、Footer、Bar、Dialog 区域名或稳定 Presentation key，不接收 CSS selector。
+同页还把普通文本与 `print` 产生的 Surface 写入 Passage Header。
+Core 接受 Header、Main、Footer、Bar、Dialog 区域名或稳定 Surface key，不接收 CSS selector。
 
 检查并编译游戏内容：
 
@@ -77,7 +77,7 @@ Rust。正式发行后应由 Narrava CLI 或桌面工具直接打开游戏目录
 
 当前 CLI 会完成 Config、Source、Resource、Twee、HIR、MIR、LIR 与 Bytecode 检查。Tauri Host
 会在 Rust Worker 中真实转译并执行示例 TypeScript、驱动 Story，并由 WebView Renderer 显示
-Presentation。`:: Bar` 通过 `<<barDemo>>` 展示天气、人物、状态、提示和 Host 工具，
+Surface。`:: Bar` 通过 `<<barDemo>>` 展示天气、人物、状态、提示和 Host 工具，
 `:: BarStowed` 通过 `<<barStowedDemo>>` 展示“雨／痛／!”等窄栏摘要；删除对应 Macro 后，
 Host 不会自行向 Bar 注入内容。模组管理属于独立 ModLoader。
 

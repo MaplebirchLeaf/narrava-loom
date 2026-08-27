@@ -18,6 +18,7 @@ impl From<&HirBodyKind<'_>> for OwnedHirBodyKind {
     fn from(kind: &HirBodyKind<'_>) -> Self {
         match kind {
             HirBodyKind::Text(text) => Self::Text((*text).to_owned()),
+            HirBodyKind::HardBreak => Self::HardBreak,
             HirBodyKind::Print(print) => Self::Print(OwnedHirPrint::from(print)),
             HirBodyKind::Silently(body) => Self::Silently(own_body(body)),
             HirBodyKind::If(value) => Self::If(OwnedHirIf::from(value)),

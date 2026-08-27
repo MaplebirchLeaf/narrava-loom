@@ -91,7 +91,7 @@ NarravaProject/
 [game]
 id = "example.forest"
 name = "Forest"
-version = "0.1.0"
+version = "0.2.0"
 default_locale = "zh-CN"
 ```
 
@@ -188,7 +188,7 @@ Twine 是所属生态，Twee 是文件格式。识别 SourceKind 只表示完成
 | `twee`、`hir`、`expression` | 编译和表达式语义 |
 | `macro_runtime`、`runtime` | Macro 与 HIR 执行 |
 | `state`、`story`、`engine` | 游戏状态、导航与事务 |
-| `presentation` | 最小宿主无关语义输出 |
+| `surface` | 最小宿主无关语义输出 |
 | `i18n` | 稳定文本身份与默认语言目录 |
 | `diagnostic`、`logger` | 问题数据与可观察记录 |
 
@@ -267,7 +267,7 @@ I18n 后的修改仍分两层：
 
 ## 8. Runtime
 
-Core 向 Host API 暴露 `Engine`、`State`、`Macro`、`Story`、`Logger`、`ModLoader`、`ModUtils`、`Resource`、`Save`、`Event`、`I18n` 等稳定能力。Renderer 不属于 Core 控制器；Host 通过 Presentation Protocol 取得语义输出，再交给自己的 Renderer。详细五层边界见 [/docs/architecture/host-presentation.md](/docs/architecture/host-presentation.md)。
+Core 向 Host API 暴露 `Engine`、`State`、`Macro`、`Story`、`Logger`、`ModLoader`、`ModUtils`、`Resource`、`Save`、`Event`、`I18n` 等稳定能力。Renderer 不属于 Core 控制器；Host 通过 Surface Protocol 取得语义输出，再交给自己的 Renderer。详细五层边界见 [/docs/architecture/protocol.md](/docs/architecture/protocol.md)。
 
 普通 Passage 的语义输出若不包含导航动作，Engine 会追加 SafeReturn，指向 history 中最近的安全普通 Passage。Core 只定义动作语义与目标，不规定它显示成按钮、链接、3D 对象或终端选项。`[exit]` Passage 执行逻辑但不产生可显示输出，也不进入安全返回目标集合。
 
@@ -324,7 +324,7 @@ Bytecode，并从拥有型源码建立 Script Bundle。ZIP 文件 I/O 由构建�
 四周非常安静。
 ```
 
-当前重点不是继续扩张语法，而是把 Engine、Host API、Presentation、Script
+当前重点不是继续扩张语法，而是把 Engine、Host API、Surface、Script
 Binding、Save 与 I18n 串成可嵌入的基础游戏链。首个平台目标是 Tauri；具体
 ECMAScript Runtime、WebView 表现层、文件选择器和存储位置仍由 Tauri Host
 拥有。ModLoader、Resource 包、发布缓存与其他平台 Binding 在本体边界稳定后

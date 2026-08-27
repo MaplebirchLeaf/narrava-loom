@@ -6,7 +6,7 @@ use crate::{
     hir::{HirMacro, HirPassage},
     i18n::I18nRuntimeLanguage,
     macro_runtime::MacroStoryAccess,
-    presentation::PresentationOutput,
+    protocol::Surface,
     runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity, RuntimeMacroExecution},
     state::State,
     story::{Story, StoryRuntimeRequestError, StoryRuntimeRequests},
@@ -196,7 +196,7 @@ impl Engine {
         let progress = EngineMirProgress::new(
             current,
             vec![current],
-            PresentationOutput::default(),
+            Surface::default(),
             params,
             0,
             0,

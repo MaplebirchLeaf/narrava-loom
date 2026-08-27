@@ -1,15 +1,14 @@
-//! Core Presentation 到 WebView IPC DTO 的纯转换。
+//! Core Surface 到 WebView IPC DTO 的纯转换。
 //!
-//! 语义与视觉分离：DTO 只携带语义字段（tone 为 0..=63 数字、styles 为 8 个语义
+//! 语义与视觉分离：DTO 只携带语义字段（color 为 0..=63 数字、styles 为 8 个语义
 //! 字形名），颜色/字形外观完全由 WebView 按语义自行决定。
 
 use narrava_loom_core::{
     expression::value::TextValue,
     host::HostUpdate,
-    presentation::{
-        ActionRole, HeadingLevel, NavigationRole, PresentationAction, PresentationInputKind,
-        PresentationNode, PresentationOutput, PresentationRegion, PresentationTarget,
-        PresentationValue, TextStyle,
+    protocol::{
+        ActionRole, HeadingLevel, NavigationRole, Surface, SurfaceAction, SurfaceInputKind,
+        SurfaceNode, SurfaceTarget, SurfaceValue, TextStyle,
     },
 };
 use serde::Serialize;
@@ -19,12 +18,14 @@ use serde::Serialize;
 pub enum HostNodeDto {
     /// 纯文本。
     Text { key: String, text: String },
-    /// 带语义样式与 tone 色阶的文本（`delay` 为延迟浮现毫秒数，`heading` 为结构性标题级别）。
+    /// 作者显式硬换行。
+    HardBreak { key: String },
+    /// 带语义样式与标准 color 的文本（`delay` 只规定到期前不可见，`heading` 为结构性标题级别）。
     StyledText {
         key: String,
         text: String,
         styles: Vec<&'static str>,
-        tone: u8,
+        color: u8,
         #[serde(skip_serializing_if = "Option::is_none")]
         delay: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,7 +41,7 @@ pub enum HostNodeDto {
     /// 具名区域（header/main/footer/bar/bar-stowed/dialog）。
     Region {
         key: String,
-        region: &'static str,
+        region: String,
         nodes: Vec<HostNodeDto>,
     },
     /// 按 key 可被 Replace 定位的容器。
@@ -118,7 +119,7 @@ pub enum HostNodeDto {
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum HostReplaceTargetDto {
     /// 替换整个区域。
-    Region(&'static str),
+    Region(String),
     /// 替换指定 key 的容器。
     Key(String),
 }
@@ -136,15 +137,12 @@ pub struct HostUpdateDto {
 pub(super) fn convert(update: &HostUpdate) -> HostUpdateDto {
     HostUpdateDto {
         current: update.current().to_owned(),
-        nodes: convert_output(
-            update.presentation(),
-            &format!("passage:{}", update.current()),
-        ),
+        nodes: convert_output(update.surface(), &format!("passage:{}", update.current())),
     }
 }
 
 /// 递归转换输出树；无 key 的节点用 `scope:index:kind` 生成稳定 key。
-fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> {
+fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
     output
         .nodes()
         .iter()
@@ -155,25 +153,26 @@ fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> 
                 |key| key.as_str().to_owned(),
             );
             match node {
-                PresentationNode::Text(text) => HostNodeDto::Text {
+                SurfaceNode::Text(text) => HostNodeDto::Text {
                     key,
                     text: unicode(text),
                 },
-                PresentationNode::StyledText {
+                SurfaceNode::HardBreak => HostNodeDto::HardBreak { key },
+                SurfaceNode::StyledText {
                     text,
                     styles,
-                    tone,
+                    color,
                     delay,
                     heading,
                 } => HostNodeDto::StyledText {
                     key,
                     text: unicode(text),
                     styles: styles.iter().copied().map(text_style).collect(),
-                    tone: tone.index(),
+                    color: color.index(),
                     delay: *delay,
                     heading: heading.map(HeadingLevel::level),
                 },
-                PresentationNode::Image {
+                SurfaceNode::Image {
                     resource,
                     alt,
                     caption,
@@ -183,16 +182,16 @@ fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> 
                     alt: unicode(alt),
                     caption: caption.as_ref().map(unicode),
                 },
-                PresentationNode::Region { region, content } => HostNodeDto::Region {
+                SurfaceNode::Region { region, content } => HostNodeDto::Region {
                     nodes: convert_output(content, &key),
                     key,
-                    region: presentation_region(*region),
+                    region: region.as_str().to_owned(),
                 },
-                PresentationNode::Container { content } => HostNodeDto::Container {
+                SurfaceNode::Container { content } => HostNodeDto::Container {
                     nodes: convert_output(content, &key),
                     key,
                 },
-                PresentationNode::Component {
+                SurfaceNode::Component {
                     capability,
                     version,
                     properties,
@@ -205,45 +204,45 @@ fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> 
                     properties: serde_json::Value::Object(
                         properties
                             .iter()
-                            .map(|(name, value)| (name.clone(), presentation_value(value)))
+                            .map(|(name, value)| (name.clone(), surface_value(value)))
                             .collect(),
                     ),
                 },
-                PresentationNode::Replace { target, content } => HostNodeDto::Replace {
+                SurfaceNode::Replace { target, content } => HostNodeDto::Replace {
                     key: key.clone(),
                     target: match target {
-                        PresentationTarget::Region(region) => {
-                            HostReplaceTargetDto::Region(presentation_region(*region))
+                        SurfaceTarget::Region(region) => {
+                            HostReplaceTargetDto::Region(region.as_str().to_owned())
                         }
-                        PresentationTarget::Key(target) => {
+                        SurfaceTarget::Key(target) => {
                             HostReplaceTargetDto::Key(target.as_str().to_owned())
                         }
                     },
                     nodes: convert_output(content, &key),
                 },
-                PresentationNode::Action {
+                SurfaceNode::Action {
                     label,
                     action,
                     role,
                 } => HostNodeDto::Action {
                     key,
                     label: unicode(label),
-                    action: presentation_action(*action),
+                    action: surface_action(*action),
                     role: action_role(*role),
                 },
-                PresentationNode::Input { id, binding } => match &binding.kind {
-                    PresentationInputKind::Checkbox {
+                SurfaceNode::Input { id, binding } => match &binding.kind {
+                    SurfaceInputKind::Checkbox {
                         unchecked,
                         checked,
                         selected,
                     } => HostNodeDto::Checkbox {
                         key,
                         id: id.as_str().to_owned(),
-                        unchecked: presentation_value(unchecked),
-                        checked: presentation_value(checked),
+                        unchecked: surface_value(unchecked),
+                        checked: surface_value(checked),
                         selected: *selected,
                     },
-                    PresentationInputKind::Radio {
+                    SurfaceInputKind::Radio {
                         group,
                         value,
                         selected,
@@ -251,16 +250,16 @@ fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> 
                         key,
                         id: id.as_str().to_owned(),
                         group: group.as_str().to_owned(),
-                        value: presentation_value(value),
+                        value: surface_value(value),
                         selected: *selected,
                     },
-                    PresentationInputKind::Text { value } => HostNodeDto::Textbox {
+                    SurfaceInputKind::Text { value } => HostNodeDto::Textbox {
                         key,
                         id: id.as_str().to_owned(),
                         value: unicode(value),
                     },
                 },
-                PresentationNode::Navigation {
+                SurfaceNode::Navigation {
                     id,
                     label,
                     target,
@@ -279,7 +278,7 @@ fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> 
                         target: target.clone(),
                     },
                 },
-                PresentationNode::SafeReturn { id, target } => HostNodeDto::SafeReturn {
+                SurfaceNode::SafeReturn { id, target } => HostNodeDto::SafeReturn {
                     key,
                     id: id.as_str().to_owned(),
                     target: target.clone(),
@@ -290,30 +289,31 @@ fn convert_output(output: &PresentationOutput, scope: &str) -> Vec<HostNodeDto> 
 }
 
 /// 节点种类名（用于生成匿名节点 key）。
-fn node_kind(node: &PresentationNode) -> &'static str {
+fn node_kind(node: &SurfaceNode) -> &'static str {
     match node {
-        PresentationNode::Text(_) => "text",
-        PresentationNode::StyledText { .. } => "styled-text",
-        PresentationNode::Image { .. } => "image",
-        PresentationNode::Region { .. } => "region",
-        PresentationNode::Container { .. } => "container",
-        PresentationNode::Component { .. } => "component",
-        PresentationNode::Replace { .. } => "replace",
-        PresentationNode::Action { .. } => "action",
-        PresentationNode::Input { binding, .. } => match binding.kind {
-            PresentationInputKind::Checkbox { .. } => "checkbox",
-            PresentationInputKind::Radio { .. } => "radiobutton",
-            PresentationInputKind::Text { .. } => "textbox",
+        SurfaceNode::Text(_) => "text",
+        SurfaceNode::HardBreak => "hard-break",
+        SurfaceNode::StyledText { .. } => "styled-text",
+        SurfaceNode::Image { .. } => "image",
+        SurfaceNode::Region { .. } => "region",
+        SurfaceNode::Container { .. } => "container",
+        SurfaceNode::Component { .. } => "component",
+        SurfaceNode::Replace { .. } => "replace",
+        SurfaceNode::Action { .. } => "action",
+        SurfaceNode::Input { binding, .. } => match binding.kind {
+            SurfaceInputKind::Checkbox { .. } => "checkbox",
+            SurfaceInputKind::Radio { .. } => "radiobutton",
+            SurfaceInputKind::Text { .. } => "textbox",
         },
-        PresentationNode::Navigation { .. } => "navigation",
-        PresentationNode::SafeReturn { .. } => "safe-return",
+        SurfaceNode::Navigation { .. } => "navigation",
+        SurfaceNode::SafeReturn { .. } => "safe-return",
     }
 }
 
 /// 动作枚举 → IPC 名。
-fn presentation_action(action: PresentationAction) -> &'static str {
+fn surface_action(action: SurfaceAction) -> &'static str {
     match action {
-        PresentationAction::Dismiss => "dismiss",
+        SurfaceAction::Dismiss => "dismiss",
     }
 }
 
@@ -327,35 +327,23 @@ fn action_role(role: ActionRole) -> &'static str {
     }
 }
 
-/// Presentation 值 → JSON（用于组件属性与控件取值）。
-fn presentation_value(value: &PresentationValue) -> serde_json::Value {
+/// Surface 值 → JSON（用于组件属性与控件取值）。
+fn surface_value(value: &SurfaceValue) -> serde_json::Value {
     match value {
-        PresentationValue::Null => serde_json::Value::Null,
-        PresentationValue::Boolean(value) => serde_json::Value::Bool(*value),
-        PresentationValue::Number(value) => serde_json::Number::from_f64(*value)
+        SurfaceValue::Null => serde_json::Value::Null,
+        SurfaceValue::Boolean(value) => serde_json::Value::Bool(*value),
+        SurfaceValue::Number(value) => serde_json::Number::from_f64(*value)
             .map_or(serde_json::Value::Null, serde_json::Value::Number),
-        PresentationValue::Text(value) => serde_json::Value::String(value.clone()),
-        PresentationValue::List(values) => {
-            serde_json::Value::Array(values.iter().map(presentation_value).collect())
+        SurfaceValue::Text(value) => serde_json::Value::String(value.clone()),
+        SurfaceValue::List(values) => {
+            serde_json::Value::Array(values.iter().map(surface_value).collect())
         }
-        PresentationValue::Map(values) => serde_json::Value::Object(
+        SurfaceValue::Map(values) => serde_json::Value::Object(
             values
                 .iter()
-                .map(|(name, value)| (name.clone(), presentation_value(value)))
+                .map(|(name, value)| (name.clone(), surface_value(value)))
                 .collect(),
         ),
-    }
-}
-
-/// 区域枚举 → IPC 区域名。
-fn presentation_region(region: PresentationRegion) -> &'static str {
-    match region {
-        PresentationRegion::Header => "header",
-        PresentationRegion::Main => "main",
-        PresentationRegion::Footer => "footer",
-        PresentationRegion::Bar => "bar",
-        PresentationRegion::BarStowed => "bar-stowed",
-        PresentationRegion::Dialog => "dialog",
     }
 }
 

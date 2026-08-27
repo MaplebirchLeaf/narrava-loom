@@ -64,6 +64,9 @@ pub enum BytecodeOperation {
         span: Span,
         i18n: Option<BytecodeI18nPart>,
     },
+    HardBreak {
+        output: MirOutputMode,
+    },
     PrintExpression {
         output: MirOutputMode,
         span: Span,
@@ -132,6 +135,7 @@ impl BytecodeOperation {
                 span: *span,
                 i18n: i18n.as_ref().map(BytecodeI18nPart::from),
             },
+            MirInstruction::HardBreak { output } => Self::HardBreak { output: *output },
             MirInstruction::PrintExpression {
                 output, span, i18n, ..
             } => Self::PrintExpression {
@@ -217,6 +221,7 @@ impl BytecodeOperation {
     pub(super) fn opcode(&self) -> Opcode {
         match self {
             Self::Text { .. } => Opcode::Text,
+            Self::HardBreak { .. } => Opcode::HardBreak,
             Self::PrintExpression { .. } => Opcode::PrintExpression,
             Self::PrintLiteral { .. } => Opcode::PrintLiteral,
             Self::EvaluateDiscard => Opcode::EvaluateDiscard,
@@ -254,6 +259,7 @@ impl BytecodeOperation {
                 usize::from(matches!(arguments, BytecodeMacroArguments::Expression))
             }
             Self::Text { .. }
+            | Self::HardBreak { .. }
             | Self::PrintLiteral { .. }
             | Self::ExitPassage
             | Self::Jump { .. }
@@ -357,6 +363,7 @@ pub(super) fn own_expressions(instruction: &MirInstruction<'_, '_>) -> Vec<Owned
             HirMacroArguments::None | HirMacroArguments::Raw(_) => Vec::new(),
         },
         MirInstruction::Text { .. }
+        | MirInstruction::HardBreak { .. }
         | MirInstruction::PrintLiteral { .. }
         | MirInstruction::ExitPassage
         | MirInstruction::Jump { .. }

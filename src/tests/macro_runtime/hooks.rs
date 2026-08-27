@@ -86,12 +86,9 @@ fn lifecycle_controller_executes_matching_subscriptions_in_order() {
             arguments[0] = Value::string(*hook);
             Ok(())
         },
-        |hook: &&str,
-         _name: &str,
-         _arguments: &[Value],
-         mut output: crate::presentation::PresentationOutput| {
+        |hook: &&str, _name: &str, _arguments: &[Value], mut output: crate::protocol::Surface| {
             order.borrow_mut().push((*hook).to_owned());
-            output.push(PresentationNode::Text(TextValue::from(*hook)));
+            output.push(SurfaceNode::Text(TextValue::from(*hook)));
             Ok(output)
         },
     );
@@ -100,18 +97,14 @@ fn lifecycle_controller_executes_matching_subscriptions_in_order() {
     controller
         .before("greet", &mut arguments)
         .expect("before 序列应完成");
-    let output: crate::presentation::PresentationOutput = controller
-        .after(
-            "greet",
-            &arguments,
-            crate::presentation::PresentationOutput::default(),
-        )
+    let output: crate::protocol::Surface = controller
+        .after("greet", &arguments, crate::protocol::Surface::default())
         .expect("after 序列应完成");
 
     assert_eq!(arguments, vec![Value::string("second")]);
     assert_eq!(
         output.nodes(),
-        &[PresentationNode::Text(TextValue::from("suffix"))]
+        &[SurfaceNode::Text(TextValue::from("suffix"))]
     );
     assert_eq!(
         order.into_inner(),

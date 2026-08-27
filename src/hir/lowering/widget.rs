@@ -27,6 +27,7 @@ pub(super) fn validate_widget_passage_content(passages: &[HirPassage<'_>]) -> Re
             .find(|node: &&HirBodyNode<'_>| match node.kind {
                 HirBodyKind::Widget(_) => false,
                 HirBodyKind::Text(text) => !text.trim().is_empty(),
+                HirBodyKind::HardBreak => false,
                 _ => true,
             })
         {

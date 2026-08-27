@@ -21,16 +21,16 @@
 你发现了<<print " 发光的钥匙" 32 "strong">>。<br>
 <</if>>
 <<link [[查看藏书室|Library]]>><</link>><br>
-<<link [[查看语义渲染|PresentationGallery]]>><</link>><br>
+<<link [[查看语义渲染|SurfaceGallery]]>><</link>><br>
 <<link [[查看弹窗与按钮|DialogGallery]]>><</link>><br>
 <<link [[查看状态绑定表单|FormGallery]]>><</link>><br>
 <<link [[查看内容替换|ReplaceGallery]]>><</link>><br>
 <<link [[查看作者能力演示|AuthorToolsGallery]]>><</link>><br>
-<<link [[查看 Twee 内 Presentation|TextGallery]]>><</link>><br>
+<<link [[查看 Twee 内 Surface|TextGallery]]>><</link>><br>
 <<link [[查看控制流范本|MacroGallery]]>><</link>>
 
-:: PresentationGallery [reference]
-<<presentationDemo>>
+:: SurfaceGallery [reference]
+<<surfaceDemo>>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: DialogGallery [reference]
@@ -53,13 +53,13 @@
 
 :: ReplaceGallery [reference]
 <<slot "status-panel">>
-  这段默认内容会被同一份 Presentation 中稍后的 replace 替换。
+  这段默认内容会被同一份 Surface 中稍后的 replace 替换。
 <</slot>>
 <<replace "status-panel">>
-  稳定槽 status-panel 已被替换；Tauri 与 TUI 都按 Presentation Key 定位它。
+  稳定槽 status-panel 已被替换；Tauri 与 TUI 都按 Surface Key 定位它。
 <</replace>>
 <<replace "header">>
-  替换后的页眉：这是由 replace 容器正文产生的 Presentation。
+  替换后的页眉：这是由 replace 容器正文产生的 Surface。
 <</replace>>
 正文仍保留在 Passage Main；TUI 与 WebView 都能把 header 映射到自己的区域。<br>
 <<link [[返回大厅|Hall]]>><</link>>
@@ -82,10 +82,10 @@
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: TextGallery [reference]
-这是由 print Macro 提供的 Twee 内 Presentation：内容 + 可选 tone + 零到多个 style，<br>
+这是由 print Macro 提供的 Twee 内 Surface：内容 + 可选 color + 零到多个 style，<br>
 不需要写脚本。结构化的 Region、Component、图片与 Dialog 仍需在 scripts 中构建。<br>
 
-<br>状态色阶是 0..=63，对齐二进制边界：0-7 是灰阶（白1→亮灰2→浅灰3→灰4→深灰5→暗灰6→黑7），<br>
+<br>标准调色板是 0..=63：0-7 是默认色与灰阶，8-63 是红到深紫的色谱。<br>
 8-63 是光谱（红8→橙16→黄24→绿32→蓝40→紫48→深紫56→63，每色相 8 级）；0 为正文默认。<br>
 <<print "3" 3>> <<print "8" 8>> <<print "16" 16>> <<print "24" 24>><br>
 <<print "32" 32>> <<print "40" 40>> <<print "48" 48>> <<print "63" 63>><br>
@@ -100,19 +100,19 @@
 <br>标题示例（色阶 16 是橙色，strong 只负责加粗）：<br>
 <<print "橙色标题演示" 16 "strong">><br>
 
-<br>tone 与 style 互不排斥，可以同时指定。位置形式（内容、tone、style...）：<br>
+<br>color 与 style 互不排斥，可以同时指定。位置形式（内容、color、style...）：<br>
 <<print "正面加粗" 32 "strong">><br>
-对象形式把 tone 与多个 style 写在一个对象里：<br>
-<<print "警告对象形式" {tone: 24, styles: ["strong", "code"]}>><br>
+对象形式把 color 与多个 style 写在一个对象里：<br>
+<<print "警告对象形式" {color: 24, styles: ["strong", "code"]}>><br>
 
 <br>变量内容：<<print $hero 16 "strong">>。<br>
 
-<br>延迟显示：对象形式加 delay（毫秒），渲染器在此之前保持隐藏、到时淡入浮现。<br>
-<<print "两秒后出现的文字" {tone: 40, delay: 2000}>><br>
-<<print "一秒后出现的文字" {tone: 32, styles: ["strong"], delay: 1000}>><br>
+<br>延迟显示：对象形式加 delay（毫秒），Host 在此之前不呈现内容。<br>
+<<print "两秒后出现的文字" {color: 40, delay: 2000}>><br>
+<<print "一秒后出现的文字" {color: 32, styles: ["strong"], delay: 1000}>><br>
 
-<br>浮现属于 Host 视觉层：Presentation 只表达色阶、语义字形和延迟提示。<br>
-作者可在 styles/*.css 里用 [data-tone="N"] 覆盖任意色阶。<br>
+<br>动画属于 Host 视觉层：Surface 的 delay 只表达内容到期前不可见。<br>
+作者可在 styles/*.css 里用 [data-color="N"] 覆盖任意色阶。<br>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: MacroGallery [reference]

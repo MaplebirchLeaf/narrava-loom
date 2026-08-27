@@ -12,10 +12,10 @@
 - Source → Twee → HIR → MIR → LIR → 拥有型 Bytecode → VM 编译执行链；
 - 事务化 Engine、State、Story、Expression、Macro、Event、Logger 和 Diagnostic；
 - I18n、Save、Resource、Script Bundle 与 TypeScript 游戏作者契约；
-- Host-neutral Presentation，包括语义节点、交互、稳定 Key、`slot` 与 `replace`；
+- Host-neutral Surface，包括语义节点、交互、稳定 Key、`slot` 与 `replace`；
 - 在 Rust Worker 中执行 ECMAScript 的 Tauri Host，以及只负责 Renderer 的 WebView；
 - 由 `Bar`／`BarStowed` 控制的展开与收起侧栏，以及不污染真实 State／Story 的特殊区域渲染；
-- 可操作的 TUI Presentation 前端，包括输入值保留、命令验证与标准输入／输出循环；
+- 可操作的 TUI Surface 前端，包括输入值保留、命令验证与标准输入／输出循环；
 - 无 Rust 综合示例、Twee VS Code 扩展、可移动发行目录和正式构建流水线。
 
 ## 当前限制
@@ -32,7 +32,7 @@
 
 1. 用真实 Tauri 窗口完成发行目录的视觉、输入、Resource、I18n 与 Save 回归；
 2. 抽取可供 Tauri 与 TUI 共用的 Native ECMAScript／Runtime 驱动，避免复制 Worker；
-3. 根据实际游戏用例稳定 0.1.x 的公开 API 与诊断，不预先扩张平台能力；
+3. 根据实际游戏用例稳定 0.2.x 的公开 API 与诊断，不预先扩张平台能力；
 4. Core 稳定后，再单独设计 `narrava-loom-modloader` 的最小 `.nmod` 纵向链。
 
 ## 发布门禁

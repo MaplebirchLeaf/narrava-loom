@@ -90,8 +90,8 @@ fn host_start_forwards_the_fallback_chain_into_the_engine_transaction() {
     };
 
     assert!(matches!(
-        update.presentation().nodes(),
-        [PresentationNode::Text(text)]
+        update.surface().nodes(),
+        [SurfaceNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("发现铁剑")
     ));
 }
@@ -156,7 +156,7 @@ fn host_takes_only_a_presented_macro_interaction_with_the_same_target() {
 }
 
 #[test]
-fn host_does_not_consume_macro_interaction_when_presentation_does_not_match() {
+fn host_does_not_consume_macro_interaction_when_surface_does_not_match() {
     let body: Vec<HirBodyNode<'_>> = Vec::new();
     let id: InteractionId = InteractionId::from_key("link:host:mismatch");
     let presented: HostUpdate = host_update_with_navigation(id.clone(), "Forest");
@@ -182,7 +182,7 @@ fn host_rejects_a_presented_navigation_without_a_macro_action() {
     let mut interactions: MacroInteractions<'_, '_> = MacroInteractions::new();
 
     let error: Diagnostic = HostApi::take_macro_interaction(&presented, &id, &mut interactions)
-        .expect_err("缺少 Core 动作时不能只信任 Presentation 目标");
+        .expect_err("缺少 Core 动作时不能只信任 Surface 目标");
 
     assert_eq!(error.code, "host.missing_macro_interaction");
     assert!(interactions.is_empty());
@@ -475,7 +475,7 @@ fn host_mir_chain_presents_and_activates_an_author_link() {
     let HostDriveResult::Ready(started) = started else {
         panic!("同步 link 不应产生异步等待");
     };
-    let [PresentationNode::Navigation { id, label, target, .. }] = started.presentation().nodes()
+    let [SurfaceNode::Navigation { id, label, target, .. }] = started.surface().nodes()
     else {
         panic!("Start 应只显示一个作者导航动作");
     };
@@ -515,8 +515,8 @@ fn host_mir_chain_presents_and_activates_an_author_link() {
 
     assert_eq!(advanced.current(), "Forest");
     assert!(matches!(
-        advanced.presentation().nodes(),
-        [PresentationNode::Text(text), PresentationNode::SafeReturn { target, .. }]
+        advanced.surface().nodes(),
+        [SurfaceNode::Text(text), SurfaceNode::SafeReturn { target, .. }]
             if text.as_units() == TextValue::from("森林深处").as_units() && target == "Start"
     ));
 }

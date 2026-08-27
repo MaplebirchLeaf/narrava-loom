@@ -53,7 +53,7 @@
 ```
 
 普通源码换行会折叠为空格，`<br>` 才是游戏内硬换行。文字样式使用
-`<<print value tone style...>>` 或脚本侧 `Presentation.text()`；其他标签会按普通文字显示。
+`<<print value color style...>>` 或脚本侧 `Surface.text()`；其他标签会按普通文字显示。
 
 ## 变量：什么时候用 `$`、`_`、`@`、`setup`
 

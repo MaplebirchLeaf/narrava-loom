@@ -21,13 +21,13 @@ cargo test --locked -p narrava-loom-tauri
 
 ```bash
 cargo test --locked -p narrava-loom-tauri host_delay_suspends_and_resumes_the_engine_transaction
-cargo test --locked -p narrava-loom-tauri example_presentation_builder_reaches_tauri_semantic_dtos
+cargo test --locked -p narrava-loom-tauri example_surface_builder_reaches_tauri_semantic_dtos
 cargo test --locked -p narrava-loom-tauri packaged_game_starts_without_development_sources
 cargo test --locked -p narrava-loom-tauri packaged_host_styles_are_restored_from_the_reserved_resource_namespace
 cargo test --locked -p narrava-loom-tauri protocol_reads_only_the_requested_validated_resource
 ```
 
-这些测试分别覆盖 Pending／Resume、Script Presentation 到 DTO、发行包启动、打包 CSS 恢复和
+这些测试分别覆盖 Pending／Resume、Script Surface 到 DTO、发行包启动、打包 CSS 恢复和
 Resource 自定义协议。它们不会验证 WebKit 实际像素布局。
 
 Rust 静态检查和全仓库门禁见[仓库命令](commands.md)。

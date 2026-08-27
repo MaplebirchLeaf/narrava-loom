@@ -26,6 +26,7 @@ pub struct HirBodyNode<'source> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum HirBodyKind<'source> {
     Text(&'source str),
+    HardBreak,
     Print(HirPrint<'source>),
     Silently(Vec<HirBodyNode<'source>>),
     If(HirIf<'source>),
@@ -177,7 +178,7 @@ impl HirPassage<'_> {
         self.tags.contains(&tag)
     }
 
-    /// Widget Passage 只保存定义；顶层文本不进入 Presentation 输出。
+    /// Widget Passage 只保存定义；顶层文本不进入 Surface 输出。
     pub fn emits_text(&self) -> bool {
         !self.has_tag("widget")
     }

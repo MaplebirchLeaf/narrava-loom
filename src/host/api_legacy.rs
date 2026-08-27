@@ -52,13 +52,13 @@ impl HostApi {
         match input {
             HostInput::Activate { interaction } => {
                 let target: String = presented
-                    .presentation
+                    .surface
                     .interaction_target(&interaction)
                     .ok_or_else(|| {
                         host_error(
                             "host.unknown_interaction",
                             &format!(
-                                "交互身份未出现在上一份 Presentation 中：{}",
+                                "交互身份未出现在上一份 Surface 中：{}",
                                 interaction.as_str()
                             ),
                         )

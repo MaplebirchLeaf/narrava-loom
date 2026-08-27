@@ -53,6 +53,53 @@ fn i18n_catalog_does_not_export_whitespace_only_output() {
 }
 
 #[test]
+fn hard_break_splits_translatable_messages_without_exporting_markup() {
+    let source: Source = Source {
+        path: crate::source::SourcePath::from_path(Path::new("story/main.twee")).unwrap(),
+        kind: crate::source::SourceKind::Twee,
+        content: String::from(":: Start\na<br>b"),
+    };
+    let sources: [Source; 1] = [source];
+    let twee: crate::twee::Story<'_> = crate::twee::Story::build(&sources).unwrap();
+    let hir: HirStory<'_> = HirStory::lower(&twee).unwrap();
+    let catalog: I18nCatalog = I18nCatalog::from_hir(&hir);
+    let nmsg: String = catalog.template("en").to_nmsg();
+
+    assert_eq!(catalog.messages().len(), 2);
+    assert_eq!(catalog.messages()[0].text(), "a");
+    assert_eq!(catalog.messages()[1].text(), "b");
+    assert!(!nmsg.contains("<br>"));
+    assert!(!nmsg.contains("{br}"));
+    assert!(matches!(hir.passages[0].body[1].kind, HirBodyKind::HardBreak));
+}
+
+#[test]
+fn hard_break_is_structured_inside_nested_control_flow() {
+    let source: Source = Source {
+        path: crate::source::SourcePath::from_path(Path::new("story/main.twee")).unwrap(),
+        kind: crate::source::SourceKind::Twee,
+        content: String::from(":: Start\n<<if true>>\na<br>b\n<</if>>"),
+    };
+    let sources: [Source; 1] = [source];
+    let twee: crate::twee::Story<'_> = crate::twee::Story::build(&sources).unwrap();
+    let hir: HirStory<'_> = HirStory::lower(&twee).unwrap();
+    let HirBodyKind::If(branches) = &hir.passages[0].body[0].kind else {
+        panic!("if 应保留结构化分支");
+    };
+
+    let body: &[HirBodyNode<'_>] = &branches.branches[0].body;
+    let break_index: usize = body
+        .iter()
+        .position(|node| matches!(node.kind, HirBodyKind::HardBreak))
+        .expect("嵌套正文中的 <br> 应成为 HardBreak");
+    assert!(matches!(
+        (&body[break_index - 1].kind, &body[break_index + 1].kind),
+        (HirBodyKind::Text(before), HirBodyKind::Text(after))
+            if before.ends_with('a') && after.starts_with('b')
+    ));
+}
+
+#[test]
 fn i18n_template_exposes_translator_text_and_placeholder_bindings() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),

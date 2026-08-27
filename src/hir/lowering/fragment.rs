@@ -56,7 +56,15 @@ pub(super) fn print_argument_required_diagnostic() -> Diagnostic {
 pub fn lower_fragment<'source>(
     nodes: &[twee::BodyNode<'source>],
 ) -> Result<Vec<HirBodyNode<'source>>, HirError> {
-    nodes.iter().map(lower_fragment_node).collect()
+    let mut lowered: Vec<HirBodyNode<'source>> = Vec::new();
+    for node in nodes {
+        if let twee::BodyNodeKind::Text(text) = node.kind {
+            lowered.extend(super::lower_text_nodes(text, node.span));
+        } else {
+            lowered.push(lower_fragment_node(node)?);
+        }
+    }
+    Ok(lowered)
 }
 
 /// 把单个动态 Twee 节点降为 HIR；通用 Macro 参数保持 Raw。

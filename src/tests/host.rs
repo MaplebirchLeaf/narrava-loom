@@ -33,7 +33,7 @@ use crate::{
         prepare_argument_values, register_story_widgets,
     },
     mir::MirStory,
-    presentation::{InteractionId, PresentationNode, PresentationOutput},
+    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionIdentity,
         RuntimeMacroExecution,
@@ -47,8 +47,8 @@ use crate::{
 fn host_update_with_navigation(id: InteractionId, target: &str) -> HostUpdate {
     HostUpdate::new(
         "Start",
-        PresentationOutput::from_nodes(vec![PresentationNode::Navigation {
-            role: crate::presentation::NavigationRole::Link,
+        Surface::from_nodes(vec![SurfaceNode::Navigation {
+            role: crate::protocol::NavigationRole::Link,
             id,
             label: TextValue::from("前往"),
             target: target.to_owned(),

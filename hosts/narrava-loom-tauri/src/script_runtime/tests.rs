@@ -55,9 +55,9 @@ fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
     assert!(value.get("missing").is_none());
 }
 
-/// Presentation builder 是冻结且 Host 中立的（不依赖 `narrava` 全局）。
+/// Surface builder 是冻结且 Host 中立的（不依赖 `narrava` 全局）。
 #[test]
-fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
+fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
     let mut context = Context::default();
     context
         .eval(Source::from_bytes(BOOTSTRAP))
@@ -67,15 +67,17 @@ fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
             r#"
               JSON.stringify({
                 narravaType: typeof narrava,
-                frozen: Object.isFrozen(Presentation),
-                value: Presentation.region("bar", [
-                  Presentation.text("体力不足", { key: "stamina", styles: ["strong"], tone: "warning" }),
-                  Presentation.image("images/hero.png", { alt: "主角" }),
+                presentationType: typeof Presentation,
+                surfaceType: typeof Surface,
+                frozen: Object.isFrozen(Surface),
+                value: Surface.region("bar", [
+                  Surface.text("体力不足", { key: "stamina", styles: ["strong"], color: "warning" }),
+                  Surface.image("images/hero.png", { alt: "主角" }),
                 ], { key: "status" }),
               })
             "#,
         ))
-        .expect("Presentation builder 应可执行");
+        .expect("Surface builder 应可执行");
     let json = result
         .to_string(&mut context)
         .unwrap()
@@ -83,9 +85,11 @@ fn bootstrap_exposes_frozen_host_neutral_presentation_builders() {
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
 
     assert_eq!(value["narravaType"], "undefined");
+    assert_eq!(value["presentationType"], "undefined");
+    assert_eq!(value["surfaceType"], "object");
     assert_eq!(value["frozen"], true);
-    assert_eq!(value["value"]["__narravaPresentation"], "region");
-    assert_eq!(value["value"]["children"][0]["tone"], "warning");
+    assert_eq!(value["value"]["__narravaSurface"], "region");
+    assert_eq!(value["value"]["children"][0]["color"], "warning");
 }
 
 /// Save 钩子按注册顺序执行，可改写目标，且 after 等待完成结果。

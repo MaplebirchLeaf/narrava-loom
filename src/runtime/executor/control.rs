@@ -265,7 +265,7 @@ where
 
         // Widget 先写入自己的缓冲区。只有完整成功后才合并，后续 after 钩子也只会
         // 接触这一份输出；失败时不能把半段文本遗留在 Passage 输出中。
-        let outer_output: PresentationOutput = std::mem::take(&mut self.output);
+        let outer_output: Surface = std::mem::take(&mut self.output);
         self.locals.enter_call(prepared.arguments);
 
         if let Some(callbacks) = self.macro_lifecycle.as_deref_mut() {
@@ -282,7 +282,7 @@ where
 
         let result: Result<BodyControl, RuntimeExecutionError<Story::Error>> =
             self.execute_body(prepared.body);
-        let mut widget_output: PresentationOutput = std::mem::take(&mut self.output);
+        let mut widget_output: Surface = std::mem::take(&mut self.output);
         self.output = outer_output;
 
         match result {
@@ -381,7 +381,7 @@ where
             }
         };
 
-        let outer_output: PresentationOutput = std::mem::take(&mut self.output);
+        let outer_output: Surface = std::mem::take(&mut self.output);
         let captures: CapturedMacroLocals<Value> = self.locals.capture(&self.capture_names);
         self.locals.enter_call(arguments);
         if let Some(callbacks) = self.macro_lifecycle.as_deref_mut() {

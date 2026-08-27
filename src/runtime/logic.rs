@@ -1,4 +1,4 @@
-//! 不直接产生 Presentation 输出的 HIR 逻辑节点分派。
+//! 不直接产生 Surface 输出的 HIR 逻辑节点分派。
 
 use crate::{
     diagnostic::{Diagnostic, DiagnosticSeverity},

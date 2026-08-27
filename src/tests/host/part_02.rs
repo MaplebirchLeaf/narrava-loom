@@ -1,7 +1,7 @@
 // host.rs 测试分片 02：按用例边界拆分，保持原测试顺序。
 // 本文件由上级测试模块直接包含，共享该模块的导入与辅助夹具。
 #[test]
-fn host_start_returns_only_current_identity_and_presentation() {
+fn host_start_returns_only_current_identity_and_surface() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),
@@ -28,7 +28,7 @@ fn host_start_returns_only_current_identity_and_presentation() {
         |_passage, _state, _requests, _limits| {
             Ok::<BodyExecution, Diagnostic>(BodyExecution {
                 control: BodyControl::Continue,
-                output: PresentationOutput::from_nodes(vec![PresentationNode::Text(
+                output: Surface::from_nodes(vec![SurfaceNode::Text(
                     TextValue::from("森林入口"),
                 )]),
             })
@@ -38,26 +38,28 @@ fn host_start_returns_only_current_identity_and_presentation() {
 
     assert_eq!(update.current(), "Start");
     assert_eq!(
-        update.presentation().nodes(),
-        &[PresentationNode::Text(TextValue::from("森林入口"))]
+        update.surface().nodes(),
+        &[SurfaceNode::Text(TextValue::from("森林入口"))]
     );
 }
 
 #[test]
-fn host_visible_text_requires_explicit_br_for_line_breaks() {
+fn host_update_preserves_protocol_hard_break_without_scanning_text() {
     let update: HostUpdate = HostUpdate::new(
         "Start",
-        PresentationOutput::from_nodes(vec![
-            PresentationNode::Text(TextValue::from("第一行\n第二行")),
-            PresentationNode::Text(TextValue::from("第三行<br>第四行")),
+        Surface::from_nodes(vec![
+            SurfaceNode::Text(TextValue::from("第一行")),
+            SurfaceNode::HardBreak,
+            SurfaceNode::Text(TextValue::from("第二行")),
         ]),
     );
 
     assert_eq!(
-        update.presentation().nodes(),
+        update.surface().nodes(),
         &[
-            PresentationNode::Text(TextValue::from("第一行 第二行")),
-            PresentationNode::Text(TextValue::from("第三行\n第四行")),
+            SurfaceNode::Text(TextValue::from("第一行")),
+            SurfaceNode::HardBreak,
+            SurfaceNode::Text(TextValue::from("第二行")),
         ]
     );
 }
@@ -104,8 +106,8 @@ fn host_navigation_input_is_validated_and_executed_by_engine() {
         |_passage, _state, _requests, _limits| {
             Ok::<BodyExecution, Diagnostic>(BodyExecution {
                 control: BodyControl::Continue,
-                output: PresentationOutput::from_nodes(vec![PresentationNode::Navigation {
-                    role: crate::presentation::NavigationRole::Link,
+                output: Surface::from_nodes(vec![SurfaceNode::Navigation {
+                    role: crate::protocol::NavigationRole::Link,
                     id: interaction.clone(),
                     label: TextValue::from("进入森林"),
                     target: String::from("Forest"),
@@ -148,8 +150,8 @@ fn host_navigation_input_is_validated_and_executed_by_engine() {
 
     assert_eq!(update.current(), "Forest");
     assert!(matches!(
-        update.presentation().nodes(),
-        [PresentationNode::SafeReturn { target, .. }] if target == "Start"
+        update.surface().nodes(),
+        [SurfaceNode::SafeReturn { target, .. }] if target == "Start"
     ));
     assert_eq!(state.variables_get("unused"), None::<&Value>);
 }

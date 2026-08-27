@@ -1,6 +1,6 @@
-//! Core Presentation 到终端区域、文本和交互列表的最小 Host Renderer。
+//! Core Surface 到终端区域、文本和交互列表的最小 Host Renderer。
 //!
-//! 语义与视觉分离：颜色只由 64 级 tone 色阶（0 最弱、63 最强）决定，字形只由语义
+//! 语义与视觉分离：颜色只由 64 级 color 色阶（0 最弱、63 最强）决定，字形只由语义
 //! TextStyle 决定；`delay > 0` 的文本停放在 `frame.delayed`，由消费方在最小
 //! `delay_ms` 之后用 `render_at` 重新渲染。
 
@@ -10,22 +10,21 @@ use std::{
     io::{self, BufRead, Write},
 };
 
-use narrava_loom_core::presentation::{
-    HeadingLevel, NavigationRole, PresentationAction, PresentationInputKind, PresentationNode,
-    PresentationOutput, PresentationRegion, PresentationTarget, PresentationValue, TextStyle,
-    TextTone,
+use narrava_loom_core::protocol::{
+    HeadingLevel, NavigationRole, RegionId, Surface, SurfaceAction, SurfaceInputKind, SurfaceNode,
+    SurfaceTarget, SurfaceValue, TextColor, TextStyle,
 };
 
 /// 输入控件执行时需要的完整语义。TUI 保留这些值，避免终端层根据标签反推状态。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiInput {
     Checkbox {
-        unchecked: PresentationValue,
-        checked: PresentationValue,
+        unchecked: SurfaceValue,
+        checked: SurfaceValue,
         selected: bool,
     },
     Radio {
-        value: PresentationValue,
+        value: SurfaceValue,
         selected: bool,
     },
     Text {
@@ -104,7 +103,7 @@ impl TuiCommand {
                     .ok_or(TuiCommandError::MissingIdentity)?;
                 Ok(TuiOperation::Input {
                     id,
-                    value: PresentationValue::Text(value.clone()),
+                    value: SurfaceValue::Text(value.clone()),
                 })
             }
             Self::Help => Ok(TuiOperation::Help),
@@ -117,13 +116,8 @@ impl TuiCommand {
 /// 终端协议解析出的平台无关操作。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiOperation {
-    Activate {
-        id: String,
-    },
-    Input {
-        id: String,
-        value: PresentationValue,
-    },
+    Activate { id: String },
+    Input { id: String, value: SurfaceValue },
     Dismiss,
     Help,
     Redraw,
@@ -359,7 +353,7 @@ impl TuiSurface {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TuiDelayedText {
     /// 文本最终应进入的区域名。
-    pub region: &'static str,
+    pub region: String,
     /// 待显示的行文本。
     pub lines: Vec<String>,
     /// 到达显示时刻前还需等待的毫秒数。
@@ -383,6 +377,8 @@ pub struct TuiFrame {
     pub bar_stowed: Vec<String>,
     /// 弹窗区域。
     pub dialog: Vec<String>,
+    /// Host 不认识的开放区域；按逻辑 RegionId 原名保留，绝不静默丢弃。
+    pub custom: BTreeMap<String, Vec<String>>,
     /// 玩家可触发的动作列表。
     pub interactions: Vec<TuiInteraction>,
     /// `delay > 0` 且未到时刻的文本；消费方按其最小 `delay_ms` 安排下次 `render_at`。
@@ -394,7 +390,7 @@ pub struct TuiFrame {
 #[derive(Clone, Debug, Default)]
 pub struct TuiRenderer {
     /// 各区域名到其文本面的缓冲。
-    surfaces: BTreeMap<&'static str, TuiSurface>,
+    surfaces: BTreeMap<String, TuiSurface>,
     /// 本帧收集到的可触发交互。
     interactions: Vec<TuiInteraction>,
     /// 本帧停放、尚未到时的延迟文本。
@@ -403,45 +399,35 @@ pub struct TuiRenderer {
 
 impl TuiRenderer {
     /// 渲染当前时刻（elapsed = 0）的帧；`delay > 0` 的文本停放在 `frame.delayed`。
-    pub fn render(&mut self, current: &str, output: &PresentationOutput) -> TuiFrame {
+    pub fn render(&mut self, current: &str, output: &Surface) -> TuiFrame {
         self.render_at(current, output, 0)
     }
 
     /// 渲染经过 `elapsed_ms` 毫秒后的帧：`delay <= elapsed_ms` 的文本进入对应区域，
     /// 其余仍停放在 `frame.delayed` 供消费方继续等待。
-    pub fn render_at(
-        &mut self,
-        current: &str,
-        output: &PresentationOutput,
-        elapsed_ms: u64,
-    ) -> TuiFrame {
+    pub fn render_at(&mut self, current: &str, output: &Surface, elapsed_ms: u64) -> TuiFrame {
         self.surfaces.clear();
         self.interactions.clear();
         self.delayed.clear();
-        self.render_output(PresentationRegion::Main, output, elapsed_ms);
+        self.render_output(RegionId::main(), output, elapsed_ms);
         self.frame(current)
     }
 
     /// 递归渲染输出树：Region 下钻、Replace 就地覆盖、未到时的延迟文本停放。
-    fn render_output(
-        &mut self,
-        region: PresentationRegion,
-        output: &PresentationOutput,
-        elapsed_ms: u64,
-    ) {
+    fn render_output(&mut self, region: RegionId, output: &Surface, elapsed_ms: u64) {
         for (index, node) in output.nodes().iter().enumerate() {
             let key = output.key(index).map(|key| key.as_str().to_owned());
             match node {
-                PresentationNode::Region { region, content } => {
-                    self.render_output(*region, content, elapsed_ms)
+                SurfaceNode::Region { region, content } => {
+                    self.render_output(region.clone(), content, elapsed_ms)
                 }
-                PresentationNode::Replace { target, content } => {
+                SurfaceNode::Replace { target, content } => {
                     let lines = render_content(content, &mut self.interactions);
                     match target {
-                        PresentationTarget::Region(target) => {
-                            self.surface_mut(*target).blocks = vec![TuiBlock { key: None, lines }];
+                        SurfaceTarget::Region(target) => {
+                            self.surface_mut(target).blocks = vec![TuiBlock { key: None, lines }];
                         }
-                        PresentationTarget::Key(target) => {
+                        SurfaceTarget::Key(target) => {
                             for surface in self.surfaces.values_mut() {
                                 if surface.replace_key(target.as_str(), &lines) {
                                     break;
@@ -450,13 +436,13 @@ impl TuiRenderer {
                         }
                     }
                 }
-                PresentationNode::StyledText {
+                SurfaceNode::StyledText {
                     delay: Some(delay), ..
                 } if *delay > elapsed_ms => {
                     let lines = render_node(node, &mut self.interactions);
                     if !lines.is_empty() {
                         self.delayed.push(TuiDelayedText {
-                            region: region_name(region),
+                            region: region.as_str().to_owned(),
                             lines,
                             delay_ms: *delay,
                         });
@@ -465,7 +451,7 @@ impl TuiRenderer {
                 _ => {
                     let lines = render_node(node, &mut self.interactions);
                     if !lines.is_empty() {
-                        self.surface_mut(region)
+                        self.surface_mut(&region)
                             .blocks
                             .push(TuiBlock { key, lines });
                     }
@@ -475,38 +461,41 @@ impl TuiRenderer {
     }
 
     /// 取（必要时创建）某区域的文本面。
-    fn surface_mut(&mut self, region: PresentationRegion) -> &mut TuiSurface {
-        self.surfaces.entry(region_name(region)).or_default()
+    fn surface_mut(&mut self, region: &RegionId) -> &mut TuiSurface {
+        self.surfaces.entry(region.as_str().to_owned()).or_default()
     }
 
     /// 把当前缓冲整理为一帧可打印画面。
     fn frame(&self, current: &str) -> TuiFrame {
         TuiFrame {
             current: current.to_owned(),
-            header: self.lines(PresentationRegion::Header),
-            main: self.lines(PresentationRegion::Main),
-            footer: self.lines(PresentationRegion::Footer),
-            bar: self.lines(PresentationRegion::Bar),
-            bar_stowed: self.lines(PresentationRegion::BarStowed),
-            dialog: self.lines(PresentationRegion::Dialog),
+            header: self.lines(RegionId::header()),
+            main: self.lines(RegionId::main()),
+            footer: self.lines(RegionId::footer()),
+            bar: self.lines(RegionId::bar()),
+            bar_stowed: self.lines(RegionId::bar_stowed()),
+            dialog: self.lines(RegionId::dialog()),
+            custom: self
+                .surfaces
+                .iter()
+                .filter(|(region, _)| !is_standard_region(region))
+                .map(|(region, surface)| (region.clone(), surface.lines()))
+                .collect(),
             interactions: self.interactions.clone(),
             delayed: self.delayed.clone(),
         }
     }
 
     /// 取某区域的全部行；区域从未出现时返回空。
-    fn lines(&self, region: PresentationRegion) -> Vec<String> {
+    fn lines(&self, region: RegionId) -> Vec<String> {
         self.surfaces
-            .get(region_name(region))
+            .get(region.as_str())
             .map_or_else(Vec::new, TuiSurface::lines)
     }
 }
 
 /// 渲染子输出并返回其全部行（顺带把可触发节点收集进 `interactions`）。
-fn render_content(
-    output: &PresentationOutput,
-    interactions: &mut Vec<TuiInteraction>,
-) -> Vec<String> {
+fn render_content(output: &Surface, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
     output
         .nodes()
         .iter()
@@ -516,17 +505,18 @@ fn render_content(
 
 /// 渲染单个节点：文本/样式文本成行，图像转占位，Action/Input/Navigation/SafeReturn
 /// 收集为交互（不产出行）。
-fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
+fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
     match node {
-        PresentationNode::Text(text) => visible_lines(unicode(text)),
-        PresentationNode::StyledText {
+        SurfaceNode::Text(text) => visible_lines(unicode(text)),
+        SurfaceNode::HardBreak => Vec::new(),
+        SurfaceNode::StyledText {
             text,
             styles,
-            tone,
+            color,
             heading,
             ..
-        } => visible_lines(styled(unicode(text), styles, *tone, *heading)),
-        PresentationNode::Image {
+        } => visible_lines(styled(unicode(text), styles, *color, *heading)),
+        SurfaceNode::Image {
             resource,
             alt,
             caption,
@@ -539,22 +529,22 @@ fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) 
                 .map(|value| format!(" — {}", unicode(value)))
                 .unwrap_or_default()
         )],
-        PresentationNode::Component { fallback, .. } => render_content(fallback, interactions),
-        PresentationNode::Container { content } => render_content(content, interactions),
-        PresentationNode::Action { label, action, .. } => {
+        SurfaceNode::Component { fallback, .. } => render_content(fallback, interactions),
+        SurfaceNode::Container { content } => render_content(content, interactions),
+        SurfaceNode::Action { label, action, .. } => {
             interactions.push(TuiInteraction {
                 id: None,
                 label: unicode(label),
                 kind: match action {
-                    PresentationAction::Dismiss => "dismiss",
+                    SurfaceAction::Dismiss => "dismiss",
                 },
                 input: None,
             });
             Vec::new()
         }
-        PresentationNode::Input { id, binding } => {
+        SurfaceNode::Input { id, binding } => {
             let (label, kind, input) = match &binding.kind {
-                PresentationInputKind::Checkbox {
+                SurfaceInputKind::Checkbox {
                     unchecked,
                     checked,
                     selected,
@@ -567,7 +557,7 @@ fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) 
                         selected: *selected,
                     },
                 ),
-                PresentationInputKind::Radio {
+                SurfaceInputKind::Radio {
                     value, selected, ..
                 } => (
                     if *selected { "(o)" } else { "( )" }.to_owned(),
@@ -577,7 +567,7 @@ fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) 
                         selected: *selected,
                     },
                 ),
-                PresentationInputKind::Text { value } => {
+                SurfaceInputKind::Text { value } => {
                     let value: String = unicode(value);
                     (format!("[{value}]"), "textbox", TuiInput::Text { value })
                 }
@@ -590,7 +580,7 @@ fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) 
             });
             Vec::new()
         }
-        PresentationNode::Navigation {
+        SurfaceNode::Navigation {
             id, label, role, ..
         } => {
             interactions.push(TuiInteraction {
@@ -604,7 +594,7 @@ fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) 
             });
             Vec::new()
         }
-        PresentationNode::SafeReturn { id, target } => {
+        SurfaceNode::SafeReturn { id, target } => {
             interactions.push(TuiInteraction {
                 id: Some(id.as_str().to_owned()),
                 label: format!("返回 {target}"),
@@ -613,22 +603,22 @@ fn render_node(node: &PresentationNode, interactions: &mut Vec<TuiInteraction>) 
             });
             Vec::new()
         }
-        PresentationNode::Region { content, .. } | PresentationNode::Replace { content, .. } => {
+        SurfaceNode::Region { content, .. } | SurfaceNode::Replace { content, .. } => {
             render_content(content, interactions)
         }
     }
 }
 
-/// Core 已把显式 `<br>` 规范为 `\n`；TUI 在这里把它拆成真实终端行。
+/// Text 是一个可见文本片段；HardBreak 已是相邻片段之间的独立协议节点。
 fn visible_lines(text: String) -> Vec<String> {
-    text.split('\n').map(str::to_owned).collect()
+    vec![text]
 }
 
-/// 按语义样式包裹标记符，结构性标题加粗下划线，并按 tone 梯度染色；tone 为 0 时不染色。
+/// 按语义样式包裹标记符，结构性标题加粗下划线，并按 color 梯度染色；color 为 0 时不染色。
 fn styled(
     mut text: String,
     styles: &[TextStyle],
-    tone: TextTone,
+    color: TextColor,
     heading: Option<HeadingLevel>,
 ) -> String {
     for style in styles.iter().rev() {
@@ -644,14 +634,14 @@ fn styled(
     if heading.is_some() {
         text = format!("\x1b[1;4m{text}\x1b[0m");
     }
-    tone_rgb(tone.index())
+    palette_rgb(color.index())
         .map(|(r, g, b)| format!("\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"))
         .unwrap_or(text)
 }
 
 /// 64 级色阶 → RGB（灰阶 0-7：白 1 → 黑 7；光谱 8-63：红 8 → 橙 16 → 黄 24 → 绿 32 → 蓝 40 → 紫 48 → 深紫 63）；
 /// 0 不染色，由终端默认前景呈现。
-fn tone_rgb(index: u8) -> Option<(u8, u8, u8)> {
+fn palette_rgb(index: u8) -> Option<(u8, u8, u8)> {
     if index == 0 {
         return None;
     }
@@ -698,26 +688,18 @@ fn unicode(value: &narrava_loom_core::expression::value::TextValue) -> String {
         .unwrap_or_else(|| String::from("<非 Unicode 文本>"))
 }
 
-/// 区域枚举 → 帧字段名。
-fn region_name(region: PresentationRegion) -> &'static str {
-    match region {
-        PresentationRegion::Header => "header",
-        PresentationRegion::Main => "main",
-        PresentationRegion::Footer => "footer",
-        PresentationRegion::Bar => "bar",
-        PresentationRegion::BarStowed => "bar-stowed",
-        PresentationRegion::Dialog => "dialog",
-    }
+fn is_standard_region(region: &str) -> bool {
+    matches!(
+        region,
+        "header" | "main" | "footer" | "bar" | "bar-stowed" | "dialog"
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use narrava_loom_core::{
         expression::value::TextValue,
-        presentation::{
-            PresentationKey, PresentationNode, PresentationOutput, PresentationRegion,
-            PresentationTarget, TextTone,
-        },
+        protocol::{RegionId, Surface, SurfaceKey, SurfaceNode, SurfaceTarget, TextColor},
     };
 
     use super::{
@@ -728,34 +710,30 @@ mod tests {
     /// Region 与 Replace（按 key）就地更新对应终端区域，交互被收集进帧。
     #[test]
     fn region_and_key_replacements_update_terminal_surfaces() {
-        let mut main = PresentationOutput::default();
+        let mut main = Surface::default();
         main.push_keyed(
-            PresentationKey::parse("status").unwrap(),
-            PresentationNode::Container {
-                content: PresentationOutput::from_nodes(vec![PresentationNode::Text(
-                    TextValue::from("旧状态"),
-                )]),
+            SurfaceKey::parse("status").unwrap(),
+            SurfaceNode::Container {
+                content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("旧状态"))]),
             },
         )
         .unwrap();
-        main.push(PresentationNode::Replace {
-            target: PresentationTarget::Key(PresentationKey::parse("status").unwrap()),
-            content: PresentationOutput::from_nodes(vec![
-                PresentationNode::Text(TextValue::from("新状态")),
-                PresentationNode::Navigation {
-                    id: narrava_loom_core::presentation::InteractionId::parse("status:continue")
+        main.push(SurfaceNode::Replace {
+            target: SurfaceTarget::Key(SurfaceKey::parse("status").unwrap()),
+            content: Surface::from_nodes(vec![
+                SurfaceNode::Text(TextValue::from("新状态")),
+                SurfaceNode::Navigation {
+                    id: narrava_loom_core::protocol::InteractionId::parse("status:continue")
                         .unwrap(),
                     label: TextValue::from("继续"),
                     target: String::from("Next"),
-                    role: narrava_loom_core::presentation::NavigationRole::Link,
+                    role: narrava_loom_core::protocol::NavigationRole::Link,
                 },
             ]),
         });
-        main.push(PresentationNode::Region {
-            region: PresentationRegion::Header,
-            content: PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from(
-                "标题",
-            ))]),
+        main.push(SurfaceNode::Region {
+            region: RegionId::header(),
+            content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("标题"))]),
         });
 
         let frame = TuiRenderer::default().render("Start", &main);
@@ -770,18 +748,18 @@ mod tests {
     /// delay 文本先停放在 `delayed`，超过延迟后 `render_at` 才让其进入正文。
     #[test]
     fn styled_text_with_delay_is_parked_then_revealed() {
-        let output = PresentationOutput::from_nodes(vec![
-            PresentationNode::StyledText {
+        let output = Surface::from_nodes(vec![
+            SurfaceNode::StyledText {
                 text: TextValue::from("立即显示"),
                 styles: Vec::new(),
-                tone: TextTone::DEFAULT,
+                color: TextColor::DEFAULT,
                 delay: None,
                 heading: None,
             },
-            PresentationNode::StyledText {
+            SurfaceNode::StyledText {
                 text: TextValue::from("两秒后出现"),
                 styles: Vec::new(),
-                tone: TextTone::DEFAULT,
+                color: TextColor::DEFAULT,
                 delay: Some(2000),
                 heading: None,
             },
@@ -804,16 +782,30 @@ mod tests {
         assert!(later.delayed.is_empty());
     }
 
-    /// Core 的显式换行在 TUI 中拆为两个终端行，而不是把换行塞进单个行字符串。
+    /// 结构化 HardBreak 把相邻文本保持为两条终端行。
     #[test]
     fn explicit_line_break_becomes_two_terminal_lines() {
-        let output = PresentationOutput::from_nodes(vec![PresentationNode::Text(TextValue::from(
-            "第一行\n第二行",
-        ))]);
+        let output = Surface::from_nodes(vec![
+            SurfaceNode::Text(TextValue::from("第一行")),
+            SurfaceNode::HardBreak,
+            SurfaceNode::Text(TextValue::from("第二行")),
+        ]);
 
         let frame = TuiRenderer::default().render("Break", &output);
 
         assert_eq!(frame.main, ["第一行", "第二行"]);
+    }
+
+    #[test]
+    fn custom_region_falls_back_without_losing_content() {
+        let output = Surface::from_nodes(vec![SurfaceNode::Region {
+            region: RegionId::parse("hud").unwrap(),
+            content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("状态"))]),
+        }]);
+
+        let frame = TuiRenderer::default().render("Custom", &output);
+
+        assert_eq!(frame.custom.get("hud").unwrap(), &["状态"]);
     }
 
     /// 玩家使用一基序号；文本框必须显式使用 set，避免直接选择时误清空内容。
@@ -826,9 +818,9 @@ mod tests {
                     label: String::from("( )"),
                     kind: "radiobutton",
                     input: Some(TuiInput::Radio {
-                        value: narrava_loom_core::presentation::PresentationValue::Text(
-                            String::from("quiet"),
-                        ),
+                        value: narrava_loom_core::protocol::SurfaceValue::Text(String::from(
+                            "quiet",
+                        )),
                         selected: false,
                     }),
                 },
@@ -848,9 +840,7 @@ mod tests {
             TuiCommand::parse("1").unwrap().resolve(&frame).unwrap(),
             TuiOperation::Input {
                 id: String::from("route:quiet"),
-                value: narrava_loom_core::presentation::PresentationValue::Text(String::from(
-                    "quiet"
-                )),
+                value: narrava_loom_core::protocol::SurfaceValue::Text(String::from("quiet")),
             }
         );
         assert_eq!(
@@ -860,9 +850,7 @@ mod tests {
                 .unwrap(),
             TuiOperation::Input {
                 id: String::from("name"),
-                value: narrava_loom_core::presentation::PresentationValue::Text(String::from(
-                    "游侠"
-                )),
+                value: narrava_loom_core::protocol::SurfaceValue::Text(String::from("游侠")),
             }
         );
         assert_eq!(

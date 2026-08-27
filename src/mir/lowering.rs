@@ -176,6 +176,9 @@ fn lower_nodes<'hir, 'source>(
                 span: node.span,
                 i18n: None,
             }),
+            HirBodyKind::HardBreak => context.instructions.push(MirInstruction::HardBreak {
+                output: context.output_mode(),
+            }),
             HirBodyKind::Print(HirPrint::Expression(expression)) => {
                 context.instructions.push(MirInstruction::PrintExpression {
                     expression,
@@ -498,6 +501,7 @@ fn patch_jumps(
 fn hir_kind_name(kind: &HirBodyKind<'_>) -> &'static str {
     match kind {
         HirBodyKind::Text(_) => "text",
+        HirBodyKind::HardBreak => "hard-break",
         HirBodyKind::Print(_) => "print",
         HirBodyKind::Silently(_) => "silently",
         HirBodyKind::If(_) => "if",

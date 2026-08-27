@@ -43,7 +43,7 @@ ModLoader。`TauriHost::spawn(relative_game_path)` 建立专用 Runtime Worker�
 - Worker 在线程栈中长期拥有 Source、AST、HIR、MIR、LIR、Bytecode、State、Story 与上一份输出；
 - Tauri managed state 只保存可克隆的命令发送端，不持有自引用 IR；
 - `start_game` command 启动固定 `Start` Passage；
-- `activate` command 只接受上一份 Presentation 中的 Interaction ID；
+- `activate` command 只接受上一份 Surface 中的 Interaction ID；
 - Rust DTO 以 serde tagged enum 输出 Text、Navigation 与 SafeReturn；
 - 错误统一输出稳定 `code + message`，不把 Rust 错误对象交给 WebView。
 
@@ -56,7 +56,7 @@ Interaction ID 交回 `activate`。DOM 与 CSS 因此留在 Tauri Host，不进�
 
 ## Core 与 Host 的表现边界
 
-Core 输出文本、文字语气、图片、区域、动作、状态绑定输入、导航和带 fallback 的版本化
+Core 输出文本、标准颜色、图片、区域、动作、状态绑定输入、导航和带 fallback 的版本化
 Component。Tauri 再决定 DOM、CSS、Dialog 布局和更新算法。
 
 `replace "header"` 是 Core 固定的 Region／Key 替换语义。WebView 把固定区域映射到稳定 DOM
@@ -89,12 +89,12 @@ nv-story
 ├─ nv-ui-bar#ui-bar
 │  ├─ nav#ui-bar-tray
 │  └─ div#ui-bar-body
-│     └─ div#bar-presentation
+│     └─ div#bar-surface
 ├─ nv-passage[data-passage]
 │  ├─ header.passage-header
 │  ├─ main.passage-main
 │  └─ footer.passage-footer
-│     ├─ div#passage-footer-presentation
+│     ├─ div#passage-footer-surface
 │     └─ span#status
 └─ dialog#nv-dialog
 ```
@@ -155,7 +155,7 @@ cargo run -p narrava-loom-tauri -- examples
 - `Save.export/import` 把命名槽位写入或读自 `save/<target>.nsave`；
 - Host 提供语言包选择和有界结构化诊断能力，但不生成“存档／语言／日志”固定页面；
 - 游戏内管理弹窗的标题、页签、控件、文案与布局全部由游戏作者通过 Twee、脚本和
-  Presentation 定义；Host 只拥有原生 Dialog 外壳与经过验证的平台动作；
+  Surface 定义；Host 只拥有原生 Dialog 外壳与经过验证的平台动作；
 - Mod 管理界面属于 `narrava-loom-modloader`，不进入本 Host 的 Core 完成条件。
 
 默认主题包含窄屏、safe-area 与 coarse pointer 规则。这只说明共享页面具备移动布局基础，

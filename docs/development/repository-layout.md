@@ -26,7 +26,7 @@ Narrava Loom/
 ## 存放规则
 
 - Core 公共语义、编译器和运行时放在 `src/`；不得导入 Tauri、DOM、CSS 或 ModLoader 类型。
-- 平台实现放在 `hosts/<host>/`，Host 只通过 Core 的公开类型消费 Presentation 和 Runtime。
+- 平台实现放在 `hosts/<host>/`，Host 只通过 Core 的公开类型消费 Surface 和 Runtime。
 - 游戏作者可直接复制或修改的内容放在 `examples/`；示例不得要求作者编写 Rust。
 - 游戏脚本声明只在 `bindings/typescript/narrava.d.ts` 维护，编辑器扩展从公开语义目录提供辅助。
 - 仓库操作脚本放在 `scripts/`；Host 内部的构建逻辑留在对应 Host crate。
