@@ -1,7 +1,7 @@
 //! Tauri 2 command 注册。
 //!
 //! 每个 command 用 managed state 注入同一个 Runtime Worker；本模块只做参数
-//! 转交与结果包装，事务逻辑在 [TauriHost] 与 [worker](crate::worker)。
+//! 转交与结果包装，事务逻辑在 [TauriHost] 与 Runtime Worker 模块。
 
 use tauri::State;
 

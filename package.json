@@ -2,7 +2,8 @@
   "name": "narrava-loom-workspace",
   "private": true,
   "workspaces": [
-    "bindings/typescript"
+    "bindings/typescript",
+    "editors/vscode-narrava-loom"
   ],
   "scripts": {
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test",

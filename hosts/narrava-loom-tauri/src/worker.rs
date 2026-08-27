@@ -2,7 +2,7 @@
 //!
 //! 本模块拥有常驻 Worker 线程的请求协议与事务循环：装载游戏包、编译 Story、
 //! 驱动 Engine 事务、处理宏分发与 save/语言/日志请求，并把结果转成 DTO 回传。
-//! 宏分发回调见 [dispatch](crate::dispatch)。
+//! 宏分发回调复用 `narrava-loom-script::dispatch`。
 
 use std::{
     path::Path,
