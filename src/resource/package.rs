@@ -155,29 +155,3 @@ impl NresPackage {
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::NresPackage;
-    use crate::resource::{ResourceCatalog, ResourceInput};
-
-    #[test]
-    fn nres_round_trips_resource_bytes_and_media_type() {
-        let catalog = ResourceCatalog::new([ResourceInput::with_media_type(
-            "guide.txt",
-            "text/plain",
-            b"hello".to_vec(),
-        )])
-        .unwrap();
-        let package = NresPackage::build(&catalog).unwrap();
-        let decoded = NresPackage::from_files(package.files().collect())
-            .unwrap()
-            .validate()
-            .unwrap();
-        assert_eq!(decoded.text("guide.txt").unwrap(), Some("hello"));
-        assert_eq!(
-            decoded.info("guide.txt").unwrap().media_type(),
-            "text/plain"
-        );
-    }
-}

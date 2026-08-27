@@ -20,6 +20,7 @@ mod logger;
 mod macro_runtime;
 mod mir;
 mod nar;
+mod package_zip;
 mod protocol;
 mod release;
 mod resource;

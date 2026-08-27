@@ -47,3 +47,6 @@ impl fmt::Display for HostErrorDto {
         write!(formatter, "{}: {}", self.code, self.message)
     }
 }
+
+#[cfg(test)]
+mod tests;

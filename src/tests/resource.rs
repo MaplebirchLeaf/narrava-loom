@@ -176,3 +176,27 @@ fn unique_temp_dir(name: &str) -> PathBuf {
         std::thread::current().name().unwrap_or("test")
     ))
 }
+
+// NresPackage 打包往返（原内联于 resource/package.rs，按源码规范收拢）。
+
+use crate::resource::NresPackage;
+
+#[test]
+fn nres_round_trips_resource_bytes_and_media_type() {
+    let catalog = ResourceCatalog::new([ResourceInput::with_media_type(
+        "guide.txt",
+        "text/plain",
+        b"hello".to_vec(),
+    )])
+    .unwrap();
+    let package = NresPackage::build(&catalog).unwrap();
+    let decoded = NresPackage::from_files(package.files().collect())
+        .unwrap()
+        .validate()
+        .unwrap();
+    assert_eq!(decoded.text("guide.txt").unwrap(), Some("hello"));
+    assert_eq!(
+        decoded.info("guide.txt").unwrap().media_type(),
+        "text/plain"
+    );
+}
