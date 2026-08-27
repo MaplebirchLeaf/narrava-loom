@@ -12,7 +12,8 @@ Narrava Loom/
 │   ├── narrava-loom-tauri/         官方 Tauri Host；桌面可运行，移动共享层待平台工程
 │   └── narrava-loom-tui/           Host-neutral 终端 Renderer 与输入前端
 ├── crates/
-│   ├── narrava-loom-protocol/      跨 Host 的 Surface 传输协议（DTO 与脚本 bridge），依赖 Core
+│   ├── narrava-loom-protocol/      跨 Host 的 Surface 协议语义、双向转换与传输 DTO，依赖 Core
+│   ├── narrava-loom-script/        ECMAScript 游戏脚本执行（Boa + Oxc）与宏分发，依赖 Core/Protocol
 │   └── narrava-loom-modloader/     独立演进的可选附属，不属于 Core workspace
 ├── bindings/typescript/            游戏脚本 TypeScript 契约
 ├── editors/vscode-narrava-loom/    Twee 编辑器扩展源码
@@ -43,7 +44,9 @@ Narrava Loom/
 ```text
 narrava-loom-core
        ↑
-narrava-loom-protocol   （Surface 语义 + 双向转换 + 传输 DTO 与脚本 bridge）
+narrava-loom-protocol   （Surface 语义 + 双向转换 + 传输 DTO）
+       ↑
+narrava-loom-script     （ECMAScript 执行 + 宏分发）
        ↑
 Host / Binding / narrava-loom-modloader
        ↑

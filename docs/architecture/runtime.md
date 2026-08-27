@@ -228,7 +228,7 @@ State.global.set("sum", sum)
 
 ### 完成边界
 
-Core Script 契约已闭合：源码分流、加载契约、批量 State 导入、不可保存函数身份、Expression 调用、Macro CRUD、生命周期 Hook、同步/异步所有权，以及 Engine、Story、Logger、Event、Save、Resource、I18n 边界均有稳定类型和测试。首个 Tauri Binding 已使用 Boa 执行 ECMAScript，以 Oxc 去除 TypeScript 类型，并把真实 Function、Promise Macro、Host delay、State、Save、Resource、I18n 与事件桥接到 Runtime Worker。作者侧声明在 `bindings/typescript/narrava.d.ts`；后续平台能力必须继续沿用同一窄 Binding 边界，不能让 DOM、Tauri 对象或 JavaScript 引擎类型进入 Core。
+Core Script 契约已闭合：源码分流、加载契约、批量 State 导入、不可保存函数身份、Expression 调用、Macro CRUD、生命周期 Hook、同步/异步所有权，以及 Engine、Story、Logger、Event、Save、Resource、I18n 边界均有稳定类型和测试。ECMAScript 执行由共享 `narrava-loom-script` crate 提供（Boa 引擎 + Oxc 去除 TypeScript 类型），Tauri 与 TUI 复用同一运行时，并把真实 Function、Promise Macro、Host delay、State、Save、Resource、I18n 与事件桥接到各自 Host。作者侧声明在 `bindings/typescript/narrava.d.ts`；后续平台能力必须继续沿用同一窄 Binding 边界，不能让 DOM、Tauri 对象或 JavaScript 引擎类型进入 Core。
 
 ## I18n、Mod、Resource、Save 与 Event
 
