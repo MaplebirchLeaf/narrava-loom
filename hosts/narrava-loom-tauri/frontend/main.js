@@ -20,7 +20,6 @@ const dialogSurface = document.querySelector("#dialog-surface")
 // 可变运行时状态：作者样式 Blob URL、Resource 路径集合、最近一次更新与侧栏区域缓存。
 const objectUrls = new Set()
 let resourcePaths = new Set()
-let lastUpdate = null
 let barRegions = { expanded: [], stowed: [] }
 
 /** 同步侧栏视觉状态与无障碍状态；不改变 Core Story。 */
@@ -36,46 +35,19 @@ function setBarStowed(stowed) {
 barToggle.addEventListener("click", () => setBarStowed(!bar.classList.contains("stowed")))
 if (window.matchMedia("(max-width: 39.5em)").matches) setBarStowed(true)
 
-/** 开发者面板的说明表：每项是 window.narrava 方法的一句话用法。 */
-const help = () => ({
-  state: "读取 global、variables、temporary 的安全摘要",
-  set: "set(namespace, name, JSON值) 修改 Worker State",
-  del: "del(namespace, name) 删除 Worker State 值",
-  current: "读取最近一次 Surface 更新",
-  assets: "读取游戏 CSS 与 Resource 清单",
-  activate: "activate(interactionId) 触发当前表现中的交互",
-  devtools: "开关 WebView DevTools",
-})
-
-/** 开启后把只读调试 API 挂到 window.narrava，并注册 F12 切换 DevTools。 */
+/** 开发者模式只注册 F12 开关 WebView DevTools；调试 State 请使用游戏内表现或未来控制台能力。 */
 function configureDeveloperMode(enabled) {
   if (!enabled) return
-  const state = () => invoke("developer_state")
-  const set = async (namespace, name, value) => {
-    await invoke("developer_set", { namespace, name, value })
-    return state()
-  }
-  const del = async (namespace, name) => {
-    await invoke("developer_delete", { namespace, name })
-    return state()
-  }
-  const current = () => (lastUpdate === null ? null : structuredClone(lastUpdate))
-  const assets = () => invoke("host_assets")
-  const devtools = () => invoke("toggle_devtools")
-  window.narrava = Object.freeze({ state, set, del, current, assets, activate, devtools, help })
   window.addEventListener("keydown", (event) => {
     if (event.key !== "F12") return
     event.preventDefault()
     void invoke("toggle_devtools").catch(showError)
   })
-  console.info(
-    "Narrava 开发者模式已开启。按 F12 开关 DevTools；使用 window.narrava.state/set/del 调试 Worker State。",
-  )
+  console.info("Narrava 开发者模式已开启。按 F12 开关 WebView DevTools。")
 }
 
 /** 按 key 协调 Surface DTO，保留仍存在的控件与焦点。 */
 function render(update) {
-  lastUpdate = structuredClone(update)
   const focusedKey = document.activeElement?.closest?.("[data-surface-key]")?.dataset.surfaceKey
   passageRoot.dataset.passage = update.current
   passageRoot.setAttribute("aria-label", update.current)

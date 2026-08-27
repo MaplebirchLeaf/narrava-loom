@@ -81,7 +81,5 @@ Surface。`:: Bar` 通过 `<<barDemo>>` 展示天气、人物、状态、提示�
 `:: BarStowed` 通过 `<<barStowedDemo>>` 展示“雨／痛／!”等窄栏摘要；删除对应 Macro 后，
 Host 不会自行向 Bar 注入内容。模组管理属于独立 ModLoader。
 
-示例在 `[host.tauri]` 中开启了 `developer = true`，因此窗口内可按 F12 检查 Renderer，并在
-控制台使用 `window.narrava.state()`、`window.narrava.set(...)` 和
-`window.narrava.del(...)` 调试 State。
-制作发行配置时应关闭该选项。
+示例在 `[host.tauri]` 中开启了 `developer = true`，因此窗口内可按 F12 开关 WebView DevTools
+检查 Renderer。制作发行配置时应关闭该选项。

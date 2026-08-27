@@ -46,8 +46,7 @@ Event.emit("game:ready", { coins: 10 })
 和 `Surface` 是彼此独立的公开契约。Worker 中不存在 `narrava.Save` 或聚合对象
 `globalThis.narrava`。
 
-开发模式 DevTools 的 `window.narrava` 只属于 WebView 调试桥，提供 `state/set/del` 等开发工具；
-它不是游戏脚本 API，发布模式也不会注入。
+WebView DevTools（F12）只属于开发模式调试桥，不是游戏脚本 API，发布模式不会注入。
 
 上面的三斜线声明路径取决于脚本文件与仓库 `bindings/` 的相对位置。复制 `examples/` 时无需
 修改；如果把游戏移到仓库外，编辑器可能找不到声明文件，但这不影响 Host 运行。可把

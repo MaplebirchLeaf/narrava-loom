@@ -55,34 +55,10 @@ maximized = false
 也会自动获得侧栏、正文、Header／Footer、弹窗、表单、图片、64 级 color 和全部 8 种语义字形；
 自定义 CSS 只用于品牌主题覆盖，不是制作游戏的必需文件。
 
-开发者模式开启后，在游戏窗口按 F12 可以开关 WebView DevTools。控制台通过
-`window.narrava` 提供：
+开发者模式开启后，在游戏窗口按 F12 可以开关 WebView DevTools，检查 Renderer 的 DOM、控制台
+与网络面板。DevTools 只属于开发 WebView，不是游戏作者脚本 API。
 
-```js
-await window.narrava.state()
-await window.narrava.set("variables", "coins", 999)
-await window.narrava.set("temporary", "debugName", "Maple")
-await window.narrava.del("variables", "coins")
-```
-
-namespace 只能是 `global`、`variables` 或 `temporary`。`state()` 对标量显示实际值；对数组、
-对象和函数只显示安全摘要，避免循环引用卡死 DevTools。修改值后通常要进行一次游戏 Interaction
-才能看到新状态影响后续正文；它不会倒带并重画已经提交的 Passage。
-
-还可以使用：
-
-```js
-window.narrava.current()       // 最近一次 Surface DTO 的副本
-await window.narrava.assets()  // CSS 和 Resource 清单
-await window.narrava.activate("交互ID")
-await window.narrava.devtools()
-window.narrava.help()          // 显示所有调试方法说明
-```
-
-这些能力只用于 F12 调试，不是游戏作者脚本 API。`current()` 和 `assets()` 返回副本，修改它们
-不会修改 Engine；`activate()` 会真实推进游戏，应当像点击按钮一样谨慎使用。
-
-开发者模式会开放检查页面和修改运行状态的能力，发行给玩家前请改回：
+开发者模式会开放检查页面的能力，发行给玩家前请改回：
 
 ```toml
 [host.tauri]

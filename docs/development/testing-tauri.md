@@ -45,7 +45,7 @@ bun run check
 - 交互只回传 DTO 中的不透明 ID；
 - Resource URL 只由已验证清单生成；
 - 作者 CSS 在 Host 默认 CSS 后加载；
-- `window.narrava` 只在 `developer = true` 时公开。
+- WebView DevTools（F12）只在 `developer = true` 时可用。
 
 ## 3. 真实窗口开发验收
 
@@ -68,16 +68,8 @@ cargo run --locked -p narrava-loom-tauri -- examples
 7. 作者能力页能导出／导入 Save，导出 I18n 模板，并加载 `languages/en/`；
 8. Resource 图片、默认主题和窄屏布局正常。
 
-示例启用了开发者模式。按 F12 后可用：
-
-```js
-await window.narrava.state()
-await window.narrava.assets()
-window.narrava.current()
-window.narrava.help()
-```
-
-F12 与 `window.narrava` 只是 Renderer 调试入口，不属于游戏脚本 API。
+示例启用了开发者模式。按 F12 可开关 WebView DevTools，检查 Renderer 的 DOM、控制台与网络面板；
+它只是 Renderer 调试入口，不属于游戏脚本 API。
 
 ## 4. 发行目录回归
 

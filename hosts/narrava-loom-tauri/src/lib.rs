@@ -6,7 +6,6 @@
 
 mod assets;
 mod config;
-mod developer;
 mod package;
 mod resource_protocol;
 mod save_io;
@@ -65,10 +64,8 @@ use serde::Serialize;
 
 pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
 pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
-pub use developer::DeveloperValueDto;
 pub use narrava_loom_protocol::{HostErrorDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
-use developer::{developer_delete, developer_disabled, developer_set, developer_state};
 use narrava_loom_protocol::{Surface, SurfaceNode, convert};
 use package::{
     load_language_packages, load_release_config_text, load_release_package, load_tauri_config,
@@ -78,7 +75,6 @@ use save_io::{process_save, process_save_operation};
 type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
 type WorkerReply = Sender<WorkerResult>;
 type WorkerResponse = Receiver<WorkerResult>;
-type DeveloperResult<T> = Result<T, HostErrorDto>;
 type InputResult = Result<(), HostErrorDto>;
 type CommandResult = Result<(), HostErrorDto>;
 
@@ -121,21 +117,6 @@ enum WorkerRequest {
         locale: String,
         reply: Sender<CommandResult>,
     },
-    /// 拉取开发者模式 State 快照。
-    DeveloperState(Sender<DeveloperResult<Vec<DeveloperValueDto>>>),
-    /// 按 namespace 写入一个开发者值。
-    DeveloperSet {
-        namespace: String,
-        name: String,
-        value: serde_json::Value,
-        reply: Sender<DeveloperResult<()>>,
-    },
-    /// 按 namespace 删除一个开发者条目。
-    DeveloperDelete {
-        namespace: String,
-        name: String,
-        reply: Sender<DeveloperResult<()>>,
-    },
 }
 
 /// Tauri managed state 中保存的轻量句柄。
@@ -173,7 +154,7 @@ impl TauriHost {
         let worker_resources: Arc<ResourceCatalog> = Arc::clone(&resources);
         thread::Builder::new()
             .name(String::from("narrava-runtime"))
-            .spawn(move || run_worker(game_path, receiver, developer, worker_resources))
+            .spawn(move || run_worker(game_path, receiver, worker_resources))
             .map_err(|error: std::io::Error| {
                 HostErrorDto::new("tauri_host.worker_spawn", error.to_string())
             })?;
@@ -268,62 +249,6 @@ impl TauriHost {
     pub fn developer(&self) -> bool {
         self.developer
     }
-
-    /// 拉取开发者模式 State 快照（需已启用开发者模式）。
-    pub fn developer_state(&self) -> DeveloperResult<Vec<DeveloperValueDto>> {
-        self.require_developer()?;
-        let (reply, result) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::DeveloperState(reply))
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
-    }
-
-    /// 按 namespace 写入一个开发者值（需已启用开发者模式）。
-    pub fn developer_set(
-        &self,
-        namespace: String,
-        name: String,
-        value: serde_json::Value,
-    ) -> DeveloperResult<()> {
-        self.require_developer()?;
-        let (reply, result) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::DeveloperSet {
-                namespace,
-                name,
-                value,
-                reply,
-            })
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
-    }
-
-    /// 按 namespace 删除一个开发者条目（需已启用开发者模式）。
-    pub fn developer_delete(&self, namespace: String, name: String) -> DeveloperResult<()> {
-        self.require_developer()?;
-        let (reply, result) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::DeveloperDelete {
-                namespace,
-                name,
-                reply,
-            })
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
-    }
-
-    /// 校验开发者模式已启用；未启用时给出配置指引错误。
-    fn require_developer(&self) -> DeveloperResult<()> {
-        if self.developer {
-            Ok(())
-        } else {
-            Err(HostErrorDto::new(
-                "tauri_host.developer_disabled",
-                "请在 config.toml 的 [host.tauri] 中设置 developer = true",
-            ))
-        }
-    }
 }
 
 /// 从进程参数选择游戏目录；正式版无参数时使用可执行文件所在目录。
@@ -370,9 +295,6 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             commands::available_languages,
             commands::select_language,
             commands::developer_enabled,
-            commands::developer_state,
-            commands::developer_set,
-            commands::developer_delete,
             commands::toggle_devtools
         ])
         .setup(move |app: &mut tauri::App| {
@@ -429,9 +351,7 @@ fn build_main_window(
 pub mod commands {
     use tauri::State;
 
-    use super::{
-        DeveloperValueDto, HostAssetsDto, HostErrorDto, HostLogDto, HostUpdateDto, TauriHost,
-    };
+    use super::{HostAssetsDto, HostErrorDto, HostLogDto, HostUpdateDto, TauriHost};
 
     /// 启动游戏并返回起始 Passage 更新。
     #[tauri::command]
@@ -498,42 +418,18 @@ pub mod commands {
         host.developer()
     }
 
-    /// 拉取开发者模式 State 快照。
-    #[tauri::command]
-    pub fn developer_state(
-        host: State<'_, TauriHost>,
-    ) -> Result<Vec<DeveloperValueDto>, HostErrorDto> {
-        host.developer_state()
-    }
-
-    /// 按 namespace 写入开发者值。
-    #[tauri::command]
-    pub fn developer_set(
-        namespace: String,
-        name: String,
-        value: serde_json::Value,
-        host: State<'_, TauriHost>,
-    ) -> Result<(), HostErrorDto> {
-        host.developer_set(namespace, name, value)
-    }
-
-    /// 按 namespace 删除开发者条目。
-    #[tauri::command]
-    pub fn developer_delete(
-        namespace: String,
-        name: String,
-        host: State<'_, TauriHost>,
-    ) -> Result<(), HostErrorDto> {
-        host.developer_delete(namespace, name)
-    }
-
     /// 开发者模式下切换 WebView 调试工具开关。
     #[tauri::command]
     pub fn toggle_devtools(
         window: tauri::WebviewWindow,
         host: State<'_, TauriHost>,
     ) -> Result<(), HostErrorDto> {
-        host.require_developer()?;
+        if !host.developer() {
+            return Err(HostErrorDto::new(
+                "tauri_host.developer_disabled",
+                "请在 config.toml 的 [host.tauri] 中设置 developer = true",
+            ));
+        }
         if window.is_devtools_open() {
             window.close_devtools();
         } else {
@@ -547,7 +443,6 @@ pub mod commands {
 fn run_worker(
     game_path: String,
     requests: Receiver<WorkerRequest>,
-    developer: bool,
     resources: Arc<ResourceCatalog>,
 ) {
     let release = match load_release_package(Path::new(&game_path)) {
@@ -1008,39 +903,6 @@ fn run_worker(
                 }
                 let _sent = reply.send(result);
             }
-            WorkerRequest::DeveloperState(reply) => {
-                let result = if developer {
-                    Ok(developer_state(&state))
-                } else {
-                    Err(developer_disabled())
-                };
-                let _sent = reply.send(result);
-            }
-            WorkerRequest::DeveloperSet {
-                namespace,
-                name,
-                value,
-                reply,
-            } => {
-                let result = if developer {
-                    developer_set(&script, &mut state, &namespace, &name, &value)
-                } else {
-                    Err(developer_disabled())
-                };
-                let _sent = reply.send(result);
-            }
-            WorkerRequest::DeveloperDelete {
-                namespace,
-                name,
-                reply,
-            } => {
-                let result = if developer {
-                    developer_delete(&script, &mut state, &namespace, &name)
-                } else {
-                    Err(developer_disabled())
-                };
-                let _sent = reply.send(result);
-            }
         }
     }
 }
@@ -1236,18 +1098,11 @@ fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message: String) {
     for request in requests {
         let reply: WorkerReply = match request {
             WorkerRequest::Start(reply) | WorkerRequest::Activate { reply, .. } => reply,
-            WorkerRequest::DeveloperState(reply) => {
-                let _sent = reply.send(Err(HostErrorDto::new(code, message.clone())));
-                continue;
-            }
             WorkerRequest::Input { reply, .. } => {
                 let _sent = reply.send(Err(HostErrorDto::new(code, message.clone())));
                 continue;
             }
-            WorkerRequest::DeveloperSet { reply, .. }
-            | WorkerRequest::DeveloperDelete { reply, .. }
-            | WorkerRequest::Save { reply, .. }
-            | WorkerRequest::SelectLanguage { reply, .. } => {
+            WorkerRequest::Save { reply, .. } | WorkerRequest::SelectLanguage { reply, .. } => {
                 let _sent = reply.send(Err(HostErrorDto::new(code, message.clone())));
                 continue;
             }
@@ -1889,16 +1744,7 @@ mod release_tests {
             serde_json::Value::String(String::from("explore")),
         )
         .expect("radiobutton 值应写回 Worker State");
-        assert!(host.developer_state().unwrap().iter().any(|entry| {
-            entry.namespace == "variables"
-                && entry.name == "tips_enabled"
-                && entry.value == serde_json::Value::Bool(true)
-        }));
-        assert!(host.developer_state().unwrap().iter().any(|entry| {
-            entry.namespace == "variables"
-                && entry.name == "route"
-                && entry.value == serde_json::Value::String(String::from("explore"))
-        }));
+
         let button_id: String = forms
             .nodes
             .iter()
@@ -1911,11 +1757,7 @@ mod release_tests {
             .activate(button_id.as_str())
             .expect("button 应执行正文后导航");
         assert_eq!(hall.current, "Hall");
-        assert!(host.developer_state().unwrap().iter().any(|entry| {
-            entry.namespace == "variables"
-                && entry.name == "form_confirmed"
-                && entry.value == serde_json::Value::Bool(true)
-        }));
+
         let replace_id: String = hall
             .nodes
             .iter()

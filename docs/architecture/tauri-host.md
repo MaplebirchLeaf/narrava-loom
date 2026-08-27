@@ -128,12 +128,9 @@ maximized = false
 `decorations = false` 启动，不显示占用空间的系统标题栏。开发时若需要普通窗口和系统窗口按钮，
 显式使用上面的 `fullscreen = false`、`decorations = true` 即可。
 
-开发时可在 `[host.tauri]` 设置 `developer = true`。此时 F12 切换 WebView DevTools，控制台的
-`window.narrava.state/set/del` 通过受保护的 IPC 读取或修改 Worker State；默认和发布配置应保持
-`false`。关闭时 Rust command 同样拒绝访问，而非仅隐藏前端入口。
-
-同一对象还提供 `current/assets/activate/devtools/help`：读取最近表现快照与资源、从控制台触发
-真实交互、切换 DevTools 和查看自说明。它只属于开发 WebView，不进入游戏 Worker API。
+开发时可在 `[host.tauri]` 设置 `developer = true`。此时按 F12 切换 WebView DevTools；
+默认和发布配置应保持 `false`。关闭时 Rust command 同样拒绝访问，而非仅隐藏前端入口。
+DevTools 只属于开发 WebView，不进入游戏 Worker API；调试 Worker State 不通过浏览器控制台暴露。
 
 `title` 未填写时继承 `game.name`。`icon` 是游戏级可选项，仓库 Host 不要求自带 `icon.png`；
 填写时只接受游戏目录内的普通相对 PNG／ICO 路径；
