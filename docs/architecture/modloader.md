@@ -6,14 +6,16 @@
 
 ## 当前真实实现
 
-`crates/narrava-loom-modloader` 当前只有 crate 声明和对 `narrava-loom-core` 的单向依赖，
+`crates/narrava-loom-modloader` 当前只有 crate 声明和对 `narrava-loom-protocol` 与
+`narrava-loom-core` 的单向依赖（顺序固定为 `modloader → protocol → core`），
 源码尚未定义 `ModLoader`、`.nmod` 清单、选择顺序、Patch、有效构建或 ZIP 导入 API。它被排除在
 根 workspace 之外，因此根目录的 Rust CI 也不会验证该附属项目。
 
 这一空壳只记录两条已经确定的边界：
 
 - ModLoader 不回到 Core 内部，也不让 Core 依赖模组类型；
-- ModLoader 可以依赖 Core 的公开数据与验证能力，但不能依赖 Tauri、TUI 或具体 Renderer。
+- ModLoader 可以依赖 Core 的公开数据、验证能力与 `narrava-loom-protocol` 的传输类型，
+  但不能依赖 Tauri、TUI 或具体 Renderer。
 
 I18n 的 `.nlang` 校验、导入和运行时语言链已经由 Core 实现；那部分不是 ModLoader 已完成的证据。
 
@@ -34,6 +36,8 @@ I18n 的 `.nlang` 校验、导入和运行时语言链已经由 Core 实现；�
 
 ```text
 narrava-loom-modloader
+        ↓
+narrava-loom-protocol
         ↓
 narrava-loom-core public API
 

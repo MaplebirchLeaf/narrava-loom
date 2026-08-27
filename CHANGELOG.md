@@ -1,3 +1,17 @@
+## 0.3.0 - 2026-08-27
+
+### 已包含
+
+- 拆出独立 `narrava-loom-protocol` crate：跨 Host 的 Surface 传输协议（`HostErrorDto`、节点/更新 DTO 与脚本 bridge 的受验证转换），单向依赖 Core；
+- Host 与 `narrava-loom-modloader` 统一改为同时依赖 `narrava-loom-protocol` 与 `narrava-loom-core`，依赖方向固定为 `host/modloader → protocol → core`；
+- 纯内部重构：Core 语义（Surface 等）与 Host 传输层分离，作者侧 API 与既有 DTO 公开形态不变。
+
+### 当前限制
+
+- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
+- TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
+- `0.3.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
+
 ## 0.2.0 - 2026-08-27
 
 ### 已包含

@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "semver",
  "serde",
@@ -157,12 +157,22 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-modloader"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "narrava-loom-core",
+ "narrava-loom-protocol",
  "semver",
  "serde",
  "toml",
+]
+
+[[package]]
+name = "narrava-loom-protocol"
+version = "0.3.0"
+dependencies = [
+ "narrava-loom-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

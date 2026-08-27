@@ -17,7 +17,7 @@ const MARKER: &str = "__narravaSurface";
 const MAX_DEPTH: usize = 32;
 
 /// 若脚本返回值带 Surface 标记则解析为语义输出，否则返回 `None`。
-pub(super) fn output(value: &Value) -> Result<Option<Surface>, HostErrorDto> {
+pub fn output(value: &Value) -> Result<Option<Surface>, HostErrorDto> {
     let Value::Object(object) = value else {
         return Ok(None);
     };

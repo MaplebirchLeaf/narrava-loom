@@ -1,6 +1,6 @@
 {
   "name": "@narrava-loom/types",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "TypeScript declarations for Narrava Loom game scripts",
   "files": [

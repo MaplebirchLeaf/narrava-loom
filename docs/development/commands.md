@@ -20,7 +20,7 @@
 |---|---|
 | `cargo fmt --all -- --check` | 检查 Rust 格式，不修改文件 |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | 检查整个 workspace，并把警告视为错误 |
-| `cargo test --workspace --all-targets --locked` | 运行 Core、Tauri 与 TUI 的 Rust 测试 |
+| `cargo test --workspace --all-targets --locked` | 运行 Core、Protocol、Tauri 与 TUI 的 Rust 测试 |
 | `cargo doc --workspace --no-deps --locked` | 生成 workspace API 文档，不构建依赖文档 |
 
 只修改一个 crate 时可把 workspace 命令缩窄为 `-p <crate>`；完成前仍应运行全工作区门禁。

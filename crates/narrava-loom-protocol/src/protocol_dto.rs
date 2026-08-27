@@ -134,7 +134,7 @@ pub struct HostUpdateDto {
 }
 
 /// 把 Core 的 HostUpdate 转换为 IPC DTO。
-pub(super) fn convert(update: &HostUpdate) -> HostUpdateDto {
+pub fn convert(update: &HostUpdate) -> HostUpdateDto {
     HostUpdateDto {
         current: update.current().to_owned(),
         nodes: convert_output(update.surface(), &format!("passage:{}", update.current())),

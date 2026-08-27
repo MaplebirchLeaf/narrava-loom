@@ -23,7 +23,7 @@ use oxc::{
     transformer::{TransformOptions, Transformer, TypeScriptOptions},
 };
 
-use crate::HostErrorDto;
+use narrava_loom_protocol::HostErrorDto;
 
 mod resource_bridge;
 mod state_bridge;

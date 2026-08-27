@@ -2201,7 +2201,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "semver",
  "serde",
@@ -2212,12 +2212,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "narrava-loom-protocol"
+version = "0.3.0"
+dependencies = [
+ "narrava-loom-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "narrava-loom-tauri"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "boa_engine",
  "boa_gc",
  "narrava-loom-core",
+ "narrava-loom-protocol",
  "oxc",
  "serde",
  "serde_json",
@@ -2228,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-tui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "narrava-loom-core",
 ]

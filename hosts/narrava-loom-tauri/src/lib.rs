@@ -1,20 +1,18 @@
 //! Narrava Core 与 Tauri IPC 之间的最小 Host Binding。
 //!
 //! `TauriHost` 把 Core 的 Engine 事务（start/activate/input/save/语言/开发者能力）
-//! 投递给常驻 Runtime Worker 线程，并把语义 Surface 转换为 WebView 的 JSON DTO。
+//! 投递给常驻 Runtime Worker 线程，并把语义 Surface 经 `narrava-loom-protocol`
+//! 的转换层输出为 WebView 的 JSON DTO；本 crate 同时依赖 Core 与传输协议。
 
 mod assets;
 mod config;
 mod developer;
 mod package;
-mod protocol_bridge;
-mod protocol_dto;
 mod resource_protocol;
 mod save_io;
 mod script_runtime;
 
 use std::{
-    fmt,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -68,13 +66,13 @@ use serde::Serialize;
 pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
 pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
 pub use developer::DeveloperValueDto;
-pub use protocol_dto::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
+pub use narrava_loom_protocol::{HostErrorDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
 use developer::{developer_delete, developer_disabled, developer_set, developer_state};
+use narrava_loom_protocol::convert;
 use package::{
     load_language_packages, load_release_config_text, load_release_package, load_tauri_config,
 };
-use protocol_dto::convert;
 use save_io::{process_save, process_save_operation};
 
 type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
@@ -91,39 +89,6 @@ pub struct HostLogDto {
     pub level: String,
     /// 人类可读的日志消息。
     pub message: String,
-}
-
-/// IPC 边界只暴露稳定代码与可显示消息，不泄漏 Rust 错误对象。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct HostErrorDto {
-    /// 稳定的错误码（IPC 前端可据此分流）。
-    pub code: String,
-    /// 可显示的中文错误消息。
-    pub message: String,
-}
-
-impl HostErrorDto {
-    /// 构造带稳定错误码的 Host 错误。
-    fn new(code: &str, message: impl Into<String>) -> Self {
-        Self {
-            code: code.to_owned(),
-            message: message.into(),
-        }
-    }
-
-    /// 从 Core 诊断构造 Host 错误。
-    fn diagnostic(diagnostic: Diagnostic) -> Self {
-        Self {
-            code: diagnostic.code,
-            message: diagnostic.message,
-        }
-    }
-}
-
-impl fmt::Display for HostErrorDto {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
 }
 
 /// Worker 线程收到的请求；除日志/语言查询外都通过一次性 channel 回传结果。
@@ -1729,7 +1694,7 @@ fn find_hir_macro_in_body<'hir, 'source>(
 
 /// 把脚本宏返回的 Core 值转成 Surface 输出执行；无 Surface 时退化为纯文本。
 fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
-    let output: Surface = match protocol_bridge::output(value)? {
+    let output: Surface = match narrava_loom_protocol::protocol_bridge::output(value)? {
         Some(output) => output,
         None => {
             let mut output = Surface::default();

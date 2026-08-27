@@ -1,10 +1,10 @@
 [package]
 name = "narrava-loom-core" # Core crate 名称
-version = "0.2.0"     # 项目版本
+version = "0.3.0"     # 项目版本
 edition = "2024"      # Rust 2024 Edition
 
 [workspace]
-members = ["hosts/narrava-loom-tauri", "hosts/narrava-loom-tui"] # 官方 Host；ModLoader 独立演进
+members = ["crates/narrava-loom-protocol", "hosts/narrava-loom-tauri", "hosts/narrava-loom-tui"] # 官方 Host 与 Surface 传输协议；ModLoader 独立演进
 exclude = ["crates/narrava-loom-modloader"]
 resolver = "3"                         # Rust 2024 的依赖解析器
 
