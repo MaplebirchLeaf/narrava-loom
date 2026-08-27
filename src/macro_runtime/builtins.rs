@@ -1,4 +1,4 @@
-//! 不直接产生 Surface 输出的原生逻辑 Macro。
+//! 不直接产生 SemanticOutput 输出的原生逻辑 Macro。
 
 mod protocol;
 mod story;

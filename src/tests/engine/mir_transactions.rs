@@ -83,7 +83,7 @@ fn mir_vm_commits_state_goto_history_and_output_through_engine() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string(),
+            SemanticNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -428,7 +428,7 @@ fn engine_resumes_vm_after_the_shared_macro_runtime_completes() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string(),
+            SemanticNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -631,7 +631,7 @@ fn engine_mir_transaction_uses_the_selected_translation_until_commit() {
 
     assert!(matches!(
         committed.navigation.output.nodes(),
-        [SurfaceNode::Text(text)]
+        [SemanticNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("发现铁剑")
     ));
 }

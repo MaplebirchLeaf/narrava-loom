@@ -209,7 +209,7 @@ impl Engine {
             .map_err(EngineNavigationError::Navigation)?;
         let mut entries: Vec<StoryHistoryEntry<'hir, 'source>> = vec![current];
         let mut executed: usize = 0;
-        let mut output: Surface = Surface::default();
+        let mut output: SemanticOutput = SemanticOutput::default();
         let empty_params: Value = Value::Undefined;
 
         loop {
@@ -294,7 +294,7 @@ impl Engine {
                         if !execution.output.has_navigation()
                             && let Some(target) = story.safe_return_target()
                         {
-                            execution.output.push(SurfaceNode::SafeReturn {
+                            execution.output.push(SemanticNode::SafeReturn {
                                 id: InteractionId::from_key(format!("safe-return:{}", target.name)),
                                 target: target.name.to_owned(),
                             });

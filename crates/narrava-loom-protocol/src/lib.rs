@@ -1,16 +1,19 @@
-//! 跨 Host 的 Surface 传输协议。
+//! 跨 Host 的 Surface 协议与传输层。
 //!
-//! 语义类型（`Surface`、`SurfaceNode` 等）保留在 `narrava-loom-core::protocol`，
-//! 由 Core 产生并被 Core 内部使用；本 crate 只承载 Host 与 Core 之间的稳定传输层：
-//! IPC 错误 DTO、节点/更新 DTO 以及脚本 Surface builder 值的受验证转换。
-//! Host 同时依赖 `narrava-loom-core`（执行）与本 crate（传输）。
+//! 本 crate 依赖 `narrava-loom-core`：`Surface` 语义类型（[surface]）是 Core 执行
+//! 输出（`semantic::SemanticOutput`）的协议表示，[conversion] 提供两者间的同构转换；
+//! 传输层包含 IPC 错误 DTO、节点/更新 DTO 与脚本 Surface builder 值的受验证转换。
+//! Host 同时依赖 `narrava-loom-core`（执行）与本 crate（协议与传输）。
 
 use std::fmt;
 
+pub mod conversion;
 pub mod protocol_bridge;
 pub mod protocol_dto;
+pub mod surface;
 
 pub use protocol_dto::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto, convert};
+pub use surface::*;
 
 /// IPC 边界只暴露稳定代码与可显示消息，不泄漏 Rust 错误对象。
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]

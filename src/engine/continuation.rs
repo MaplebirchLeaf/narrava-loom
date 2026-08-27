@@ -12,13 +12,13 @@ use crate::{
         MacroLogicContext, MacroResumeOutcome, MacroStoryAccess, MacroSuspension,
     },
     mir::MirMacroBody,
-    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{
         BodyControl, RuntimeExecutionIdentity, RuntimeMacroBodyContinuation,
         RuntimeMacroBodyContinuationResume, RuntimeMacroBodyResumed, RuntimeMacroContinuation,
         RuntimeMacroContinuationError, RuntimeMacroContinuationResume,
         RuntimeMacroContinuationResumeError, RuntimeMacroExecution, RuntimeMacroResumed,
     },
+    semantic::{InteractionId, SemanticNode, SemanticOutput},
     state::{State, StateCheckpoint},
     story::{
         Story, StoryHistoryEntry, StoryNavigationError, StoryRuntimePending,

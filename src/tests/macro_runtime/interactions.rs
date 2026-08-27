@@ -93,7 +93,7 @@ fn link_with_body_registers_body_target_and_selected_captures() {
         &mut interactions,
     )
     .expect("容器 link 应完成登记");
-    let [SurfaceNode::Navigation { id, .. }] = execution.output.nodes() else {
+    let [SemanticNode::Navigation { id, .. }] = execution.output.nodes() else {
         panic!("link 应只产生一个 Navigation");
     };
 
@@ -152,7 +152,7 @@ fn button_uses_button_role() {
     .expect("button 应登记延迟正文");
     assert!(matches!(
         button.output.nodes()[0],
-        SurfaceNode::Navigation {
+        SemanticNode::Navigation {
             role: NavigationRole::Button,
             ..
         }
@@ -161,19 +161,19 @@ fn button_uses_button_role() {
 
 #[test]
 fn replace_uses_host_neutral_region_or_key_targets() {
-    let content = Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("替换内容"))]);
+    let content = SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("替换内容"))]);
     let header: BodyExecution = replace("header", content.clone()).expect("固定区域应有效");
     assert!(matches!(
         &header.output.nodes()[0],
-        SurfaceNode::Replace { target: SurfaceTarget::Region(region), .. }
+        SemanticNode::Replace { target: SemanticTarget::Region(region), .. }
             if region == &RegionId::header()
     ));
 
     let keyed: BodyExecution = replace("status-panel", content).expect("稳定 key 应有效");
     assert!(matches!(
         keyed.output.nodes()[0],
-        SurfaceNode::Replace {
-            target: SurfaceTarget::Key(ref key),
+        SemanticNode::Replace {
+            target: SemanticTarget::Key(ref key),
             ..
         } if key.as_str() == "status-panel"
     ));
@@ -181,7 +181,7 @@ fn replace_uses_host_neutral_region_or_key_targets() {
 
 #[test]
 fn slot_creates_a_keyed_container_for_later_replace() {
-    let content = Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("初始内容"))]);
+    let content = SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("初始内容"))]);
     let execution: BodyExecution =
         crate::macro_runtime::slot("status-panel", content).expect("有效 key 应建立稳定替换槽");
 
@@ -191,6 +191,6 @@ fn slot_creates_a_keyed_container_for_later_replace() {
     );
     assert!(matches!(
         execution.output.nodes(),
-        [SurfaceNode::Container { content }] if content.len() == 1
+        [SemanticNode::Container { content }] if content.len() == 1
     ));
 }

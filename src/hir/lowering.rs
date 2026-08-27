@@ -1,7 +1,7 @@
 //! Twee AST → HIR 的 lowering 与校验。
 //!
 //! 只负责把已通过 Twee 编译边界的 Passage 转换到 HIR，并执行 Widget 等
-//! 结构化约束校验；不涉及 State、Macro Definitions 或 Surface。
+//! 结构化约束校验；不涉及 State、Macro Definitions 或 SemanticOutput。
 
 mod assignment;
 mod control;

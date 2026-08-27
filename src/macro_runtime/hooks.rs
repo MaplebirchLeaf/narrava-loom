@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::{
     diagnostic::{Diagnostic, DiagnosticSeverity},
     expression::value::Value,
-    protocol::Surface,
+    semantic::SemanticOutput,
 };
 
 /// Runtime 调用 Macro 生命周期时依赖的最小边界。
@@ -21,8 +21,8 @@ pub trait MacroLifecycleCallbacks {
         &mut self,
         name: &str,
         arguments: &[Value],
-        output: Surface,
-    ) -> Result<Surface, Diagnostic>;
+        output: SemanticOutput,
+    ) -> Result<SemanticOutput, Diagnostic>;
 }
 
 /// 将有序订阅转换为 Runtime 可调用的 Macro 生命周期边界。
@@ -56,7 +56,7 @@ impl<Hook, Before, After> MacroLifecycleCallbacks
     for MacroLifecycleController<'_, Hook, Before, After>
 where
     Before: FnMut(&Hook, &str, &mut [Value]) -> Result<(), Diagnostic>,
-    After: FnMut(&Hook, &str, &[Value], Surface) -> Result<Surface, Diagnostic>,
+    After: FnMut(&Hook, &str, &[Value], SemanticOutput) -> Result<SemanticOutput, Diagnostic>,
 {
     fn before(&mut self, name: &str, arguments: &mut [Value]) -> Result<(), Diagnostic> {
         for hook in self.subscriptions.before_hooks(name) {
@@ -69,8 +69,8 @@ where
         &mut self,
         name: &str,
         arguments: &[Value],
-        mut output: Surface,
-    ) -> Result<Surface, Diagnostic> {
+        mut output: SemanticOutput,
+    ) -> Result<SemanticOutput, Diagnostic> {
         for hook in self.subscriptions.after_hooks(name) {
             output = (self.invoke_after)(hook, name, arguments, output)?;
         }

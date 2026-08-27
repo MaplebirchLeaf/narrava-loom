@@ -2241,6 +2241,7 @@ name = "narrava-loom-tui"
 version = "0.3.0"
 dependencies = [
  "narrava-loom-core",
+ "narrava-loom-protocol",
 ]
 
 [[package]]

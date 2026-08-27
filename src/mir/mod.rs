@@ -103,7 +103,7 @@ pub enum MirInstruction<'hir, 'source> {
     Halt,
 }
 
-/// 当前指令产生的 Surface 是否进入执行链输出。
+/// 当前指令产生的 SemanticOutput 是否进入执行链输出。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MirOutputMode {
     /// 指令结果进入执行链输出。

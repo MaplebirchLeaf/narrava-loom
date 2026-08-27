@@ -1,6 +1,6 @@
 # Narrava Protocol
 
-> 状态：Core 内必选协议模块；Tauri 与 TUI 均已接入
+> 状态：独立 `narrava-loom-protocol` crate（单向依赖 Core）；Tauri 与 TUI 均已接入
 >
 > 更新日期：2026-08-27
 
@@ -10,11 +10,20 @@ Narrava Core 是可嵌入的叙事 Runtime/VM。它决定游戏状态、控制�
 
 ## 当前模块边界
 
-Protocol 本轮收束为 Core 的必选 `protocol` 模块，没有机械拆成独立 crate。原因是 Surface 文本
-继续使用 `TextValue` 保存与 Expression、State、Save 一致的 UTF-16 值；现在单独搬走会迫使
-Protocol 反向依赖 Core，或退化为有损的 Rust `String`。当前模块只依赖这项基础值类型，不依赖
-VM frame、Engine transaction、Macro continuation 或任何 Host 类型。若以后抽出共享 value crate，
-Protocol 才能在不制造循环依赖和重复 DTO 的前提下成为独立必选 crate。
+Protocol 是独立必选 crate `narrava-loom-protocol`，单向依赖 `narrava-loom-core`。依赖树：
+
+```text
+narrava-loom-core         语义执行（semantic::SemanticOutput 等内部输出类型）
+       ↑
+narrava-loom-protocol     Surface 协议语义（surface）+ 双向同构转换（conversion）+ 传输 DTO
+       ↑
+hosts/* 与 modloader      Tauri、TUI 与 ModLoader 同时依赖 Core 与 Protocol
+```
+
+`Surface` 文本继续使用 Core 的 `TextValue`（与 Expression、State、Save 一致的 UTF-16 值），
+避免退化为有损的 Rust `String`。Core 内部执行直接构造 `semantic::SemanticOutput`（不依赖
+Protocol），Host 消费前由 Protocol 的 `conversion` 层做结构同构的逐节点转换；脚本 Surface
+builder 产生的协议值也经同一层转回语义输出进入 Macro 执行。因此依赖保持单向，不制造循环依赖。
 
 ## 五层职责
 
@@ -47,7 +56,7 @@ Core 不反向调用 DOM、Godot、WebView、TUI 或其他平台对象。Binding
 
 ## Surface 所有权
 
-Surface Protocol 只表达 Narrava 必须理解的跨宿主语义。当前 Core 的 `protocol` 模块提供：
+Surface Protocol 只表达 Narrava 必须理解的跨宿主语义。当前 `narrava-loom-protocol` 的 `surface` 模块提供：
 
 - Text、HardBreak，以及可组合的 `TextStyle + TextColor`；
 - Resource 逻辑路径 Image，以及开放的 `RegionId`；
@@ -98,7 +107,7 @@ fallback。WebView 的 HTML、CSS 和 DOM 实现始终只属于 Tauri Host。
 
 ## Host 契约
 
-- Core 只产生 `Surface`，并以不透明 `InteractionId` 接收玩家动作；Renderer 不进入 Core。
+- Core 只产生语义输出（`semantic::SemanticOutput`），经 Protocol 转换层成为 `Surface`，并以不透明 `InteractionId` 接收玩家动作；Renderer 不进入 Core。
 - `HostApi::start_mir()` 和 `advance_mir()` 驱动到 Ready 或 Pending；Binding 不编排 VM 内部阶段。
 - Resume／Cancel 只传递 `HostExecutionToken`。Continuation、检查点、作用域和平台句柄留在后端。
 - State 与 Story 在同一事务中提交或回滚；容器 Macro 正文与目标 Passage 也属于同一事务。

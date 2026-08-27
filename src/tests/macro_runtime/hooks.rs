@@ -86,9 +86,12 @@ fn lifecycle_controller_executes_matching_subscriptions_in_order() {
             arguments[0] = Value::string(*hook);
             Ok(())
         },
-        |hook: &&str, _name: &str, _arguments: &[Value], mut output: crate::protocol::Surface| {
+        |hook: &&str,
+         _name: &str,
+         _arguments: &[Value],
+         mut output: crate::semantic::SemanticOutput| {
             order.borrow_mut().push((*hook).to_owned());
-            output.push(SurfaceNode::Text(TextValue::from(*hook)));
+            output.push(SemanticNode::Text(TextValue::from(*hook)));
             Ok(output)
         },
     );
@@ -97,14 +100,18 @@ fn lifecycle_controller_executes_matching_subscriptions_in_order() {
     controller
         .before("greet", &mut arguments)
         .expect("before 序列应完成");
-    let output: crate::protocol::Surface = controller
-        .after("greet", &arguments, crate::protocol::Surface::default())
+    let output: crate::semantic::SemanticOutput = controller
+        .after(
+            "greet",
+            &arguments,
+            crate::semantic::SemanticOutput::default(),
+        )
         .expect("after 序列应完成");
 
     assert_eq!(arguments, vec![Value::string("second")]);
     assert_eq!(
         output.nodes(),
-        &[SurfaceNode::Text(TextValue::from("suffix"))]
+        &[SemanticNode::Text(TextValue::from("suffix"))]
     );
     assert_eq!(
         order.into_inner(),

@@ -23,7 +23,7 @@ impl HostApi {
                 host_error(
                     "host.unknown_interaction",
                     &format!(
-                        "交互身份未出现在上一份 Surface 中：{}",
+                        "交互身份未出现在上一份 SemanticOutput 中：{}",
                         interaction.as_str()
                     ),
                 )
@@ -38,7 +38,7 @@ impl HostApi {
         if action.target() != presented_target {
             return Err(host_error(
                 "host.macro_interaction_target_mismatch",
-                "Surface 目标与延迟 Macro 动作不一致",
+                "SemanticOutput 目标与延迟 Macro 动作不一致",
             ));
         }
         Ok(interactions
@@ -183,7 +183,7 @@ impl HostApi {
         )
     }
 
-    /// 验证上一份 Surface 的玩家动作，再进入目标 Passage 的 MIR 链。
+    /// 验证上一份 SemanticOutput 的玩家动作，再进入目标 Passage 的 MIR 链。
     pub fn advance_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
@@ -234,7 +234,7 @@ impl HostApi {
                     diagnostic: host_error(
                         "host.unknown_interaction",
                         &format!(
-                            "交互身份未出现在上一份 Surface 中：{}",
+                            "交互身份未出现在上一份 SemanticOutput 中：{}",
                             interaction.as_str()
                         ),
                     ),

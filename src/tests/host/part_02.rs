@@ -28,7 +28,7 @@ fn host_start_returns_only_current_identity_and_surface() {
         |_passage, _state, _requests, _limits| {
             Ok::<BodyExecution, Diagnostic>(BodyExecution {
                 control: BodyControl::Continue,
-                output: Surface::from_nodes(vec![SurfaceNode::Text(
+                output: SemanticOutput::from_nodes(vec![SemanticNode::Text(
                     TextValue::from("森林入口"),
                 )]),
             })
@@ -39,7 +39,7 @@ fn host_start_returns_only_current_identity_and_surface() {
     assert_eq!(update.current(), "Start");
     assert_eq!(
         update.surface().nodes(),
-        &[SurfaceNode::Text(TextValue::from("森林入口"))]
+        &[SemanticNode::Text(TextValue::from("森林入口"))]
     );
 }
 
@@ -47,19 +47,19 @@ fn host_start_returns_only_current_identity_and_surface() {
 fn host_update_preserves_protocol_hard_break_without_scanning_text() {
     let update: HostUpdate = HostUpdate::new(
         "Start",
-        Surface::from_nodes(vec![
-            SurfaceNode::Text(TextValue::from("第一行")),
-            SurfaceNode::HardBreak,
-            SurfaceNode::Text(TextValue::from("第二行")),
+        SemanticOutput::from_nodes(vec![
+            SemanticNode::Text(TextValue::from("第一行")),
+            SemanticNode::HardBreak,
+            SemanticNode::Text(TextValue::from("第二行")),
         ]),
     );
 
     assert_eq!(
         update.surface().nodes(),
         &[
-            SurfaceNode::Text(TextValue::from("第一行")),
-            SurfaceNode::HardBreak,
-            SurfaceNode::Text(TextValue::from("第二行")),
+            SemanticNode::Text(TextValue::from("第一行")),
+            SemanticNode::HardBreak,
+            SemanticNode::Text(TextValue::from("第二行")),
         ]
     );
 }
@@ -106,8 +106,8 @@ fn host_navigation_input_is_validated_and_executed_by_engine() {
         |_passage, _state, _requests, _limits| {
             Ok::<BodyExecution, Diagnostic>(BodyExecution {
                 control: BodyControl::Continue,
-                output: Surface::from_nodes(vec![SurfaceNode::Navigation {
-                    role: crate::protocol::NavigationRole::Link,
+                output: SemanticOutput::from_nodes(vec![SemanticNode::Navigation {
+                    role: crate::semantic::NavigationRole::Link,
                     id: interaction.clone(),
                     label: TextValue::from("进入森林"),
                     target: String::from("Forest"),
@@ -151,7 +151,7 @@ fn host_navigation_input_is_validated_and_executed_by_engine() {
     assert_eq!(update.current(), "Forest");
     assert!(matches!(
         update.surface().nodes(),
-        [SurfaceNode::SafeReturn { target, .. }] if target == "Start"
+        [SemanticNode::SafeReturn { target, .. }] if target == "Start"
     ));
     assert_eq!(state.variables_get("unused"), None::<&Value>);
 }

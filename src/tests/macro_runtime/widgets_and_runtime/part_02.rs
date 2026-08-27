@@ -16,8 +16,8 @@ fn async_native_resume_runs_after_only_on_final_completion() {
             Ok::<_, &'static str>(MacroHandlerOutcome::Complete(RuntimeMacroExecution {
                 execution: BodyExecution {
                     control: BodyControl::Continue,
-                    output: crate::protocol::Surface::from_nodes(vec![
-                        SurfaceNode::Text(TextValue::from("完成")),
+                    output: crate::semantic::SemanticOutput::from_nodes(vec![
+                        SemanticNode::Text(TextValue::from("完成")),
                     ]),
                 },
                 includes_entered: 2,
@@ -32,8 +32,8 @@ fn async_native_resume_runs_after_only_on_final_completion() {
             assert_eq!(
                 output.execution.output.nodes(),
                 &[
-                    SurfaceNode::Text(TextValue::from("完成")),
-                    SurfaceNode::Text(TextValue::from("!")),
+                    SemanticNode::Text(TextValue::from("完成")),
+                    SemanticNode::Text(TextValue::from("!")),
                 ]
             );
             assert_eq!(scopes.args(), None);
@@ -323,9 +323,9 @@ fn successful_widget_merges_its_output_at_the_call_position() {
     assert_eq!(
         execution.output.nodes(),
         &[
-            SurfaceNode::Text(TextValue::from("前")),
-            SurfaceNode::Text(TextValue::from("中")),
-            SurfaceNode::Text(TextValue::from("后")),
+            SemanticNode::Text(TextValue::from("前")),
+            SemanticNode::Text(TextValue::from("中")),
+            SemanticNode::Text(TextValue::from("后")),
         ]
     );
 }
@@ -347,12 +347,12 @@ impl MacroLifecycleCallbacks for RecordingMacroLifecycle {
         &mut self,
         name: &str,
         arguments: &[Value],
-        mut output: crate::protocol::Surface,
-    ) -> Result<crate::protocol::Surface, Diagnostic> {
+        mut output: crate::semantic::SemanticOutput,
+    ) -> Result<crate::semantic::SemanticOutput, Diagnostic> {
         assert_eq!(name, "greet");
         assert_eq!(arguments, &[Value::string("Hook")]);
         self.stages.push("after");
-        output.push(SurfaceNode::Text(TextValue::from("!")));
+        output.push(SemanticNode::Text(TextValue::from("!")));
         Ok(output)
     }
 }
@@ -393,8 +393,8 @@ fn runtime_widget_runs_lifecycle_around_its_isolated_output() {
     assert_eq!(
         execution.output.nodes(),
         &[
-            SurfaceNode::Text(TextValue::from("Hook")),
-            SurfaceNode::Text(TextValue::from("!")),
+            SemanticNode::Text(TextValue::from("Hook")),
+            SemanticNode::Text(TextValue::from("!")),
         ]
     );
     assert_eq!(lifecycle.stages, vec!["before", "after"]);
@@ -427,7 +427,7 @@ fn compiler_owned_logic_does_not_enter_macro_lifecycle() {
 
     assert_eq!(
         execution.output.nodes(),
-        &[SurfaceNode::Text(TextValue::from("通过"))]
+        &[SemanticNode::Text(TextValue::from("通过"))]
     );
     assert!(lifecycle.stages.is_empty());
 }
@@ -443,8 +443,8 @@ impl MacroLifecycleCallbacks for FailingAfterLifecycle {
         &mut self,
         _name: &str,
         _arguments: &[Value],
-        _output: crate::protocol::Surface,
-    ) -> Result<crate::protocol::Surface, Diagnostic> {
+        _output: crate::semantic::SemanticOutput,
+    ) -> Result<crate::semantic::SemanticOutput, Diagnostic> {
         Err(Diagnostic::new(
             "test.macro.after_failed",
             DiagnosticSeverity::Error,

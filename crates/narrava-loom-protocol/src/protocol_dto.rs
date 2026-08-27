@@ -6,12 +6,13 @@
 use narrava_loom_core::{
     expression::value::TextValue,
     host::HostUpdate,
-    protocol::{
-        ActionRole, HeadingLevel, NavigationRole, Surface, SurfaceAction, SurfaceInputKind,
-        SurfaceNode, SurfaceTarget, SurfaceValue, TextStyle,
-    },
+    semantic::{ActionRole, HeadingLevel, NavigationRole, TextStyle},
 };
 use serde::Serialize;
+
+use crate::surface::{
+    Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -135,9 +136,11 @@ pub struct HostUpdateDto {
 
 /// 把 Core 的 HostUpdate 转换为 IPC DTO。
 pub fn convert(update: &HostUpdate) -> HostUpdateDto {
+    // Core 执行输出（semantic）经同构转换成为 Host 消费的 Surface 协议表示。
+    let surface = Surface::from(update.surface());
     HostUpdateDto {
         current: update.current().to_owned(),
-        nodes: convert_output(update.surface(), &format!("passage:{}", update.current())),
+        nodes: convert_output(&surface, &format!("passage:{}", update.current())),
     }
 }
 

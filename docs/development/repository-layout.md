@@ -43,7 +43,7 @@ Narrava Loom/
 ```text
 narrava-loom-core
        ↑
-narrava-loom-protocol   （Surface 传输 DTO 与脚本 bridge）
+narrava-loom-protocol   （Surface 语义 + 双向转换 + 传输 DTO 与脚本 bridge）
        ↑
 Host / Binding / narrava-loom-modloader
        ↑

@@ -11,7 +11,7 @@ fn print_builtin_builds_styled_text_from_flat_twee_arguments() {
 
     assert_eq!(
         execution.output.nodes(),
-        [SurfaceNode::StyledText {
+        [SemanticNode::StyledText {
             text: TextValue::from("关键道具"),
             styles: vec![TextStyle::Strong],
             color: TextColor::GREEN,
@@ -28,7 +28,7 @@ fn print_builtin_without_options_emits_plain_text() {
 
     assert_eq!(
         execution.output.nodes(),
-        [SurfaceNode::Text(TextValue::from("普通文本"))]
+        [SemanticNode::Text(TextValue::from("普通文本"))]
     );
 }
 
@@ -59,7 +59,7 @@ fn print_builtin_object_form_parses_delay_and_validates_range() {
 
     assert_eq!(
         execution.output.nodes(),
-        [SurfaceNode::StyledText {
+        [SemanticNode::StyledText {
             text: TextValue::from("延迟文本"),
             styles: vec![TextStyle::Strong],
             color: TextColor::YELLOW,
@@ -96,12 +96,12 @@ fn print_builtin_object_form_parses_heading_and_validates_level() {
 
     assert_eq!(
         execution.output.nodes(),
-        [SurfaceNode::StyledText {
+        [SemanticNode::StyledText {
             text: TextValue::from("第一页"),
             styles: vec![TextStyle::Strong],
             color: TextColor::DEFAULT,
             delay: None,
-            heading: Some(crate::protocol::HeadingLevel::H2),
+            heading: Some(crate::semantic::HeadingLevel::H2),
         }]
     );
 
@@ -130,7 +130,7 @@ fn link_builtin_converts_prepared_interaction_into_navigation_semantics() {
     assert_eq!(execution.control, BodyControl::Continue);
     assert!(matches!(
         execution.output.nodes(),
-        [SurfaceNode::Navigation { id, label, target, .. }]
+        [SemanticNode::Navigation { id, label, target, .. }]
             if !id.as_str().is_empty()
                 && label.as_units() == TextValue::from("进入森林").as_units()
                 && target == "Forest"
@@ -163,7 +163,7 @@ fn dynamic_fragment_execution_accumulates_markup_and_text_output() {
     assert_eq!(execution.output.len(), 1);
     assert_eq!(
         execution.output.nodes()[0],
-        SurfaceNode::Text(TextValue::from("你好，${$count}！"))
+        SemanticNode::Text(TextValue::from("你好，${$count}！"))
     );
 }
 
@@ -191,7 +191,7 @@ fn public_fragment_api_parses_and_executes() {
     assert_eq!(execution.output.len(), 1);
     assert_eq!(
         execution.output.nodes()[0],
-        SurfaceNode::Text(TextValue::from("你好，${$count}！"))
+        SemanticNode::Text(TextValue::from("你好，${$count}！"))
     );
 }
 
@@ -227,8 +227,8 @@ fn print_is_the_only_explicit_text_evaluation_boundary() {
         .output
         .nodes()
         .iter()
-        .map(|node: &SurfaceNode| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string().expect("测试文本不含孤立代理项"),
+        .map(|node: &SemanticNode| match node {
+            SemanticNode::Text(text) => text.to_unicode_string().expect("测试文本不含孤立代理项"),
             _ => panic!("print 示例只应产生 Text"),
         })
         .collect();
@@ -269,8 +269,8 @@ fn silently_discards_text_but_keeps_state_changes() {
         .output
         .nodes()
         .iter()
-        .map(|node: &SurfaceNode| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string().expect("测试文本应为有效 Unicode"),
+        .map(|node: &SemanticNode| match node {
+            SemanticNode::Text(text) => text.to_unicode_string().expect("测试文本应为有效 Unicode"),
             _ => panic!("silently 示例只应产生 Text"),
         })
         .collect();
@@ -320,11 +320,11 @@ fn passage_execution_accumulates_text_and_print_output() {
     assert_eq!(execution.output.len(), 2);
     assert_eq!(
         execution.output.nodes()[0],
-        SurfaceNode::Text(TextValue::from("你好，"))
+        SemanticNode::Text(TextValue::from("你好，"))
     );
     assert_eq!(
         execution.output.nodes()[1],
-        SurfaceNode::Text(TextValue::from("42"))
+        SemanticNode::Text(TextValue::from("42"))
     );
 }
 
@@ -363,7 +363,7 @@ fn passage_output_survives_stop_control_and_is_cleared_between_executions() {
     assert_eq!(first.output.len(), 1);
     assert_eq!(
         first.output.nodes()[0],
-        SurfaceNode::Text(TextValue::from("before"))
+        SemanticNode::Text(TextValue::from("before"))
     );
 
     let second: BodyExecution = runtime
@@ -395,23 +395,23 @@ fn input_builtins_create_state_bound_semantic_controls() {
     let text_output: BodyExecution =
         textbox("$name", &Value::string("Maple"), identity, 3).expect("textbox 应接受文字状态");
 
-    let SurfaceNode::Input { binding, .. } = &checkbox_output.output.nodes()[0] else {
+    let SemanticNode::Input { binding, .. } = &checkbox_output.output.nodes()[0] else {
         panic!("checkbox 应产生 Input")
     };
     assert_eq!(binding.receiver, "$enabled");
     assert_eq!(
         binding.kind,
-        SurfaceInputKind::Checkbox {
-            unchecked: SurfaceValue::Boolean(false),
-            checked: SurfaceValue::Boolean(true),
+        SemanticInputKind::Checkbox {
+            unchecked: SemanticValue::Boolean(false),
+            checked: SemanticValue::Boolean(true),
             selected: true,
         }
     );
     assert!(matches!(
         radio_output.output.nodes()[0],
-        SurfaceNode::Input {
-            binding: crate::protocol::SurfaceInputBinding {
-                kind: SurfaceInputKind::Radio { selected: true, .. },
+        SemanticNode::Input {
+            binding: crate::semantic::SemanticInputBinding {
+                kind: SemanticInputKind::Radio { selected: true, .. },
                 ..
             },
             ..
@@ -419,9 +419,9 @@ fn input_builtins_create_state_bound_semantic_controls() {
     ));
     assert!(matches!(
         text_output.output.nodes()[0],
-        SurfaceNode::Input {
-            binding: crate::protocol::SurfaceInputBinding {
-                kind: SurfaceInputKind::Text { .. },
+        SemanticNode::Input {
+            binding: crate::semantic::SemanticInputBinding {
+                kind: SemanticInputKind::Text { .. },
                 ..
             },
             ..

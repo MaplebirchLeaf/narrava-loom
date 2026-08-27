@@ -48,12 +48,12 @@ use narrava_loom_core::{
         prepare_argument_values, print, radiobutton, replace, slot, textbox,
     },
     mir::MirStory,
-    protocol::{InteractionId, RegionId, Surface, SurfaceNode, SurfaceValue},
     resource::ResourceCatalog,
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionIdentity,
         RuntimeMacroExecution, execute_logic_body,
     },
+    semantic::{InteractionId, RegionId, SemanticOutput, SemanticValue},
     state::{State, StateCheckpoint},
     story::{
         Story, StoryRuntimeRequests,
@@ -69,7 +69,7 @@ pub use developer::DeveloperValueDto;
 pub use narrava_loom_protocol::{HostErrorDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
 use developer::{developer_delete, developer_disabled, developer_set, developer_state};
-use narrava_loom_protocol::convert;
+use narrava_loom_protocol::{Surface, SurfaceNode, convert};
 use package::{
     load_language_packages, load_release_config_text, load_release_package, load_tauri_config,
 };
@@ -798,7 +798,7 @@ fn run_worker(
                                 })?;
                             Ok(BodyExecution {
                                 control,
-                                output: Surface::default(),
+                                output: SemanticOutput::default(),
                             })
                         },
                         |phase, context, _state| emit_passage_event(&script, phase, context),
@@ -908,7 +908,7 @@ fn run_worker(
                             "输入身份未出现在上一份 Surface 中",
                         )
                     })?;
-                    let semantic: SurfaceValue = json_to_surface_value(&value)?;
+                    let semantic: SemanticValue = json_to_surface_value(&value)?;
                     if !binding.accepts(&semantic) {
                         return Err(HostErrorDto::new(
                             "tauri_host.input_value",
@@ -1273,26 +1273,26 @@ fn worker_stopped() -> HostErrorDto {
 }
 
 /// 把 Input 的 JSON 值转换为 Core SurfaceValue（非有限数拒绝）。
-fn json_to_surface_value(value: &serde_json::Value) -> Result<SurfaceValue, HostErrorDto> {
+fn json_to_surface_value(value: &serde_json::Value) -> Result<SemanticValue, HostErrorDto> {
     match value {
-        serde_json::Value::Null => Ok(SurfaceValue::Null),
-        serde_json::Value::Bool(value) => Ok(SurfaceValue::Boolean(*value)),
+        serde_json::Value::Null => Ok(SemanticValue::Null),
+        serde_json::Value::Bool(value) => Ok(SemanticValue::Boolean(*value)),
         serde_json::Value::Number(value) => value
             .as_f64()
             .filter(|value: &f64| value.is_finite())
-            .map(SurfaceValue::Number)
+            .map(SemanticValue::Number)
             .ok_or_else(|| HostErrorDto::new("tauri_host.input_value", "输入数值超出范围")),
-        serde_json::Value::String(value) => Ok(SurfaceValue::Text(value.clone())),
+        serde_json::Value::String(value) => Ok(SemanticValue::Text(value.clone())),
         serde_json::Value::Array(values) => values
             .iter()
             .map(json_to_surface_value)
             .collect::<Result<Vec<_>, _>>()
-            .map(SurfaceValue::List),
+            .map(SemanticValue::List),
         serde_json::Value::Object(values) => values
             .iter()
             .map(|(name, value)| Ok((name.clone(), json_to_surface_value(value)?)))
             .collect::<Result<std::collections::BTreeMap<_, _>, HostErrorDto>>()
-            .map(SurfaceValue::Map),
+            .map(SemanticValue::Map),
     }
 }
 
@@ -1694,7 +1694,8 @@ fn find_hir_macro_in_body<'hir, 'source>(
 
 /// 把脚本宏返回的 Core 值转成 Surface 输出执行；无 Surface 时退化为纯文本。
 fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErrorDto> {
-    let output: Surface = match narrava_loom_protocol::protocol_bridge::output(value)? {
+    // 脚本 bridge 产生协议 Surface；Core 宏执行输出需要语义表示，做同构反向转换。
+    let surface: Surface = match narrava_loom_protocol::protocol_bridge::output(value)? {
         Some(output) => output,
         None => {
             let mut output = Surface::default();
@@ -1707,7 +1708,7 @@ fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, HostErr
     Ok(RuntimeMacroExecution {
         execution: BodyExecution {
             control: narrava_loom_core::runtime::BodyControl::Continue,
-            output,
+            output: SemanticOutput::from(&surface),
         },
         includes_entered: 0,
     })

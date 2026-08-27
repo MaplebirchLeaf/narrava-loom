@@ -99,7 +99,7 @@ impl MirExecutionFrame {
         .expect("MIR I18n 身份和 placeholder 必须来自同一目录");
         if self.should_emit(MirOutputMode::Visible) {
             self.output
-                .push(SurfaceNode::Text(TextValue::from(resolved.text())));
+                .push(SemanticNode::Text(TextValue::from(resolved.text())));
         }
         for _part in 0..part_count {
             self.advance(passage.instructions().len())?;
@@ -124,20 +124,20 @@ impl MirExecutionFrame {
             BytecodeOperation::Text { text, output, .. } => {
                 if self.should_emit(*output) && !text.trim().is_empty() {
                     self.output
-                        .push(SurfaceNode::Text(fold_source_line_whitespace(text)));
+                        .push(SemanticNode::Text(fold_source_line_whitespace(text)));
                 }
                 self.advance(instruction_count)?;
             }
             BytecodeOperation::HardBreak { output } => {
                 if self.should_emit(*output) {
-                    self.output.push(SurfaceNode::HardBreak);
+                    self.output.push(SemanticNode::HardBreak);
                 }
                 self.advance(instruction_count)?;
             }
             BytecodeOperation::PrintLiteral { text, output, .. } => {
                 if self.should_emit(*output) {
                     self.output
-                        .push(SurfaceNode::Text(TextValue::from(text.as_str())));
+                        .push(SemanticNode::Text(TextValue::from(text.as_str())));
                 }
                 self.advance(instruction_count)?;
             }
@@ -148,7 +148,7 @@ impl MirExecutionFrame {
                 let text: TextValue =
                     value_to_text(&value).ok_or(MirExecutionError::InvalidText(expression.span))?;
                 if self.should_emit(*output) {
-                    self.output.push(SurfaceNode::Text(text));
+                    self.output.push(SemanticNode::Text(text));
                 }
                 self.advance(instruction_count)?;
             }

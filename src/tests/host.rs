@@ -33,11 +33,11 @@ use crate::{
         prepare_argument_values, register_story_widgets,
     },
     mir::MirStory,
-    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionIdentity,
         RuntimeMacroExecution,
     },
+    semantic::{InteractionId, SemanticNode, SemanticOutput},
     source::Source,
     state::State,
     story::{Story, StoryRuntimeRequests},
@@ -47,8 +47,8 @@ use crate::{
 fn host_update_with_navigation(id: InteractionId, target: &str) -> HostUpdate {
     HostUpdate::new(
         "Start",
-        Surface::from_nodes(vec![SurfaceNode::Navigation {
-            role: crate::protocol::NavigationRole::Link,
+        SemanticOutput::from_nodes(vec![SemanticNode::Navigation {
+            role: crate::semantic::NavigationRole::Link,
             id,
             label: TextValue::from("前往"),
             target: target.to_owned(),

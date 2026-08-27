@@ -35,11 +35,11 @@ use crate::{
         register_story_widgets, register_widget,
     },
     mir::{MirMacroBody, MirStory},
-    protocol::{InteractionId, Surface, SurfaceNode},
     runtime::{
         BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionError,
         RuntimeExecutionIdentity, RuntimeMacroBodyContinuation, RuntimeMacroExecution,
     },
+    semantic::{InteractionId, SemanticNode, SemanticOutput},
     source::Source,
     state::State,
     story::{

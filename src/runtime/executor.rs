@@ -20,7 +20,7 @@ use crate::{
         MacroLifecycleCallbacks, MacroLocalScopes, MacroLogicContext, MacroSuspension,
         RuntimeMacroHandler, parse_argument_list, prepare_argument_values,
     },
-    protocol::{Surface, SurfaceNode},
+    semantic::{SemanticNode, SemanticOutput},
     story::{RuntimeStoryAccess, StoryIncludeRequest},
 };
 
@@ -90,7 +90,7 @@ pub struct RuntimeExecutionContext<'runtime, 'hir, 'source, Story: ?Sized, Nativ
     included_passages: usize,
     capture_names: Vec<&'source str>,
     /// 当前执行链按源码顺序累积的有序输出；公共入口结束时取走。
-    output: Surface,
+    output: SemanticOutput,
 }
 
 impl<'runtime, 'hir, 'source, Story, Native>
@@ -117,7 +117,7 @@ where
             include_limit: None,
             included_passages: 0,
             capture_names: Vec::new(),
-            output: Surface::default(),
+            output: SemanticOutput::default(),
         }
     }
 
@@ -146,9 +146,9 @@ where
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         match &node.kind {
             HirBodyKind::Text(text) => {
-                // 静态正文直接进入 Surface，不进行二次语法解释。
+                // 静态正文直接进入 SemanticOutput，不进行二次语法解释。
                 if !text.trim().is_empty() {
-                    self.output.push(SurfaceNode::Text(TextValue::from(*text)));
+                    self.output.push(SemanticNode::Text(TextValue::from(*text)));
                 }
                 Ok(BodyControl::Continue)
             }
@@ -162,7 +162,7 @@ where
                         ))?
                     }
                 };
-                self.output.push(SurfaceNode::Text(text));
+                self.output.push(SemanticNode::Text(text));
                 Ok(BodyControl::Continue)
             }
             HirBodyKind::Silently(body) => self.execute_silently(body),
@@ -210,10 +210,10 @@ where
         &mut self,
         body: &[HirBodyNode<'source>],
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
-        let outer_output: Surface = std::mem::take(&mut self.output);
+        let outer_output: SemanticOutput = std::mem::take(&mut self.output);
         let result: Result<BodyControl, RuntimeExecutionError<Story::Error>> =
             self.execute_body(body);
-        let _discarded_output: Surface = std::mem::take(&mut self.output);
+        let _discarded_output: SemanticOutput = std::mem::take(&mut self.output);
         self.output = outer_output;
         result
     }
@@ -256,10 +256,10 @@ where
         &mut self,
         call: &crate::hir::HirMacro<'call>,
     ) -> Result<BodyExecution, RuntimeExecutionError<Story::Error>> {
-        let outer_output: Surface = std::mem::take(&mut self.output);
+        let outer_output: SemanticOutput = std::mem::take(&mut self.output);
         let result: Result<BodyControl, RuntimeExecutionError<Story::Error>> =
             self.execute_dynamic_macro(call);
-        let macro_output: Surface = std::mem::take(&mut self.output);
+        let macro_output: SemanticOutput = std::mem::take(&mut self.output);
         self.output = outer_output;
 
         result.map(|control| BodyExecution {

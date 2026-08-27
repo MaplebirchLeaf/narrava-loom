@@ -30,11 +30,11 @@ use crate::{
         MacroHandlerOutcome, MacroInteraction, MacroInteractions, MacroLocalScopes,
         MacroResumeOutcome,
     },
-    protocol::{InteractionId, Surface},
     runtime::{
         BodyExecution, RuntimeExecutionIdentity, RuntimeExecutionLocation,
         RuntimeMacroContinuationError, RuntimeMacroExecution,
     },
+    semantic::{InteractionId, SemanticOutput},
     state::{State, StateCheckpoint},
     story::{
         Story, StoryNavigationError, StoryRuntimeRequestError, StoryRuntimeRequests, StorySnapshot,
@@ -48,7 +48,7 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HostInput {
-    /// 玩家激活上一份 Surface 中的交互（导航或按钮）。
+    /// 玩家激活上一份 SemanticOutput 中的交互（导航或按钮）。
     Activate { interaction: InteractionId },
     /// 恢复 Host 先前保存的异步执行。
     Resume { execution: HostExecutionToken },
@@ -57,7 +57,7 @@ pub enum HostInput {
 }
 
 impl HostInput {
-    /// 回送 Core 在上一份 Surface 中提供的交互身份。
+    /// 回送 Core 在上一份 SemanticOutput 中提供的交互身份。
     pub fn activate(interaction: InteractionId) -> Self {
         Self::Activate { interaction }
     }
@@ -314,12 +314,12 @@ impl<'state> HostStateView<'state> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostUpdate {
     current: String,
-    surface: Surface,
+    surface: SemanticOutput,
 }
 
 impl HostUpdate {
     /// 用当前 Passage 名与语义输出建立更新；仅 crate 内部使用。
-    pub(crate) fn new(current: &str, surface: Surface) -> Self {
+    pub(crate) fn new(current: &str, surface: SemanticOutput) -> Self {
         Self {
             current: current.to_owned(),
             surface,
@@ -332,14 +332,14 @@ impl HostUpdate {
     }
 
     /// 本次调用按执行顺序产生的宿主无关语义输出。
-    pub fn surface(&self) -> &Surface {
+    pub fn surface(&self) -> &SemanticOutput {
         &self.surface
     }
 
     /// 把独立渲染的 Host 区域附加到本次正文更新。
-    pub fn append_region(&mut self, region: crate::protocol::RegionId, content: Surface) {
+    pub fn append_region(&mut self, region: crate::semantic::RegionId, content: SemanticOutput) {
         self.surface
-            .push(crate::protocol::SurfaceNode::Region { region, content });
+            .push(crate::semantic::SemanticNode::Region { region, content });
     }
 }
 

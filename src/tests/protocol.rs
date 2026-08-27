@@ -2,21 +2,21 @@
 
 use crate::{
     expression::value::TextValue,
-    protocol::{
-        ActionRole, ComponentCapability, InteractionId, InteractionIdError, RegionId, Surface,
-        SurfaceAction, SurfaceKey, SurfaceKeyError, SurfaceNode, SurfaceValue, TextColor,
-        TextStyle,
+    semantic::{
+        ActionRole, ComponentCapability, InteractionId, InteractionIdError, RegionId,
+        SemanticAction, SemanticKey, SemanticKeyError, SemanticNode, SemanticOutput, SemanticValue,
+        TextColor, TextStyle,
     },
 };
 
 #[test]
 fn output_preserves_semantic_node_order() {
     let web_text: TextValue = TextValue::from_units(vec![0xD800]);
-    let output: Surface = Surface::from_nodes(vec![
-        SurfaceNode::Text(TextValue::from("进入森林")),
-        SurfaceNode::Text(web_text.clone()),
-        SurfaceNode::Navigation {
-            role: crate::protocol::NavigationRole::Link,
+    let output: SemanticOutput = SemanticOutput::from_nodes(vec![
+        SemanticNode::Text(TextValue::from("进入森林")),
+        SemanticNode::Text(web_text.clone()),
+        SemanticNode::Navigation {
+            role: crate::semantic::NavigationRole::Link,
             id: InteractionId::from_key("start:choice:0"),
             label: TextValue::from("继续"),
             target: String::from("Forest"),
@@ -24,15 +24,15 @@ fn output_preserves_semantic_node_order() {
     ]);
 
     assert_eq!(output.nodes().len(), 3);
-    assert_eq!(output.nodes()[1], SurfaceNode::Text(web_text));
+    assert_eq!(output.nodes()[1], SemanticNode::Text(web_text));
     assert!(output.has_navigation());
 }
 
 #[test]
 fn output_appends_and_merges_without_a_host_renderer() {
-    let mut output: Surface = Surface::default();
-    output.push(SurfaceNode::Text(TextValue::from("前")));
-    output.append(Surface::from_nodes(vec![SurfaceNode::Text(
+    let mut output: SemanticOutput = SemanticOutput::default();
+    output.push(SemanticNode::Text(TextValue::from("前")));
+    output.append(SemanticOutput::from_nodes(vec![SemanticNode::Text(
         TextValue::from("后"),
     )]));
 
@@ -41,15 +41,15 @@ fn output_appends_and_merges_without_a_host_renderer() {
     assert_eq!(
         output.nodes(),
         &[
-            SurfaceNode::Text(TextValue::from("前")),
-            SurfaceNode::Text(TextValue::from("后")),
+            SemanticNode::Text(TextValue::from("前")),
+            SemanticNode::Text(TextValue::from("后")),
         ]
     );
 }
 
 #[test]
 fn safe_return_is_not_an_author_navigation_action() {
-    let output: Surface = Surface::from_nodes(vec![SurfaceNode::SafeReturn {
+    let output: SemanticOutput = SemanticOutput::from_nodes(vec![SemanticNode::SafeReturn {
         id: InteractionId::from_key("history:2:safe-return"),
         target: String::from("Start"),
     }]);
@@ -61,8 +61,8 @@ fn safe_return_is_not_an_author_navigation_action() {
 fn interaction_identity_resolves_only_core_presented_actions() {
     let id: InteractionId = InteractionId::from_key("start:choice:0");
     let unknown: InteractionId = InteractionId::from_key("start:choice:1");
-    let output: Surface = Surface::from_nodes(vec![SurfaceNode::Navigation {
-        role: crate::protocol::NavigationRole::Link,
+    let output: SemanticOutput = SemanticOutput::from_nodes(vec![SemanticNode::Navigation {
+        role: crate::semantic::NavigationRole::Link,
         id: id.clone(),
         label: TextValue::from("进入森林"),
         target: String::from("Forest"),
@@ -79,12 +79,12 @@ fn binding_cannot_decode_an_empty_interaction_identity() {
 
 #[test]
 fn surface_keys_are_explicit_stable_and_unique_within_one_output() {
-    let mut output = Surface::default();
-    let title = SurfaceKey::parse("passage:title").unwrap();
+    let mut output = SemanticOutput::default();
+    let title = SemanticKey::parse("passage:title").unwrap();
     output
         .push_keyed(
             title.clone(),
-            SurfaceNode::StyledText {
+            SemanticNode::StyledText {
                 text: TextValue::from("森林入口"),
                 styles: vec![TextStyle::Strong],
                 color: TextColor::DEFAULT,
@@ -97,21 +97,21 @@ fn surface_keys_are_explicit_stable_and_unique_within_one_output() {
     assert_eq!(output.key(0), Some(&title));
     assert_eq!(
         output
-            .push_keyed(title, SurfaceNode::Text(TextValue::from("重复")))
+            .push_keyed(title, SemanticNode::Text(TextValue::from("重复")))
             .unwrap_err(),
-        SurfaceKeyError::Duplicate(String::from("passage:title"))
+        SemanticKeyError::Duplicate(String::from("passage:title"))
     );
-    assert_eq!(SurfaceKey::parse(""), Err(SurfaceKeyError::Empty));
+    assert_eq!(SemanticKey::parse(""), Err(SemanticKeyError::Empty));
 }
 
 #[test]
 fn keyed_container_keeps_empty_replace_target_visible_to_hosts() {
-    let mut output = Surface::default();
+    let mut output = SemanticOutput::default();
     output
         .push_keyed(
-            SurfaceKey::parse("replace-me").unwrap(),
-            SurfaceNode::Container {
-                content: Surface::default(),
+            SemanticKey::parse("replace-me").unwrap(),
+            SemanticNode::Container {
+                content: SemanticOutput::default(),
             },
         )
         .unwrap();
@@ -119,31 +119,31 @@ fn keyed_container_keeps_empty_replace_target_visible_to_hosts() {
     assert_eq!(output.key(0).unwrap().as_str(), "replace-me");
     assert!(matches!(
         output.nodes(),
-        [SurfaceNode::Container { content }] if content.is_empty()
+        [SemanticNode::Container { content }] if content.is_empty()
     ));
 }
 
 #[test]
 fn semantic_text_and_regions_remain_host_neutral() {
-    let content = Surface::from_nodes(vec![SurfaceNode::StyledText {
+    let content = SemanticOutput::from_nodes(vec![SemanticNode::StyledText {
         text: TextValue::from("体力不足"),
         styles: vec![TextStyle::Strong],
         color: TextColor::YELLOW,
         delay: None,
         heading: None,
     }]);
-    let output = Surface::from_nodes(vec![SurfaceNode::Region {
+    let output = SemanticOutput::from_nodes(vec![SemanticNode::Region {
         region: RegionId::bar(),
         content,
     }]);
 
-    let [SurfaceNode::Region { region, content }] = output.nodes() else {
+    let [SemanticNode::Region { region, content }] = output.nodes() else {
         panic!("应建立语义区域");
     };
     assert_eq!(region, &RegionId::bar());
     assert!(matches!(
         content.nodes(),
-        [SurfaceNode::StyledText {
+        [SemanticNode::StyledText {
             color: TextColor::YELLOW,
             ..
         }]
@@ -160,39 +160,39 @@ fn region_ids_keep_standard_names_and_accept_custom_regions() {
 
 #[test]
 fn versioned_components_keep_pure_properties_and_semantic_fallback() {
-    let output = Surface::from_nodes(vec![SurfaceNode::Component {
+    let output = SemanticOutput::from_nodes(vec![SemanticNode::Component {
         capability: ComponentCapability::parse("meter").unwrap(),
         version: 1,
         properties: std::collections::BTreeMap::from([
-            (String::from("value"), SurfaceValue::Number(42.0)),
+            (String::from("value"), SemanticValue::Number(42.0)),
             (
                 String::from("label"),
-                SurfaceValue::Text(String::from("体力")),
+                SemanticValue::Text(String::from("体力")),
             ),
         ]),
-        fallback: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("体力：42"))]),
+        fallback: SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("体力：42"))]),
     }]);
 
     assert!(matches!(
         output.nodes(),
-        [SurfaceNode::Component { capability, version: 1, fallback, .. }]
+        [SemanticNode::Component { capability, version: 1, fallback, .. }]
             if capability.as_str() == "meter" && fallback.len() == 1
     ));
 }
 
 #[test]
 fn non_navigation_actions_have_explicit_host_semantics() {
-    let output = Surface::from_nodes(vec![SurfaceNode::Action {
+    let output = SemanticOutput::from_nodes(vec![SemanticNode::Action {
         label: TextValue::from("关闭"),
-        action: SurfaceAction::Dismiss,
+        action: SemanticAction::Dismiss,
         role: ActionRole::Secondary,
     }]);
 
     assert!(!output.has_navigation());
     assert!(matches!(
         output.nodes(),
-        [SurfaceNode::Action {
-            action: SurfaceAction::Dismiss,
+        [SemanticNode::Action {
+            action: SemanticAction::Dismiss,
             role: ActionRole::Secondary,
             ..
         }]

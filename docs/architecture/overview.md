@@ -33,7 +33,7 @@ Narrava 是一个以 Rust 为核心、可嵌入不同宿主环境的叙事内容
 3. 发布包保留可重建的基础输入，模组变化后从基础内容重新生成有效构建。
 4. 内嵌模组顺序来自 `config.toml`；玩家模组默认禁用，并由游戏内界面管理。
 5. 已完成最小可运行闭环；当前收束可嵌入基础游戏 Runtime 与 Host 边界。
-6. 本体、I18n 与 Script Bundle 位于 `narrava-loom-core` crate；跨 Host 的 Surface 传输协议位于 `narrava-loom-protocol` crate（依赖 Core）；ModLoader 是独立项目，不计入 Core。依赖只能沿 `host / ModLoader → narrava-loom-protocol → Core` 方向，反向不可达。
+6. 本体、I18n 与 Script Bundle 位于 `narrava-loom-core` crate；Surface 协议语义与跨 Host 传输层位于 `narrava-loom-protocol` crate（依赖 Core，Core 内部使用 `semantic` 语义输出类型）；ModLoader 是独立项目，不计入 Core。依赖只能沿 `host / ModLoader → narrava-loom-protocol → Core` 方向，反向不可达。
 
 具体目录、依赖方向与产物归属见[仓库布局与文件归属](../development/repository-layout.md)。
 

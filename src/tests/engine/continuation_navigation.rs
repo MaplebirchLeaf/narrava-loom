@@ -180,7 +180,7 @@ fn engine_mir_continuation_resumes_goto_and_commits_the_target_passage() {
                     PassageLifecyclePhase::Render | PassageLifecyclePhase::Display
                 ) {
                     assert_eq!(context.entry().passage().name, "End");
-                    assert_eq!(context.output().map(Surface::len), Some(1));
+                    assert_eq!(context.output().map(SemanticOutput::len), Some(1));
                 }
                 Ok::<(), Diagnostic>(())
             },
@@ -194,7 +194,7 @@ fn engine_mir_continuation_resumes_goto_and_commits_the_target_passage() {
                 Ok::<_, &'static str>(MacroHandlerOutcome::Complete(RuntimeMacroExecution {
                     execution: BodyExecution {
                         control: BodyControl::Continue,
-                        output: Surface::from_nodes(vec![SurfaceNode::Text(
+                        output: SemanticOutput::from_nodes(vec![SemanticNode::Text(
                             TextValue::from("恢复输出"),
                         )]),
                     },
@@ -212,8 +212,8 @@ fn engine_mir_continuation_resumes_goto_and_commits_the_target_passage() {
                         output: RuntimeMacroExecution {
                             execution: BodyExecution {
                                 control: BodyControl::Continue,
-                                output: Surface::from_nodes(vec![
-                                    SurfaceNode::Text(TextValue::from("第二输出")),
+                                output: SemanticOutput::from_nodes(vec![
+                                    SemanticNode::Text(TextValue::from("第二输出")),
                                 ]),
                             },
                             includes_entered: 0,
@@ -247,7 +247,7 @@ fn engine_mir_continuation_resumes_goto_and_commits_the_target_passage() {
     assert_eq!(committed.surface().len(), 3);
     assert!(matches!(
         committed.surface().nodes().last(),
-        Some(SurfaceNode::Text(text))
+        Some(SemanticNode::Text(text))
             if text.to_unicode_string().as_deref() == Some("Destination")
     ));
     assert_eq!(state.variables_get("changed"), Some(&Value::Boolean(true)));

@@ -4,10 +4,11 @@ use std::io;
 
 use narrava_loom_core::{
     expression::value::TextValue,
-    protocol::{
-        InteractionId, NavigationRole, RegionId, Surface, SurfaceInputBinding, SurfaceInputKind,
-        SurfaceKey, SurfaceNode, SurfaceTarget, SurfaceValue, TextColor, TextStyle,
-    },
+    semantic::{InteractionId, NavigationRole, RegionId, TextColor, TextStyle},
+};
+use narrava_loom_protocol::{
+    Surface, SurfaceInputBinding, SurfaceInputKind, SurfaceKey, SurfaceNode, SurfaceTarget,
+    SurfaceValue,
 };
 use narrava_loom_tui::{TuiFrame, TuiOperation, TuiRenderer, run_terminal};
 

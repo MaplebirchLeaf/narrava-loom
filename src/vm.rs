@@ -1,6 +1,6 @@
 //! 已编码 Bytecode 程序的最小单步执行帧。
 //!
-//! 帧持有 Passage 调用栈、临时值/迭代槽与累计 Surface 输出；`step*` 方法
+//! 帧持有 Passage 调用栈、临时值/迭代槽与累计 SemanticOutput 输出；`step*` 方法
 //! 每次精确执行一条指令，`MirStep` 告知调用方是否到达运行、结束、导航或宏边界。
 
 use std::collections::BTreeMap;
@@ -24,8 +24,8 @@ use crate::{
         MirCollectionIterationKind, MirExecutionPosition, MirIteratorSlot, MirOutputMode,
         MirValueSlot,
     },
-    protocol::{Surface, SurfaceNode},
     runtime::{collection_iteration_values, finite_range_number},
+    semantic::{SemanticNode, SemanticOutput},
 };
 
 /// 单步完成后执行帧是否仍可继续。
@@ -71,7 +71,7 @@ pub enum MirExecutionError {
 #[derive(Debug, PartialEq)]
 pub struct MirExecutionFrame {
     stack: Vec<MirPassageFrame>,
-    output: Surface,
+    output: SemanticOutput,
     navigation: Option<String>,
     includes_entered: usize,
 }
@@ -176,7 +176,7 @@ impl MirExecutionFrame {
     pub fn new(passage: &BytecodePassage) -> Self {
         Self {
             stack: vec![MirPassageFrame::new(passage, false)],
-            output: Surface::default(),
+            output: SemanticOutput::default(),
             navigation: None,
             includes_entered: 0,
         }
@@ -186,7 +186,7 @@ impl MirExecutionFrame {
     pub fn new_macro(body: &BytecodeMacroBody) -> Self {
         Self {
             stack: vec![MirPassageFrame::new_macro(body)],
-            output: Surface::default(),
+            output: SemanticOutput::default(),
             navigation: None,
             includes_entered: 0,
         }
@@ -218,7 +218,7 @@ impl MirExecutionFrame {
     pub fn complete_macro_body(
         &mut self,
         body: &BytecodeMacroBody,
-        output: Surface,
+        output: SemanticOutput,
     ) -> Result<(), MirExecutionError> {
         let mode: MirOutputMode = match body
             .instruction(self.location().instruction())
@@ -258,7 +258,7 @@ impl MirExecutionFrame {
     }
 
     /// 返回本次执行链累计的语义输出。
-    pub fn output(&self) -> &Surface {
+    pub fn output(&self) -> &SemanticOutput {
         &self.output
     }
 
@@ -296,7 +296,7 @@ impl MirExecutionFrame {
     pub fn complete_macro(
         &mut self,
         story: &BytecodeProgram,
-        output: Surface,
+        output: SemanticOutput,
     ) -> Result<(), MirExecutionError> {
         let location: MirExecutionPosition = self.location();
         let passage: &BytecodePassage = story
@@ -322,7 +322,7 @@ impl MirExecutionFrame {
     }
 
     /// 消费帧并取出累计的语义输出。
-    pub fn into_output(self) -> Surface {
+    pub fn into_output(self) -> SemanticOutput {
         self.output
     }
 

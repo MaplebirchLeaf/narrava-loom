@@ -1,4 +1,4 @@
-//! 产生宿主无关 Surface 语义的 Core Macro。
+//! 产生宿主无关 SemanticOutput 语义的 Core Macro。
 
 use std::fmt::Write;
 
@@ -12,12 +12,12 @@ use crate::{
     macro_runtime::{
         CapturedMacroLocals, MacroInteraction, MacroInteractionError, MacroInteractions,
     },
-    protocol::{
-        HeadingLevel, InputGroupId, InteractionId, NavigationRole, RegionId, Surface,
-        SurfaceInputBinding, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue, TextColor,
+    runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity},
+    semantic::{
+        HeadingLevel, InputGroupId, InteractionId, NavigationRole, RegionId, SemanticInputBinding,
+        SemanticInputKind, SemanticNode, SemanticOutput, SemanticTarget, SemanticValue, TextColor,
         TextStyle,
     },
-    runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity},
 };
 
 /// 从 Twee `<<print value options?>>` 求值并入 Passage 输出；带选项时产生 StyledText。
@@ -53,14 +53,14 @@ pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
             }
         }
     };
-    let node: SurfaceNode = if options.styles.is_empty()
+    let node: SemanticNode = if options.styles.is_empty()
         && options.color == TextColor::DEFAULT
         && options.delay.is_none()
         && options.heading.is_none()
     {
-        SurfaceNode::Text(text)
+        SemanticNode::Text(text)
     } else {
-        SurfaceNode::StyledText {
+        SemanticNode::StyledText {
             text,
             styles: options.styles,
             color: options.color,
@@ -70,7 +70,7 @@ pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
     };
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: Surface::from_nodes(vec![node]),
+        output: SemanticOutput::from_nodes(vec![node]),
     })
 }
 
@@ -257,7 +257,7 @@ fn prepare_link(
 fn link_output(prepared: PreparedLink, role: NavigationRole) -> BodyExecution {
     BodyExecution {
         control: BodyControl::Continue,
-        output: Surface::from_nodes(vec![SurfaceNode::Navigation {
+        output: SemanticOutput::from_nodes(vec![SemanticNode::Navigation {
             id: prepared.id,
             label: prepared.label,
             target: prepared.target,
@@ -329,15 +329,15 @@ pub fn checkbox(
     identity: RuntimeExecutionIdentity,
     occurrence: usize,
 ) -> Result<BodyExecution, Diagnostic> {
-    let unchecked: SurfaceValue = input_value(unchecked)?;
-    let checked: SurfaceValue = input_value(checked)?;
+    let unchecked: SemanticValue = input_value(unchecked)?;
+    let checked: SemanticValue = input_value(checked)?;
     let selected: bool = input_value(current)? == checked;
     input_output(
         receiver,
         "checkbox",
         identity,
         occurrence,
-        SurfaceInputKind::Checkbox {
+        SemanticInputKind::Checkbox {
             unchecked,
             checked,
             selected,
@@ -353,7 +353,7 @@ pub fn radiobutton(
     identity: RuntimeExecutionIdentity,
     occurrence: usize,
 ) -> Result<BodyExecution, Diagnostic> {
-    let value: SurfaceValue = input_value(value)?;
+    let value: SemanticValue = input_value(value)?;
     let selected: bool = input_value(current)? == value;
     let group: InputGroupId = InputGroupId::from_key(format!(
         "radio-group:{}:{}:{receiver}",
@@ -364,7 +364,7 @@ pub fn radiobutton(
         "radiobutton",
         identity,
         occurrence,
-        SurfaceInputKind::Radio {
+        SemanticInputKind::Radio {
             group,
             value,
             selected,
@@ -386,7 +386,7 @@ pub fn textbox(
         "textbox",
         identity,
         occurrence,
-        SurfaceInputKind::Text { value: text },
+        SemanticInputKind::Text { value: text },
     )
 }
 
@@ -396,7 +396,7 @@ fn input_output(
     control: &str,
     identity: RuntimeExecutionIdentity,
     occurrence: usize,
-    kind: SurfaceInputKind,
+    kind: SemanticInputKind,
 ) -> Result<BodyExecution, Diagnostic> {
     if receiver.starts_with('@') {
         return Err(input_error(
@@ -412,9 +412,9 @@ fn input_output(
     ));
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: Surface::from_nodes(vec![SurfaceNode::Input {
+        output: SemanticOutput::from_nodes(vec![SemanticNode::Input {
             id,
-            binding: SurfaceInputBinding {
+            binding: SemanticInputBinding {
                 receiver: receiver.to_owned(),
                 kind,
             },
@@ -423,28 +423,28 @@ fn input_output(
 }
 
 /// 把运行时值递归转换为可呈现的输入值；函数与命名空间被拒绝。
-fn input_value(value: &Value) -> Result<SurfaceValue, Diagnostic> {
+fn input_value(value: &Value) -> Result<SemanticValue, Diagnostic> {
     match value {
-        Value::Undefined | Value::Null => Ok(SurfaceValue::Null),
-        Value::Boolean(value) => Ok(SurfaceValue::Boolean(*value)),
-        Value::Number(value) if value.is_finite() => Ok(SurfaceValue::Number(*value)),
+        Value::Undefined | Value::Null => Ok(SemanticValue::Null),
+        Value::Boolean(value) => Ok(SemanticValue::Boolean(*value)),
+        Value::Number(value) if value.is_finite() => Ok(SemanticValue::Number(*value)),
         Value::Number(_) => Err(input_error("输入值必须是有限数值")),
         Value::String(value) => value
             .to_unicode_string()
-            .map(SurfaceValue::Text)
+            .map(SemanticValue::Text)
             .ok_or_else(|| input_error("输入值必须是有效 Unicode")),
         Value::Array(values) => values
             .snapshot()
             .iter()
             .map(input_value)
             .collect::<Result<Vec<_>, _>>()
-            .map(SurfaceValue::List),
+            .map(SemanticValue::List),
         Value::Object(values) => values
             .snapshot()
             .iter()
             .map(|(name, value)| Ok((name.clone(), input_value(value)?)))
             .collect::<Result<std::collections::BTreeMap<_, _>, Diagnostic>>()
-            .map(SurfaceValue::Map),
+            .map(SemanticValue::Map),
         Value::Callable(_) | Value::ScriptCallable(_) | Value::Namespace(_) => {
             Err(input_error("输入值不能包含函数或命名空间"))
         }
@@ -461,31 +461,31 @@ fn input_error(message: &str) -> Diagnostic {
 }
 
 /// 把容器正文包装为跨 Host 的区域或稳定 key 替换语义。
-pub fn replace(target: &str, content: Surface) -> Result<BodyExecution, Diagnostic> {
+pub fn replace(target: &str, content: SemanticOutput) -> Result<BodyExecution, Diagnostic> {
     let target: &str = target.trim();
     if target.is_empty() {
         return Err(replace_error("`replace` 目标不能为空"));
     }
-    let target: SurfaceTarget = match target {
-        "header" => SurfaceTarget::Region(RegionId::header()),
-        "main" => SurfaceTarget::Region(RegionId::main()),
-        "footer" => SurfaceTarget::Region(RegionId::footer()),
-        "bar" => SurfaceTarget::Region(RegionId::bar()),
-        "bar-stowed" => SurfaceTarget::Region(RegionId::bar_stowed()),
-        "dialog" => SurfaceTarget::Region(RegionId::dialog()),
-        key => SurfaceTarget::Key(
-            crate::protocol::SurfaceKey::parse(key)
+    let target: SemanticTarget = match target {
+        "header" => SemanticTarget::Region(RegionId::header()),
+        "main" => SemanticTarget::Region(RegionId::main()),
+        "footer" => SemanticTarget::Region(RegionId::footer()),
+        "bar" => SemanticTarget::Region(RegionId::bar()),
+        "bar-stowed" => SemanticTarget::Region(RegionId::bar_stowed()),
+        "dialog" => SemanticTarget::Region(RegionId::dialog()),
+        key => SemanticTarget::Key(
+            crate::semantic::SemanticKey::parse(key)
                 .map_err(|_| replace_error("`replace` key 无效"))?,
         ),
     };
     Ok(BodyExecution {
         control: BodyControl::Continue,
-        output: Surface::from_nodes(vec![SurfaceNode::Replace { target, content }]),
+        output: SemanticOutput::from_nodes(vec![SemanticNode::Replace { target, content }]),
     })
 }
 
 /// 建立一个由稳定 key 标识的普通内容槽，供后续 `replace` 跨 Host 定位。
-pub fn slot(key: &str, content: Surface) -> Result<BodyExecution, Diagnostic> {
+pub fn slot(key: &str, content: SemanticOutput) -> Result<BodyExecution, Diagnostic> {
     let key: &str = key.trim();
     if key.is_empty() {
         return Err(slot_error("`slot` key 不能为空"));
@@ -493,10 +493,11 @@ pub fn slot(key: &str, content: Surface) -> Result<BodyExecution, Diagnostic> {
     if matches!(key, "header" | "main" | "footer" | "bar" | "dialog") {
         return Err(slot_error("`slot` key 不能使用保留的 Region 名称"));
     }
-    let key = crate::protocol::SurfaceKey::parse(key).map_err(|_| slot_error("`slot` key 无效"))?;
-    let mut output = Surface::default();
+    let key =
+        crate::semantic::SemanticKey::parse(key).map_err(|_| slot_error("`slot` key 无效"))?;
+    let mut output = SemanticOutput::default();
     output
-        .push_keyed(key, SurfaceNode::Container { content })
+        .push_keyed(key, SemanticNode::Container { content })
         .map_err(|error| slot_error(&error.to_string()))?;
     Ok(BodyExecution {
         control: BodyControl::Continue,

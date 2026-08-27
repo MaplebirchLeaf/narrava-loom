@@ -382,7 +382,7 @@ fn logic_body_ignores_visible_text_owned_by_surface_dispatch() {
         MacroLogicContext::new(&mut state, &mut story, &mut locals);
 
     let control: BodyControl =
-        execute_logic_body(&body, &mut context).expect("Surface 文本不应阻断延迟动作");
+        execute_logic_body(&body, &mut context).expect("SemanticOutput 文本不应阻断延迟动作");
 
     assert_eq!(control, BodyControl::Continue);
 }

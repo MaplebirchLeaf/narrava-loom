@@ -4,14 +4,14 @@ use std::collections::BTreeMap;
 
 use narrava_loom_core::{
     expression::value::{ObjectValue, TextValue, Value},
-    protocol::{
-        ActionRole, ComponentCapability, HeadingLevel, RegionId, Surface, SurfaceAction,
-        SurfaceKey, SurfaceNode, SurfaceValue, TextColor, TextStyle,
-    },
     resource::ResourcePath,
+    semantic::{ActionRole, ComponentCapability, HeadingLevel, RegionId, TextColor, TextStyle},
 };
 
-use crate::HostErrorDto;
+use crate::{
+    HostErrorDto,
+    surface::{Surface, SurfaceAction, SurfaceKey, SurfaceNode, SurfaceValue},
+};
 
 const MARKER: &str = "__narravaSurface";
 const MAX_DEPTH: usize = 32;
@@ -329,9 +329,10 @@ fn invalid(message: impl Into<String>) -> HostErrorDto {
 
 #[cfg(test)]
 mod tests {
+    use crate::surface::SurfaceNode;
     use narrava_loom_core::{
         expression::value::{TextValue, Value},
-        protocol::{RegionId, SurfaceNode, TextColor, TextStyle},
+        semantic::{RegionId, TextColor, TextStyle},
     };
 
     use super::output;

@@ -28,7 +28,7 @@ pub(super) fn collect_body(
                 .get_or_insert_with(|| VisibleMessage::new(index, node.span))
                 .push_expression(expression, node_path, node.span),
             HirBodyKind::HardBreak => flush_visible(source, passage, path, &mut visible, messages),
-            // silently 的正文不会进入 Surface，因此不属于翻译目录。
+            // silently 的正文不会进入 SemanticOutput，因此不属于翻译目录。
             HirBodyKind::Silently(_) => {
                 flush_visible(source, passage, path, &mut visible, messages)
             }

@@ -10,7 +10,7 @@ use super::*;
 pub struct EngineMirProgress<'hir, 'source> {
     current: StoryHistoryEntry<'hir, 'source>,
     entries: Vec<StoryHistoryEntry<'hir, 'source>>,
-    output: Surface,
+    output: SemanticOutput,
     params: Value,
     executed_passages: usize,
     macro_includes_entered: usize,
@@ -23,7 +23,7 @@ impl<'hir, 'source> EngineMirProgress<'hir, 'source> {
     pub fn new(
         current: StoryHistoryEntry<'hir, 'source>,
         entries: Vec<StoryHistoryEntry<'hir, 'source>>,
-        output: Surface,
+        output: SemanticOutput,
         params: &Value,
         executed_passages: usize,
         macro_includes_entered: usize,
@@ -60,7 +60,7 @@ impl<'hir, 'source> EngineMirProgress<'hir, 'source> {
     }
 
     /// 链上已累积的有序语义输出。
-    pub fn output(&self) -> &Surface {
+    pub fn output(&self) -> &SemanticOutput {
         &self.output
     }
 

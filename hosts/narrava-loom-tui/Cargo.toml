@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 narrava-loom-core = { path = "../.." }
+narrava-loom-protocol = { path = "../../crates/narrava-loom-protocol" } # 渲染 Surface 协议表示

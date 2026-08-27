@@ -6,8 +6,8 @@ use crate::{
     hir::{HirMacro, HirPassage},
     i18n::I18nRuntimeLanguage,
     macro_runtime::MacroStoryAccess,
-    protocol::Surface,
     runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity, RuntimeMacroExecution},
+    semantic::SemanticOutput,
     state::State,
     story::{Story, StoryRuntimeRequestError, StoryRuntimeRequests},
     vm::{MirExecutionError, MirExecutionFrame, MirStep},
@@ -196,7 +196,7 @@ impl Engine {
         let progress = EngineMirProgress::new(
             current,
             vec![current],
-            Surface::default(),
+            SemanticOutput::default(),
             params,
             0,
             0,

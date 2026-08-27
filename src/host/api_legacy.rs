@@ -58,7 +58,7 @@ impl HostApi {
                         host_error(
                             "host.unknown_interaction",
                             &format!(
-                                "交互身份未出现在上一份 Surface 中：{}",
+                                "交互身份未出现在上一份 SemanticOutput 中：{}",
                                 interaction.as_str()
                             ),
                         )

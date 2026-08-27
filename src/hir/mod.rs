@@ -178,7 +178,7 @@ impl HirPassage<'_> {
         self.tags.contains(&tag)
     }
 
-    /// Widget Passage 只保存定义；顶层文本不进入 Surface 输出。
+    /// Widget Passage 只保存定义；顶层文本不进入 SemanticOutput 输出。
     pub fn emits_text(&self) -> bool {
         !self.has_tag("widget")
     }

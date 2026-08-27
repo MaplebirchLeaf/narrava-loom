@@ -246,11 +246,11 @@ fn engine_chain_carries_accumulated_render_output() {
     assert_eq!(navigation.output.len(), 2);
     assert_eq!(
         navigation.output.nodes()[0],
-        SurfaceNode::Text(TextValue::from("你好，"))
+        SemanticNode::Text(TextValue::from("你好，"))
     );
     assert_eq!(
         navigation.output.nodes()[1],
-        SurfaceNode::Text(TextValue::from("世界。"))
+        SemanticNode::Text(TextValue::from("世界。"))
     );
 }
 
@@ -282,7 +282,7 @@ fn display_phase_exposes_passage_output_to_host() {
     let mut runtime_story: EngineRuntimeStory = EngineRuntimeStory;
     let mut locals: MacroLocalScopes<Value> = MacroLocalScopes::new();
     let params: Value = Value::Undefined;
-    let displayed: RefCell<Option<Surface>> = RefCell::new(None);
+    let displayed: RefCell<Option<SemanticOutput>> = RefCell::new(None);
     let mut story: Story<'_, '_> = Story::new(&compiled);
     let mut state: State = State::new();
 
@@ -314,14 +314,14 @@ fn display_phase_exposes_passage_output_to_host() {
     )
     .expect("Display 阶段应把本跳输出交给宿主");
 
-    let output: Surface = displayed
+    let output: SemanticOutput = displayed
         .borrow()
         .clone()
         .expect("Display 阶段应收到语义输出");
     assert_eq!(output.len(), 1);
     assert_eq!(
         output.nodes()[0],
-        SurfaceNode::Text(TextValue::from("森林入口。"))
+        SemanticNode::Text(TextValue::from("森林入口。"))
     );
 }
 
@@ -368,8 +368,8 @@ fn engine_appends_safe_return_to_latest_navigation_target() {
                 requests.goto("End").expect("End 导航请求应有效");
                 Ok::<BodyExecution, &'static str>(BodyExecution {
                     control: BodyControl::StopPassage,
-                    output: Surface::from_nodes(vec![SurfaceNode::Navigation {
-                        role: crate::protocol::NavigationRole::Link,
+                    output: SemanticOutput::from_nodes(vec![SemanticNode::Navigation {
+                        role: crate::semantic::NavigationRole::Link,
                         id: InteractionId::from_key("start:choice:0"),
                         label: TextValue::from("去往"),
                         target: String::from("End"),
@@ -379,7 +379,7 @@ fn engine_appends_safe_return_to_latest_navigation_target() {
                 // 第二跳：没有任何作者导航动作。
                 Ok::<BodyExecution, &'static str>(BodyExecution {
                     control: BodyControl::Continue,
-                    output: Surface::default(),
+                    output: SemanticOutput::default(),
                 })
             }
         },
@@ -391,7 +391,7 @@ fn engine_appends_safe_return_to_latest_navigation_target() {
     assert_eq!(navigation.output.len(), 2);
     assert!(matches!(
         navigation.output.nodes()[1],
-        SurfaceNode::SafeReturn { ref target, .. } if target == "Start"
+        SemanticNode::SafeReturn { ref target, .. } if target == "Start"
     ));
 }
 
@@ -427,8 +427,8 @@ fn engine_skips_safe_return_when_output_has_navigation() {
          _limits: EngineExecutionLimits| {
             Ok::<BodyExecution, &'static str>(BodyExecution {
                 control: BodyControl::Continue,
-                output: Surface::from_nodes(vec![SurfaceNode::Navigation {
-                    role: crate::protocol::NavigationRole::Link,
+                output: SemanticOutput::from_nodes(vec![SemanticNode::Navigation {
+                    role: crate::semantic::NavigationRole::Link,
                     id: InteractionId::from_key("start:choice:0"),
                     label: TextValue::from("去往"),
                     target: String::from("Forest"),
@@ -441,7 +441,7 @@ fn engine_skips_safe_return_when_output_has_navigation() {
     assert_eq!(navigation.output.len(), 1);
     assert!(matches!(
         navigation.output.nodes()[0],
-        SurfaceNode::Navigation { .. }
+        SemanticNode::Navigation { .. }
     ));
 }
 
@@ -477,7 +477,7 @@ fn engine_skips_safe_return_when_history_has_no_target() {
          _limits: EngineExecutionLimits| {
             Ok::<BodyExecution, &'static str>(BodyExecution {
                 control: BodyControl::Continue,
-                output: Surface::default(),
+                output: SemanticOutput::default(),
             })
         },
     )

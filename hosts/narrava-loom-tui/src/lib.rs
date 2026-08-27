@@ -10,9 +10,9 @@ use std::{
     io::{self, BufRead, Write},
 };
 
-use narrava_loom_core::protocol::{
-    HeadingLevel, NavigationRole, RegionId, Surface, SurfaceAction, SurfaceInputKind, SurfaceNode,
-    SurfaceTarget, SurfaceValue, TextColor, TextStyle,
+use narrava_loom_core::semantic::{HeadingLevel, NavigationRole, RegionId, TextColor, TextStyle};
+use narrava_loom_protocol::{
+    Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
 };
 
 /// 输入控件执行时需要的完整语义。TUI 保留这些值，避免终端层根据标签反推状态。
@@ -699,8 +699,9 @@ fn is_standard_region(region: &str) -> bool {
 mod tests {
     use narrava_loom_core::{
         expression::value::TextValue,
-        protocol::{RegionId, Surface, SurfaceKey, SurfaceNode, SurfaceTarget, TextColor},
+        semantic::{RegionId, TextColor},
     };
+    use narrava_loom_protocol::{Surface, SurfaceKey, SurfaceNode, SurfaceTarget};
 
     use super::{
         TuiCommand, TuiCommandError, TuiFrame, TuiInput, TuiInteraction, TuiOperation, TuiRenderer,
@@ -723,11 +724,11 @@ mod tests {
             content: Surface::from_nodes(vec![
                 SurfaceNode::Text(TextValue::from("新状态")),
                 SurfaceNode::Navigation {
-                    id: narrava_loom_core::protocol::InteractionId::parse("status:continue")
+                    id: narrava_loom_core::semantic::InteractionId::parse("status:continue")
                         .unwrap(),
                     label: TextValue::from("继续"),
                     target: String::from("Next"),
-                    role: narrava_loom_core::protocol::NavigationRole::Link,
+                    role: narrava_loom_core::semantic::NavigationRole::Link,
                 },
             ]),
         });
@@ -818,9 +819,7 @@ mod tests {
                     label: String::from("( )"),
                     kind: "radiobutton",
                     input: Some(TuiInput::Radio {
-                        value: narrava_loom_core::protocol::SurfaceValue::Text(String::from(
-                            "quiet",
-                        )),
+                        value: narrava_loom_protocol::SurfaceValue::Text(String::from("quiet")),
                         selected: false,
                     }),
                 },
@@ -840,7 +839,7 @@ mod tests {
             TuiCommand::parse("1").unwrap().resolve(&frame).unwrap(),
             TuiOperation::Input {
                 id: String::from("route:quiet"),
-                value: narrava_loom_core::protocol::SurfaceValue::Text(String::from("quiet")),
+                value: narrava_loom_protocol::SurfaceValue::Text(String::from("quiet")),
             }
         );
         assert_eq!(
@@ -850,7 +849,7 @@ mod tests {
                 .unwrap(),
             TuiOperation::Input {
                 id: String::from("name"),
-                value: narrava_loom_core::protocol::SurfaceValue::Text(String::from("游侠")),
+                value: narrava_loom_protocol::SurfaceValue::Text(String::from("游侠")),
             }
         );
         assert_eq!(

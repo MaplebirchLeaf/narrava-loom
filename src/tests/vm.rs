@@ -18,7 +18,7 @@ use crate::{
     },
     lir::LirProgram,
     mir::{MirMacroBody, MirStory},
-    protocol::{Surface, SurfaceNode},
+    semantic::{SemanticNode, SemanticOutput},
     source::Source,
     state::State,
     twee::{MacroSyntaxKind, Span},
@@ -68,7 +68,7 @@ fn macro_body_frame_pauses_at_macro_and_continues_from_the_next_instruction() {
         Some("wait")
     );
     frame
-        .complete_macro_body(&macro_bytecode, Surface::default())
+        .complete_macro_body(&macro_bytecode, SemanticOutput::default())
         .expect("完成异步 Macro 后应推进位置");
     assert_eq!(
         frame.step_macro(&macro_bytecode, &mut state),
@@ -85,7 +85,7 @@ fn macro_body_frame_pauses_at_macro_and_continues_from_the_next_instruction() {
     );
     assert!(matches!(
         frame.output().nodes(),
-        [SurfaceNode::Text(text)]
+        [SemanticNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("完成")
     ));
 }
@@ -145,7 +145,7 @@ fn frame_steps_text_and_print_until_halt_without_losing_position() {
     assert_eq!(frame.output().len(), 1);
     assert!(matches!(
         &frame.output().nodes()[0],
-        SurfaceNode::Text(text) if text.to_unicode_string().as_deref() == Some("数量：2")
+        SemanticNode::Text(text) if text.to_unicode_string().as_deref() == Some("数量：2")
     ));
 }
 
@@ -220,7 +220,7 @@ fn frame_uses_validated_translation_to_reorder_and_translate_dynamic_values() {
     assert_eq!(frame.location().instruction().index(), 4);
     assert!(matches!(
         frame.output().nodes(),
-        [SurfaceNode::Text(text)]
+        [SemanticNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("2 个铁剑")
     ));
 }
@@ -275,7 +275,7 @@ fn translated_text_keeps_hard_break_as_protocol_structure() {
 
     assert!(matches!(
         frame.output().nodes(),
-        [SurfaceNode::Text(first), SurfaceNode::HardBreak, SurfaceNode::Text(second)]
+        [SemanticNode::Text(first), SemanticNode::HardBreak, SemanticNode::Text(second)]
             if first.to_unicode_string().as_deref() == Some("甲")
                 && second.to_unicode_string().as_deref() == Some("乙")
     ));
@@ -320,7 +320,7 @@ fn frame_uses_the_language_chain_before_falling_back_to_default_text() {
     );
     assert!(matches!(
         frame.output().nodes(),
-        [SurfaceNode::Text(text)]
+        [SemanticNode::Text(text)]
             if text.to_unicode_string().as_deref() == Some("后备文本")
     ));
 }
@@ -456,7 +456,7 @@ fn frame_executes_state_changes_and_strict_switch_control_flow() {
     assert_eq!(frame.output().len(), 1);
     assert!(matches!(
         &frame.output().nodes()[0],
-        SurfaceNode::Text(text) if text.to_unicode_string().as_deref() == Some("匹配")
+        SemanticNode::Text(text) if text.to_unicode_string().as_deref() == Some("匹配")
     ));
     assert_eq!(
         frame.step(&bytecode, &mut state),
@@ -622,7 +622,7 @@ fn include_pushes_a_passage_frame_and_returns_to_the_caller() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string(),
+            SemanticNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -734,7 +734,7 @@ fn silently_discards_direct_and_included_text_but_keeps_state_changes() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string(),
+            SemanticNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -793,7 +793,7 @@ fn exit_stops_only_the_current_included_passage() {
         .nodes()
         .iter()
         .filter_map(|node| match node {
-            SurfaceNode::Text(text) => text.to_unicode_string(),
+            SemanticNode::Text(text) => text.to_unicode_string(),
             _ => None,
         })
         .collect();
@@ -848,7 +848,7 @@ fn dynamic_macro_stays_pending_at_the_same_vm_location() {
     frame
         .complete_macro(
             &bytecode,
-            Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("完成"))]),
+            SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("完成"))]),
         )
         .expect("Macro 完成输出应回到 VM");
     assert_eq!(frame.location().instruction().index(), 1);
@@ -890,7 +890,7 @@ fn silently_suppresses_completed_macro_output() {
     frame
         .complete_macro(
             &bytecode,
-            Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("隐藏"))]),
+            SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("隐藏"))]),
         )
         .expect("静默 Macro 仍应正常完成");
 

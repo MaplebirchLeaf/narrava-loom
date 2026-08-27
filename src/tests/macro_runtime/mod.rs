@@ -26,16 +26,16 @@ use crate::{
         HirMacro, HirMacroArguments, HirPassage, HirStory, HirSwitch, HirSwitchCase, HirWhile,
         HirWidget,
     },
-    protocol::{
-        InteractionId, NavigationRole, RegionId, Surface, SurfaceInputKind, SurfaceNode,
-        SurfaceTarget, SurfaceValue, TextColor, TextStyle,
-    },
     runtime::{
         AsyncNativeMacroCallbacks, BodyControl, BodyExecution, LogicNodeError,
         NativeMacroCallbacks, NativeMacroError, RuntimeExecutionContext, RuntimeExecutionError,
         RuntimeExecutionIdentity, RuntimeMacroExecution, RuntimeNativePending,
         RuntimeNativeResumeError, WidgetMacroError, execute_logic_body, execute_widget_body,
         execute_widget_macro, resume_async_native_macro,
+    },
+    semantic::{
+        InteractionId, NavigationRole, RegionId, SemanticInputKind, SemanticNode, SemanticOutput,
+        SemanticTarget, SemanticValue, TextColor, TextStyle,
     },
     source::Source,
     state::State,
