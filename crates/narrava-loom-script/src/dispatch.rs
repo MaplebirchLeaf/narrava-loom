@@ -28,16 +28,17 @@ use narrava_loom_core::{
     story::StoryRuntimeRequests,
 };
 
-use narrava_loom_protocol::{Surface, SurfaceNode};
-
-use crate::ScriptError;
+use crate::{
+    ScriptError,
+    protocol_adapter::{Surface, SurfaceNode},
+};
 
 /// 把 Core 已确认的 Passage 生命周期事实投递给游戏脚本。
 ///
 /// 映射属于共享 Native Script Binding，而不是某一种 Host；Tauri 与 TUI 必须调用同一实现，
 /// 才能保证同一游戏在不同前端收到相同的内建事件序列。
 pub fn emit_passage_event(
-    script: &crate::EcmaBinding,
+    script: &impl crate::ScriptAdapter,
     phase: PassageLifecyclePhase,
     context: PassageLifecycleContext<'_, '_, '_, '_>,
 ) -> Result<(), Diagnostic> {
@@ -66,7 +67,7 @@ pub fn emit_passage_event(
 
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_macro<'hir, 'source>(
-    script: &crate::EcmaBinding,
+    script: &impl crate::ScriptAdapter,
     hir: &'hir HirStory<'source>,
     interactions: &mut MacroInteractions<'hir, 'source>,
     scheduled: &mut Option<crate::ScriptPending>,
@@ -447,7 +448,7 @@ pub(crate) fn find_hir_macro_in_body<'hir, 'source>(
 
 pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, ScriptError> {
     // 脚本 bridge 产生协议 Surface；Core 宏执行输出需要语义表示，做同构反向转换。
-    let surface: Surface = match narrava_loom_protocol::protocol_bridge::output(value)? {
+    let surface: Surface = match crate::protocol_adapter::protocol_bridge::output(value)? {
         Some(output) => output,
         None => {
             let mut output = Surface::default();

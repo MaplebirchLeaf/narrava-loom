@@ -9,7 +9,7 @@ use narrava_loom_core::semantic::{
     SemanticOutput, SemanticTarget, SemanticValue,
 };
 
-use crate::surface::{
+use super::surface::{
     Surface, SurfaceAction, SurfaceInputBinding, SurfaceInputKind, SurfaceKey, SurfaceNode,
     SurfaceTarget, SurfaceValue,
 };

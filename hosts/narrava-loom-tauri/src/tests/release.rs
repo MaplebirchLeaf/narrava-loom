@@ -359,12 +359,16 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     assert!(text_gallery.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::StyledText { text, color, styles, .. }
-            if text.contains("正面加粗") && *color == 32 && styles.contains(&"strong")
+            if text.contains("正面加粗")
+                && *color == 32
+                && styles.iter().any(|style: &String| style == "strong")
     )));
     assert!(text_gallery.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::StyledText { text, color, styles, .. }
-            if text.contains("警告对象形式") && *color == 24 && styles.contains(&"code")
+            if text.contains("警告对象形式")
+                && *color == 24
+                && styles.iter().any(|style: &String| style == "code")
     )));
     assert!(text_gallery.nodes.iter().any(|node| matches!(
         node,

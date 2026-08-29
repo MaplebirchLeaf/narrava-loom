@@ -14,40 +14,19 @@ use std::{
 };
 
 use narrava_loom_core::{
-    ProjectConfig, SourceList,
-    bytecode::BytecodeProgram,
-    diagnostic::{Diagnostic, DiagnosticSeverity},
-    engine::{EngineExecutionLimits, EngineMirContinuation},
-    expression::{evaluator::assign_value_with_mut, parse as parse_expression, value::Value},
-    hir::HirStory,
-    host::{
-        HostApi, HostDriveResult, HostInput, HostMirAdvanceRequest, HostMirRequest,
-        HostPendingExecutions, HostResumeOutcome, HostUpdate,
-    },
-    i18n::I18nRuntimeLanguage,
-    lir::LirProgram,
-    macro_runtime::{MacroHandlerOutcome, MacroInteractions, MacroLogicContext},
-    mir::MirStory,
-    resource::ResourceCatalog,
-    runtime::{BodyExecution, RuntimeExecutionIdentity, execute_logic_body},
-    semantic::{InteractionId, RegionId, SemanticOutput, SemanticValue},
-    state::{State, StateCheckpoint},
-    story::{
-        Story,
-        special::{BAR_PASSAGE, BAR_STOWED_PASSAGE},
-    },
-    twee,
+    ProjectConfig, SourceList, bytecode::BytecodeProgram, hir::HirStory, lir::LirProgram,
+    mir::MirStory, resource::ResourceCatalog, state::State, twee,
 };
 
-use narrava_loom_protocol::convert;
-
-use narrava_loom_script::dispatch::{dispatch_macro, emit_passage_event, macro_value_execution};
+use narrava_loom_protocol::{
+    PendingOperation, RuntimeCommand, RuntimeSessionId, RuntimeUpdate, SaveOperation,
+};
+use narrava_loom_script::{RuntimeServices, RuntimeSessionDriver};
 
 use crate::{
     HostErrorDto, HostLogDto, HostUpdateDto,
     package::{load_language_packages, load_release_config_text, load_release_package},
-    save_io::{process_save, process_save_operation},
-    script_host_error,
+    save_io::process_save_io,
 };
 
 pub(crate) type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
@@ -190,7 +169,6 @@ pub(crate) fn run_worker(
     );
     available_languages.sort();
     available_languages.dedup();
-    let mut runtime_language: Option<I18nRuntimeLanguage> = None;
     let mut state: State = State::new();
     let script = match narrava_loom_script::EcmaBinding::load(
         sources,
@@ -202,14 +180,22 @@ pub(crate) fn run_worker(
         Ok(script) => script,
         Err(error) => return fail_worker(requests, error.code.as_str(), error.message),
     };
-    state.attach_script_dispatcher(script.clone());
-    let mut story: Story<'_, '_> = Story::new(&hir);
-    let mut interactions: MacroInteractions<'_, '_> = MacroInteractions::new();
-    let mut pending: HostPendingExecutions<
-        EngineMirContinuation<'_, '_, narrava_loom_script::ScriptPending>,
-    > = HostPendingExecutions::new();
-    let mut presented: Option<HostUpdate> = None;
-    let mut sequence: u64 = 1;
+    let identity = match config.identity() {
+        Ok(identity) => identity,
+        Err(error) => return fail_worker(requests, "tauri_host.game_identity", error.to_string()),
+    };
+    let services = RuntimeServices::new(
+        identity,
+        mir.i18n().clone(),
+        config.game.default_locale.clone(),
+        language_packages,
+    );
+    let session = narrava_loom_script::RuntimeSession::with_services(
+        &hir, &bytecode, script, state, services,
+    );
+    let session_id =
+        RuntimeSessionId::new("main").expect("内建主 Session ID 必须满足 Protocol 校验");
+    let mut runtime: RuntimeSessionDriver<'_> = RuntimeSessionDriver::new(session_id, session);
     let mut logs: Vec<HostLogDto> = vec![HostLogDto {
         level: String::from("info"),
         message: String::from("Runtime Worker 已就绪"),
@@ -218,280 +204,32 @@ pub(crate) fn run_worker(
     while let Ok(request) = requests.recv() {
         match request {
             WorkerRequest::Start(reply) => {
-                let params: Value = Value::Null;
-                let mut scheduled: Option<narrava_loom_script::ScriptPending> = None;
-                let result = HostApi::start_mir(
-                    &mut pending,
-                    &mut state,
-                    &mut story,
-                    &bytecode,
-                    HostMirRequest {
-                        params: &params,
-                        identity: RuntimeExecutionIdentity::new(1, sequence),
-                        limits: limits(),
-                        language: runtime_language.as_ref(),
-                    },
-                    |_passage, _state, _requests, _limits| {
-                        Ok::<BodyExecution, Diagnostic>(BodyExecution::default())
-                    },
-                    |phase, context, _state| emit_passage_event(&script, phase, context),
-                    |invocation, state, requests, scopes| {
-                        dispatch_macro(
-                            &script,
-                            &hir,
-                            &mut interactions,
-                            &mut scheduled,
-                            invocation,
-                            state,
-                            requests,
-                            scopes,
-                        )
-                    },
-                )
-                .map_err(|error| HostErrorDto::diagnostic(error.diagnostic.clone()));
-                let mut result = finish_drive(
-                    result,
-                    &script,
-                    &mut scheduled,
-                    &mut pending,
-                    &hir,
-                    &mut interactions,
-                    &mut state,
-                    &mut story,
-                    &bytecode,
-                );
-                sequence = sequence.saturating_add(1);
-                if let Ok(update) = &mut result
-                    && let Err(error) = append_sidebar_regions(
-                        update,
-                        &script,
-                        &hir,
-                        &mut interactions,
-                        &state,
-                        &story,
-                        &bytecode,
-                        runtime_language.as_ref(),
-                        &mut sequence,
-                    )
-                {
-                    result = Err(error);
-                }
-                if let Ok(update) = &result {
-                    presented = Some(update.clone());
-                }
-                // save 失败不撤销已渲染的 Surface：把错误记入日志，保持
-                // presented 与 WebView 一致，避免后续点击报 host.unknown_interaction。
-                if result.is_ok()
-                    && let Err(error) = process_save(
-                        Path::new(&game_path),
-                        &config,
-                        &script,
-                        &mut state,
-                        &mut story,
-                    )
-                {
-                    logs.push(HostLogDto {
-                        level: String::from("error"),
-                        message: format!("{}：{}", error.code, error.message),
-                    });
-                }
-                let _sent: Result<(), _> = reply.send(result.map(|update| convert(&update)));
+                let result =
+                    execute_blocking(&mut runtime, Path::new(&game_path), RuntimeCommand::Start);
+                append_runtime_notices(&mut runtime, &mut logs);
+                let _sent: Result<(), _> = reply.send(ready_update(result));
             }
             WorkerRequest::Activate { interaction, reply } => {
-                let Some(previous) = presented.as_ref() else {
-                    let _sent: Result<(), _> = reply.send(Err(HostErrorDto::new(
-                        "tauri_host.not_started",
-                        "必须先调用 start_game",
-                    )));
-                    continue;
-                };
-                let params: Value = Value::Null;
-                let mut scheduled: Option<narrava_loom_script::ScriptPending> = None;
-                let interaction_id = match InteractionId::parse(interaction) {
-                    Ok(id) => id,
-                    Err(error) => {
-                        let _sent: Result<(), _> = reply.send(Err(HostErrorDto::new(
-                            "tauri_host.interaction",
-                            error.to_string(),
-                        )));
-                        continue;
-                    }
-                };
-                let request = HostMirAdvanceRequest {
-                    presented: previous,
-                    input: HostInput::activate(interaction_id.clone()),
-                    params: &params,
-                    identity: RuntimeExecutionIdentity::new(1, sequence),
-                    limits: limits(),
-                    language: runtime_language.as_ref(),
-                };
-                let result = if interactions.has(&interaction_id) {
-                    let mut next_interactions: MacroInteractions<'_, '_> = MacroInteractions::new();
-                    let result = HostApi::advance_macro_interaction_mir(
-                        &mut pending,
-                        &mut interactions,
-                        &mut state,
-                        &mut story,
-                        &bytecode,
-                        request,
-                        |body, state, requests, scopes| {
-                            let mut context = MacroLogicContext::new(state, requests, scopes);
-                            let control =
-                                execute_logic_body(body, &mut context).map_err(|error| {
-                                    Diagnostic::new(
-                                        "tauri_host.interaction_body",
-                                        DiagnosticSeverity::Error,
-                                        &format!("Interaction 正文执行失败：{error:?}"),
-                                    )
-                                })?;
-                            Ok(BodyExecution {
-                                control,
-                                output: SemanticOutput::default(),
-                            })
-                        },
-                        |phase, context, _state| emit_passage_event(&script, phase, context),
-                        |invocation, state, requests, scopes| {
-                            dispatch_macro(
-                                &script,
-                                &hir,
-                                &mut next_interactions,
-                                &mut scheduled,
-                                invocation,
-                                state,
-                                requests,
-                                scopes,
-                            )
-                        },
-                    );
-                    if result.is_ok() {
-                        interactions = next_interactions;
-                    }
-                    result
-                } else {
-                    HostApi::advance_mir(
-                        &mut pending,
-                        &mut state,
-                        &mut story,
-                        &bytecode,
-                        request,
-                        |phase, context, _state| emit_passage_event(&script, phase, context),
-                        |invocation, state, requests, scopes| {
-                            dispatch_macro(
-                                &script,
-                                &hir,
-                                &mut interactions,
-                                &mut scheduled,
-                                invocation,
-                                state,
-                                requests,
-                                scopes,
-                            )
-                        },
-                    )
-                }
-                .map_err(|error| HostErrorDto::diagnostic(error.diagnostic.clone()));
-                let mut result = finish_drive(
-                    result,
-                    &script,
-                    &mut scheduled,
-                    &mut pending,
-                    &hir,
-                    &mut interactions,
-                    &mut state,
-                    &mut story,
-                    &bytecode,
+                let result = execute_blocking(
+                    &mut runtime,
+                    Path::new(&game_path),
+                    RuntimeCommand::Activate { interaction },
                 );
-                sequence = sequence.saturating_add(1);
-                if let Ok(update) = &mut result
-                    && let Err(error) = append_sidebar_regions(
-                        update,
-                        &script,
-                        &hir,
-                        &mut interactions,
-                        &state,
-                        &story,
-                        &bytecode,
-                        runtime_language.as_ref(),
-                        &mut sequence,
-                    )
-                {
-                    result = Err(error);
-                }
-                if let Ok(update) = &result {
-                    presented = Some(update.clone());
-                }
-                // save 失败不撤销已渲染的 Surface：把错误记入日志，保持
-                // presented 与 WebView 一致，避免后续点击报 host.unknown_interaction。
-                if result.is_ok()
-                    && let Err(error) = process_save(
-                        Path::new(&game_path),
-                        &config,
-                        &script,
-                        &mut state,
-                        &mut story,
-                    )
-                {
-                    logs.push(HostLogDto {
-                        level: String::from("error"),
-                        message: format!("{}：{}", error.code, error.message),
-                    });
-                }
-                let _sent: Result<(), _> = reply.send(result.map(|update| convert(&update)));
+                append_runtime_notices(&mut runtime, &mut logs);
+                let _sent: Result<(), _> = reply.send(ready_update(result));
             }
             WorkerRequest::Input {
                 interaction,
                 value,
                 reply,
             } => {
-                let result: InputResult = (|| {
-                    let previous: &HostUpdate = presented.as_ref().ok_or_else(|| {
-                        HostErrorDto::new("tauri_host.not_started", "必须先调用 start_game")
-                    })?;
-                    let id: InteractionId = InteractionId::parse(interaction).map_err(|error| {
-                        HostErrorDto::new("tauri_host.input_interaction", error.to_string())
-                    })?;
-                    let binding = previous.surface().input_binding(&id).ok_or_else(|| {
-                        HostErrorDto::new(
-                            "tauri_host.unknown_input",
-                            "输入身份未出现在上一份 Surface 中",
-                        )
-                    })?;
-                    let semantic: SemanticValue = json_to_surface_value(&value)?;
-                    if !binding.accepts(&semantic) {
-                        return Err(HostErrorDto::new(
-                            "tauri_host.input_value",
-                            "输入值不属于当前控件允许的值集合",
-                        ));
-                    }
-                    let expression =
-                        parse_expression(binding.receiver.as_str()).map_err(|error| {
-                            HostErrorDto::new(
-                                "tauri_host.input_receiver",
-                                format!("输入 receiver 无效：{error:?}"),
-                            )
-                        })?;
-                    let value: Value =
-                        narrava_loom_script::json_to_value(&value).map_err(script_host_error)?;
-                    let checkpoint: StateCheckpoint = state.checkpoint();
-                    if let Err(error) = assign_value_with_mut(&expression, value, &mut state) {
-                        state.restore_checkpoint(checkpoint);
-                        return Err(HostErrorDto::new(
-                            "tauri_host.input_assignment",
-                            format!("输入值无法写回：{error:?}"),
-                        ));
-                    }
-                    if let Err(error) = process_save(
-                        Path::new(&game_path),
-                        &config,
-                        &script,
-                        &mut state,
-                        &mut story,
-                    ) {
-                        state.restore_checkpoint(checkpoint);
-                        return Err(error);
-                    }
-                    Ok(())
-                })();
+                let result: InputResult = execute_blocking(
+                    &mut runtime,
+                    Path::new(&game_path),
+                    RuntimeCommand::Input { interaction, value },
+                )
+                .map(|_| ());
+                append_runtime_notices(&mut runtime, &mut logs);
                 let _sent = reply.send(result);
             }
             WorkerRequest::Save {
@@ -499,21 +237,25 @@ pub(crate) fn run_worker(
                 target,
                 reply,
             } => {
-                let result = process_save_operation(
-                    Path::new(&game_path),
-                    &config,
-                    &mut state,
-                    &mut story,
-                    &operation,
-                    &target,
-                );
-                if result.is_ok()
-                    && operation == "import"
-                    && let Err(error) = script.sync_variables(&state)
-                {
-                    let _sent = reply.send(Err(script_host_error(error)));
-                    continue;
-                }
+                let operation_kind = match operation.as_str() {
+                    "export" => Ok(SaveOperation::Export),
+                    "import" => Ok(SaveOperation::Import),
+                    _ => Err(HostErrorDto::new(
+                        "tauri_host.save_operation",
+                        format!("未知 Save 操作：{operation}"),
+                    )),
+                };
+                let result = operation_kind.and_then(|operation| {
+                    execute_blocking(
+                        &mut runtime,
+                        Path::new(&game_path),
+                        RuntimeCommand::Save {
+                            operation,
+                            target: target.clone(),
+                        },
+                    )
+                    .map(|_| ())
+                });
                 let level = if result.is_ok() { "info" } else { "error" };
                 logs.push(HostLogDto {
                     level: String::from(level),
@@ -534,21 +276,14 @@ pub(crate) fn run_worker(
                 let _sent = reply.send(available_languages.clone());
             }
             WorkerRequest::SelectLanguage { locale, reply } => {
-                let selected: Result<Option<I18nRuntimeLanguage>, HostErrorDto> =
-                    I18nRuntimeLanguage::select(
-                        mir.i18n(),
-                        &config.game.default_locale,
-                        &locale,
-                        language_packages.clone(),
-                    )
-                    .map_err(|error| {
-                        HostErrorDto::new("tauri_host.language_select", error.to_string())
-                    });
-                let result: CommandResult = selected.and_then(|selected| {
-                    script.select_locale(&locale).map_err(script_host_error)?;
-                    runtime_language = selected;
-                    Ok(())
-                });
+                let result: CommandResult = execute_blocking(
+                    &mut runtime,
+                    Path::new(&game_path),
+                    RuntimeCommand::SelectLanguage {
+                        locale: locale.clone(),
+                    },
+                )
+                .map(|_| ());
                 if result.is_ok() {
                     logs.push(HostLogDto {
                         level: String::from("info"),
@@ -561,158 +296,75 @@ pub(crate) fn run_worker(
     }
 }
 
-/// 使用隔离的 State/Story 视图渲染作者侧栏，并追加到当前 Host 更新。
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_sidebar_regions<'hir, 'source>(
-    update: &mut HostUpdate,
-    script: &narrava_loom_script::EcmaBinding,
-    hir: &'hir HirStory<'source>,
-    interactions: &mut MacroInteractions<'hir, 'source>,
-    state: &State,
-    story: &Story<'hir, 'source>,
-    bytecode: &BytecodeProgram,
-    language: Option<&I18nRuntimeLanguage>,
-    sequence: &mut u64,
-) -> Result<(), HostErrorDto> {
-    for (name, region) in [
-        (BAR_PASSAGE, RegionId::bar()),
-        (BAR_STOWED_PASSAGE, RegionId::bar_stowed()),
-    ] {
-        if !story.has(name) {
-            continue;
-        }
-        let mut view_state: State = state.fork_view();
-        let mut view_story: Story<'hir, 'source> = story.fork_view();
-        let mut pending: HostPendingExecutions<
-            EngineMirContinuation<'hir, 'source, narrava_loom_script::ScriptPending>,
-        > = HostPendingExecutions::new();
-        let mut scheduled: Option<narrava_loom_script::ScriptPending> = None;
-        let params: Value = Value::Null;
-        let result = HostApi::render_special_mir(
-            &mut pending,
-            &mut view_state,
-            &mut view_story,
-            bytecode,
-            name,
-            HostMirRequest {
-                params: &params,
-                identity: RuntimeExecutionIdentity::new(2, *sequence),
-                limits: limits(),
-                language,
-            },
-            |_phase, _context, _state| Ok::<(), Diagnostic>(()),
-            |invocation, state, requests, scopes| {
-                dispatch_macro(
-                    script,
-                    hir,
-                    interactions,
-                    &mut scheduled,
-                    invocation,
-                    state,
-                    requests,
-                    scopes,
-                )
-            },
-        )
-        .map_err(|error| HostErrorDto::diagnostic(error.diagnostic.clone()));
-        let rendered: HostUpdate = finish_drive(
-            result,
-            script,
-            &mut scheduled,
-            &mut pending,
-            hir,
-            interactions,
-            &mut view_state,
-            &mut view_story,
-            bytecode,
-        )?;
-        update.append_region(region, rendered.surface().clone());
-        *sequence = sequence.saturating_add(1);
+fn append_runtime_notices(runtime: &mut RuntimeSessionDriver<'_>, logs: &mut Vec<HostLogDto>) {
+    logs.extend(runtime.take_notices().into_iter().map(|notice| HostLogDto {
+        level: String::from("error"),
+        message: format!("{}：{}", notice.code, notice.message),
+    }));
+    if logs.len() > 200 {
+        logs.drain(..logs.len() - 200);
     }
-    Ok(())
 }
 
-/// 驱动 Engine 直到产出 Ready 更新；遇到 Pending 时执行挂起的脚本操作
-/// （如 `Host.delay`）后再恢复，循环直到拿到可展示的更新。
-///
-/// 这些参数分别由 Engine、脚本 Worker 与当前事务持有；合并为长期上下文会扩大
-/// 可变借用范围，并让 start/activate 两条路径更难复用。
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn finish_drive<'hir, 'source>(
-    mut result: Result<HostDriveResult, HostErrorDto>,
-    script: &narrava_loom_script::EcmaBinding,
-    scheduled: &mut Option<narrava_loom_script::ScriptPending>,
-    pending: &mut HostPendingExecutions<
-        EngineMirContinuation<'hir, 'source, narrava_loom_script::ScriptPending>,
-    >,
-    hir: &'hir HirStory<'source>,
-    interactions: &mut MacroInteractions<'hir, 'source>,
-    state: &mut State,
-    story: &mut Story<'hir, 'source>,
-    bytecode: &BytecodeProgram,
-) -> Result<HostUpdate, HostErrorDto> {
+fn execute_blocking(
+    runtime: &mut RuntimeSessionDriver<'_>,
+    game_path: &Path,
+    mut command: RuntimeCommand,
+) -> Result<RuntimeUpdate, HostErrorDto> {
     loop {
-        let execution = match result? {
-            HostDriveResult::Ready(update) => return Ok(update),
-            HostDriveResult::Pending { execution } => execution,
-        };
-        let operation = scheduled.take().ok_or_else(|| {
-            HostErrorDto::new(
-                "tauri_host.pending_without_operation",
-                "Core 已暂停，但 Host 没有对应的异步操作",
-            )
-        })?;
-        thread::sleep(operation.delay());
-
-        let resumed = HostApi::resume_pending(
-            pending,
-            state,
-            story,
-            bytecode,
-            execution,
-            |handle, state, _requests, _scopes| match script.resume_macro(handle, state) {
-                Ok(narrava_loom_script::ScriptMacroOutcome::Complete(value)) => {
-                    macro_value_execution(&value)
-                        .map(MacroHandlerOutcome::Complete)
-                        .map_err(|error| error.to_string())
-                }
-                Ok(narrava_loom_script::ScriptMacroOutcome::Pending(next)) => {
-                    *scheduled = Some(next.clone());
-                    Ok(MacroHandlerOutcome::Pending(next))
-                }
-                Err(error) => Err(error.to_string()),
-            },
-        )
-        .map_err(HostErrorDto::diagnostic)?;
-
-        result = match resumed {
-            HostResumeOutcome::Pending { execution } => Ok(HostDriveResult::Pending { execution }),
-            HostResumeOutcome::Continue(resumed) => {
-                let stable = HostApi::continue_resumed(*resumed, state, story, bytecode)
-                    .map_err(HostErrorDto::diagnostic)?;
-                HostApi::drive_stable(
-                    stable,
-                    pending,
-                    state,
-                    story,
-                    bytecode,
-                    |phase, context, _state| emit_passage_event(script, phase, context),
-                    |invocation, state, requests, scopes| {
-                        dispatch_macro(
-                            script,
-                            hir,
-                            interactions,
-                            scheduled,
-                            invocation,
-                            state,
-                            requests,
-                            scopes,
-                        )
+        match runtime.execute(command)? {
+            RuntimeUpdate::Pending {
+                operation:
+                    PendingOperation::Delay {
+                        operation,
+                        milliseconds,
                     },
-                )
-                .map_err(|error| HostErrorDto::diagnostic(error.diagnostic.clone()))
+            } => {
+                thread::sleep(std::time::Duration::from_millis(milliseconds));
+                command = RuntimeCommand::Resume {
+                    operation,
+                    result: None,
+                };
             }
-        };
+            RuntimeUpdate::Pending {
+                operation:
+                    PendingOperation::Save {
+                        operation,
+                        direction,
+                        target,
+                        document,
+                    },
+            } => {
+                let result = match process_save_io(game_path, direction, &target, document) {
+                    Ok(document) => narrava_loom_protocol::PendingResult::Save { document },
+                    Err(error) => narrava_loom_protocol::PendingResult::Failed { error },
+                };
+                command = RuntimeCommand::Resume {
+                    operation,
+                    result: Some(result),
+                };
+            }
+            RuntimeUpdate::Pending {
+                operation: PendingOperation::SelectLanguage { operation, .. },
+            } => {
+                command = RuntimeCommand::Resume {
+                    operation,
+                    result: Some(narrava_loom_protocol::PendingResult::SelectLanguage),
+                };
+            }
+            update => return Ok(update),
+        }
+    }
+}
+
+fn ready_update(result: Result<RuntimeUpdate, HostErrorDto>) -> WorkerResult {
+    match result? {
+        RuntimeUpdate::Ready { update } => Ok(update),
+        RuntimeUpdate::Applied => Err(HostErrorDto::new(
+            "tauri_host.update_expected",
+            "Runtime 命令没有产生可展示更新",
+        )),
+        RuntimeUpdate::Pending { .. } => unreachable!("execute_blocking consumes pending updates"),
     }
 }
 
@@ -747,36 +399,4 @@ pub(crate) fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message
 /// 构造统一的“Worker 已停止”错误（channel 发送失败时使用）。
 pub(crate) fn worker_stopped() -> HostErrorDto {
     HostErrorDto::new("tauri_host.worker_stopped", "Narrava Runtime Worker 已停止")
-}
-
-pub(crate) fn json_to_surface_value(
-    value: &serde_json::Value,
-) -> Result<SemanticValue, HostErrorDto> {
-    match value {
-        serde_json::Value::Null => Ok(SemanticValue::Null),
-        serde_json::Value::Bool(value) => Ok(SemanticValue::Boolean(*value)),
-        serde_json::Value::Number(value) => value
-            .as_f64()
-            .filter(|value: &f64| value.is_finite())
-            .map(SemanticValue::Number)
-            .ok_or_else(|| HostErrorDto::new("tauri_host.input_value", "输入数值超出范围")),
-        serde_json::Value::String(value) => Ok(SemanticValue::Text(value.clone())),
-        serde_json::Value::Array(values) => values
-            .iter()
-            .map(json_to_surface_value)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SemanticValue::List),
-        serde_json::Value::Object(values) => values
-            .iter()
-            .map(|(name, value)| Ok((name.clone(), json_to_surface_value(value)?)))
-            .collect::<Result<std::collections::BTreeMap<_, _>, HostErrorDto>>()
-            .map(SemanticValue::Map),
-    }
-}
-
-fn limits() -> EngineExecutionLimits {
-    EngineExecutionLimits {
-        passages: 8,
-        includes: 32,
-    }
 }

@@ -1,7 +1,7 @@
 //! Narrava Core 执行的内部语义输出。
 //!
 //! 这些类型是 Core 执行（engine/runtime/macro）直接构造的输出本体，不依赖
-//! `narrava-loom-protocol`；Host 消费前由 Protocol 的 conversion 层转换为
+//! `narrava-loom-protocol`；Host 消费前由 Script Runtime 的 protocol adapter 转换为
 //! `Surface` 协议表示。共用语义原子（`TextStyle`/`TextColor`/身份）由两侧共享。
 
 use std::{collections::BTreeMap, error::Error, fmt};

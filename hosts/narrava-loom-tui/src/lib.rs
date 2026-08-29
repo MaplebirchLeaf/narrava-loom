@@ -11,7 +11,8 @@ use std::{
 };
 
 use narrava_loom_core::semantic::{HeadingLevel, NavigationRole, RegionId, TextColor, TextStyle};
-use narrava_loom_protocol::{
+use narrava_loom_protocol::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
+use narrava_loom_script::protocol_adapter::{
     Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
 };
 
@@ -400,6 +401,66 @@ pub struct TuiRenderer {
 }
 
 impl TuiRenderer {
+    /// 直接渲染 Runtime Protocol DTO；Native Host 不需要回借 Core `HostUpdate`。
+    pub fn render_update(&mut self, update: &HostUpdateDto) -> TuiFrame {
+        self.surfaces.clear();
+        self.interactions.clear();
+        self.delayed.clear();
+        self.render_dto_nodes("main", &update.nodes, 0);
+        self.frame(&update.current)
+    }
+
+    fn render_dto_nodes(&mut self, region: &str, nodes: &[HostNodeDto], elapsed_ms: u64) {
+        for node in nodes {
+            match node {
+                HostNodeDto::Region { region, nodes, .. } => {
+                    self.render_dto_nodes(region, nodes, elapsed_ms);
+                }
+                HostNodeDto::Replace { target, nodes, .. } => {
+                    let lines: Vec<String> = render_dto_content(nodes, &mut self.interactions);
+                    match target {
+                        HostReplaceTargetDto::Region(target) => {
+                            self.surfaces.entry(target.clone()).or_default().blocks =
+                                vec![TuiBlock { key: None, lines }];
+                        }
+                        HostReplaceTargetDto::Key(target) => {
+                            for surface in self.surfaces.values_mut() {
+                                if surface.replace_key(target, &lines) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                HostNodeDto::StyledText {
+                    delay: Some(delay), ..
+                } if *delay > elapsed_ms => {
+                    let lines: Vec<String> = render_dto_node(node, &mut self.interactions);
+                    if !lines.is_empty() {
+                        self.delayed.push(TuiDelayedText {
+                            region: region.to_owned(),
+                            lines,
+                            delay_ms: *delay,
+                        });
+                    }
+                }
+                _ => {
+                    let lines: Vec<String> = render_dto_node(node, &mut self.interactions);
+                    if !lines.is_empty() {
+                        self.surfaces
+                            .entry(region.to_owned())
+                            .or_default()
+                            .blocks
+                            .push(TuiBlock {
+                                key: Some(dto_key(node).to_owned()),
+                                lines,
+                            });
+                    }
+                }
+            }
+        }
+    }
+
     /// 渲染当前时刻（elapsed = 0）的帧；`delay > 0` 的文本停放在 `frame.delayed`。
     pub fn render(&mut self, current: &str, output: &Surface) -> TuiFrame {
         self.render_at(current, output, 0)
@@ -494,6 +555,185 @@ impl TuiRenderer {
             .get(region.as_str())
             .map_or_else(Vec::new, TuiSurface::lines)
     }
+}
+
+fn dto_key(node: &HostNodeDto) -> &str {
+    match node {
+        HostNodeDto::Text { key, .. }
+        | HostNodeDto::HardBreak { key }
+        | HostNodeDto::StyledText { key, .. }
+        | HostNodeDto::Image { key, .. }
+        | HostNodeDto::Region { key, .. }
+        | HostNodeDto::Container { key, .. }
+        | HostNodeDto::Component { key, .. }
+        | HostNodeDto::Replace { key, .. }
+        | HostNodeDto::Action { key, .. }
+        | HostNodeDto::Checkbox { key, .. }
+        | HostNodeDto::Radiobutton { key, .. }
+        | HostNodeDto::Textbox { key, .. }
+        | HostNodeDto::Navigation { key, .. }
+        | HostNodeDto::Button { key, .. }
+        | HostNodeDto::SafeReturn { key, .. } => key,
+    }
+}
+
+fn render_dto_content(
+    nodes: &[HostNodeDto],
+    interactions: &mut Vec<TuiInteraction>,
+) -> Vec<String> {
+    nodes
+        .iter()
+        .flat_map(|node| render_dto_node(node, interactions))
+        .collect()
+}
+
+fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
+    match node {
+        HostNodeDto::Text { text, .. } => visible_lines(text.clone()),
+        HostNodeDto::HardBreak { .. } => Vec::new(),
+        HostNodeDto::StyledText {
+            text,
+            styles,
+            color,
+            heading,
+            ..
+        } => visible_lines(styled_dto(text.clone(), styles, *color, *heading)),
+        HostNodeDto::Image {
+            resource,
+            alt,
+            caption,
+            ..
+        } => vec![format!(
+            "[图像: {alt} <{resource}>{}]",
+            caption
+                .as_ref()
+                .map(|value| format!(" — {value}"))
+                .unwrap_or_default()
+        )],
+        HostNodeDto::Component { fallback, .. }
+        | HostNodeDto::Container {
+            nodes: fallback, ..
+        }
+        | HostNodeDto::Region {
+            nodes: fallback, ..
+        }
+        | HostNodeDto::Replace {
+            nodes: fallback, ..
+        } => render_dto_content(fallback, interactions),
+        HostNodeDto::Action { label, action, .. } => {
+            interactions.push(TuiInteraction {
+                id: None,
+                label: label.clone(),
+                kind: match action.as_str() {
+                    "dismiss" => "dismiss",
+                    _ => "action",
+                },
+                input: None,
+            });
+            Vec::new()
+        }
+        HostNodeDto::Checkbox {
+            id,
+            unchecked,
+            checked,
+            selected,
+            ..
+        } => {
+            interactions.push(TuiInteraction {
+                id: Some(id.clone()),
+                label: if *selected { "[x]" } else { "[ ]" }.to_owned(),
+                kind: "checkbox",
+                input: Some(TuiInput::Checkbox {
+                    unchecked: dto_surface_value(unchecked),
+                    checked: dto_surface_value(checked),
+                    selected: *selected,
+                }),
+            });
+            Vec::new()
+        }
+        HostNodeDto::Radiobutton {
+            id,
+            value,
+            selected,
+            ..
+        } => {
+            interactions.push(TuiInteraction {
+                id: Some(id.clone()),
+                label: if *selected { "(o)" } else { "( )" }.to_owned(),
+                kind: "radiobutton",
+                input: Some(TuiInput::Radio {
+                    value: dto_surface_value(value),
+                    selected: *selected,
+                }),
+            });
+            Vec::new()
+        }
+        HostNodeDto::Textbox { id, value, .. } => {
+            interactions.push(TuiInteraction {
+                id: Some(id.clone()),
+                label: format!("[{value}]"),
+                kind: "textbox",
+                input: Some(TuiInput::Text {
+                    value: value.clone(),
+                }),
+            });
+            Vec::new()
+        }
+        HostNodeDto::Navigation { id, label, .. } => {
+            push_dto_action(interactions, id, label, "link")
+        }
+        HostNodeDto::Button { id, label, .. } => push_dto_action(interactions, id, label, "button"),
+        HostNodeDto::SafeReturn { id, target, .. } => {
+            push_dto_action(interactions, id, &format!("返回 {target}"), "safe-return")
+        }
+    }
+}
+
+fn push_dto_action(
+    interactions: &mut Vec<TuiInteraction>,
+    id: &str,
+    label: &str,
+    kind: &'static str,
+) -> Vec<String> {
+    interactions.push(TuiInteraction {
+        id: Some(id.to_owned()),
+        label: label.to_owned(),
+        kind,
+        input: None,
+    });
+    Vec::new()
+}
+
+fn dto_surface_value(value: &serde_json::Value) -> SurfaceValue {
+    match value {
+        serde_json::Value::Null => SurfaceValue::Null,
+        serde_json::Value::Bool(value) => SurfaceValue::Boolean(*value),
+        serde_json::Value::Number(value) => value
+            .as_f64()
+            .map(SurfaceValue::Number)
+            .unwrap_or(SurfaceValue::Null),
+        serde_json::Value::String(value) => SurfaceValue::Text(value.clone()),
+        _ => SurfaceValue::Null,
+    }
+}
+
+fn styled_dto(mut text: String, styles: &[String], color: u8, heading: Option<u8>) -> String {
+    for style in styles.iter().rev() {
+        text = match style.as_str() {
+            "strong" => format!("**{text}**"),
+            "emphasis" => format!("*{text}*"),
+            "code" => format!("`{text}`"),
+            "inserted" => format!("++{text}++"),
+            "deleted" => format!("~~{text}~~"),
+            _ => text,
+        };
+    }
+    if heading.is_some() {
+        text = format!("\x1b[1;4m{text}\x1b[0m");
+    }
+    palette_rgb(color)
+        .map(|(r, g, b)| format!("\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"))
+        .unwrap_or(text)
 }
 
 /// 渲染子输出并返回其全部行（顺带把可触发节点收集进 `interactions`）。

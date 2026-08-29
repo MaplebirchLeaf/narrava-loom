@@ -1,76 +1,103 @@
 //! `Save.export/import` 与发行目录 `save/` 的平台落盘边界。
 
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
+    path::Path,
+};
 
-use narrava_loom_core::{ProjectConfig, save::SaveDocument, state::State, story::Story};
+use narrava_loom_protocol::SaveOperation;
 
-use crate::{HostErrorDto, script_host_error};
-use narrava_loom_script::EcmaBinding;
+use crate::HostErrorDto;
 
-/// 取出脚本登记的 Save 请求并执行；import 成功后同步脚本变量，再回传完成钩子。
-pub(crate) fn process_save(
+const MAX_SAVE_BYTES: u64 = 16 << 20;
+
+/// Host 只执行文件 IO；存档捕获、验证与恢复均由 Runtime 完成。
+pub(crate) fn process_save_io(
     game_path: &Path,
-    config: &ProjectConfig,
-    script: &EcmaBinding,
-    state: &mut State,
-    story: &mut Story<'_, '_>,
-) -> Result<(), HostErrorDto> {
-    let Some((operation, target)) = script.take_save().map_err(script_host_error)? else {
-        return Ok(());
-    };
-    let outcome = process_save_operation(game_path, config, state, story, &operation, &target);
-    if outcome.is_ok() && operation == "import" {
-        script.sync_variables(state).map_err(script_host_error)?;
-    }
-    script
-        .complete_save(
-            &operation,
-            &target,
-            outcome
-                .as_ref()
-                .map(|_| ())
-                .map_err(|error| error.message.as_str()),
-        )
-        .map_err(script_host_error)?;
-    outcome
-}
-
-/// 执行同一存档边界：Host UI 命令与脚本请求共用此实现。
-pub(crate) fn process_save_operation(
-    game_path: &Path,
-    config: &ProjectConfig,
-    state: &mut State,
-    story: &mut Story<'_, '_>,
-    operation: &str,
+    operation: SaveOperation,
     target: &str,
-) -> Result<(), HostErrorDto> {
+    document: Option<String>,
+) -> Result<Option<String>, HostErrorDto> {
     let file_name = save_file_name(target)?;
     let save_directory = game_path.join("save");
     let path = save_directory.join(file_name);
-    let identity = config
-        .identity()
-        .map_err(|error| HostErrorDto::new("tauri_host.save_identity", error.to_string()))?;
     (|| -> Result<(), String> {
         match operation {
-            "export" => {
+            SaveOperation::Export => {
                 fs::create_dir_all(&save_directory).map_err(|error| error.to_string())?;
-                let document = SaveDocument::capture(&identity, state, story)
-                    .map_err(|error| error.to_string())?;
-                let json = document.to_json().map_err(|error| error.to_string())?;
-                fs::write(&path, json).map_err(|error| error.to_string())
+                let document = document
+                    .as_deref()
+                    .ok_or_else(|| String::from("Save export 缺少存档内容"))?;
+                write_atomically(&path, document.as_bytes()).map_err(|error| error.to_string())
             }
-            "import" => {
-                let json = fs::read_to_string(&path).map_err(|error| error.to_string())?;
-                let document = SaveDocument::from_json(&json).map_err(|error| error.to_string())?;
-                document
-                    .restore(&identity, state, story)
-                    .map_err(|error| error.to_string())?;
-                Ok(())
-            }
-            _ => Err(format!("未知 Save 操作：{operation}")),
+            SaveOperation::Import => Ok(()),
         }
     })()
-    .map_err(|message| HostErrorDto::new("tauri_host.save", message))
+    .map_err(|message| HostErrorDto::new("tauri_host.save", message))?;
+    match operation {
+        SaveOperation::Export => Ok(None),
+        SaveOperation::Import => read_limited(&path)
+            .map(Some)
+            .map_err(|error| HostErrorDto::new("tauri_host.save", error.to_string())),
+    }
+}
+
+fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let temporary = path.with_extension("nsave.tmp");
+    let mut file: File = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temporary)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    drop(file);
+    replace_file(&temporary, path)
+}
+
+#[cfg(not(windows))]
+fn replace_file(temporary: &Path, path: &Path) -> std::io::Result<()> {
+    fs::rename(temporary, path)
+}
+
+#[cfg(windows)]
+fn replace_file(temporary: &Path, path: &Path) -> std::io::Result<()> {
+    let backup = path.with_extension("nsave.bak");
+    if path.exists() {
+        fs::rename(path, &backup)?;
+    }
+    if let Err(error) = fs::rename(temporary, path) {
+        if backup.exists() {
+            let _restored: Result<(), _> = fs::rename(&backup, path);
+        }
+        return Err(error);
+    }
+    if backup.exists() {
+        fs::remove_file(backup)?;
+    }
+    Ok(())
+}
+
+fn read_limited(path: &Path) -> std::io::Result<String> {
+    let file: File = File::open(path)?;
+    let length: u64 = file.metadata()?.len();
+    if length > MAX_SAVE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "存档超过 16 MiB 上限",
+        ));
+    }
+    let mut bytes: Vec<u8> = Vec::with_capacity(usize::try_from(length).unwrap_or(0));
+    file.take(MAX_SAVE_BYTES + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_SAVE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "存档超过 16 MiB 上限",
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
 }
 
 /// 校验并规范化存档目标为 `<target>.nsave` 文件名（禁止路径逃逸）。

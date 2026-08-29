@@ -8,10 +8,9 @@ use narrava_loom_core::{
     semantic::{ActionRole, ComponentCapability, HeadingLevel, RegionId, TextColor, TextStyle},
 };
 
-use crate::{
-    HostErrorDto,
-    surface::{Surface, SurfaceAction, SurfaceKey, SurfaceNode, SurfaceValue},
-};
+use narrava_loom_protocol::HostErrorDto;
+
+use super::surface::{Surface, SurfaceAction, SurfaceKey, SurfaceNode, SurfaceValue};
 
 const MARKER: &str = "__narravaSurface";
 const MAX_DEPTH: usize = 32;
@@ -324,5 +323,5 @@ fn visible_text(text: String) -> Result<TextValue, HostErrorDto> {
 
 /// 统一 Surface 校验错误。
 fn invalid(message: impl Into<String>) -> HostErrorDto {
-    HostErrorDto::new("tauri_host.surface", message)
+    HostErrorDto::new("protocol.surface.invalid", message)
 }

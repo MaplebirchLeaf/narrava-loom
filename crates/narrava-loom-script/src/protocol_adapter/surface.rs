@@ -2,7 +2,7 @@
 //!
 //! Core 执行产生 `semantic::SemanticOutput`（内部语义），本模块定义 Host 消费的
 //! `Surface` 协议版本，并依赖 Core 的共用语义原子（`TextStyle`/`TextColor`/
-//! `InteractionId` 等）。转换见 [`convert`](crate::convert)。
+//! `InteractionId` 等）。转换见 [`convert`](super::convert)。
 
 use std::{collections::BTreeMap, error::Error, fmt};
 

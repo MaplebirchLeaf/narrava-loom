@@ -1,8 +1,8 @@
 //! Narrava Core 与 Tauri IPC 之间的最小 Host Binding。
 //!
 //! `TauriHost` 把 Core 的 Engine 事务（start/activate/input/save/语言/开发者能力）
-//! 投递给常驻 Runtime Worker 线程，并把语义 Surface 经 `narrava-loom-protocol`
-//! 的转换层输出为 WebView 的 JSON DTO；本 crate 同时依赖 Core 与传输协议。
+//! 投递给常驻 Runtime Worker 线程，并把 Runtime 返回的拥有型 Protocol DTO
+//! 输出为 WebView JSON；转换 Core Surface 不属于 Host。
 
 mod assets;
 mod config;
@@ -27,11 +27,6 @@ pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
 pub use narrava_loom_protocol::{HostErrorDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
 use package::{load_release_package, load_tauri_config};
-
-/// 在 Tauri IPC 边界把共享脚本错误编码为 Host DTO。
-pub(crate) fn script_host_error(error: narrava_loom_script::ScriptError) -> HostErrorDto {
-    HostErrorDto::new(&error.code, error.message)
-}
 
 /// Host 管理面板展示的一条有界日志（只含级别与可显示消息）。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

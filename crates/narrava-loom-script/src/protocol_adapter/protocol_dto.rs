@@ -8,131 +8,11 @@ use narrava_loom_core::{
     host::HostUpdate,
     semantic::{ActionRole, HeadingLevel, NavigationRole, TextStyle},
 };
-use serde::Serialize;
+pub use narrava_loom_protocol::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
-use crate::surface::{
+use super::surface::{
     Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
 };
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum HostNodeDto {
-    /// 纯文本。
-    Text { key: String, text: String },
-    /// 作者显式硬换行。
-    HardBreak { key: String },
-    /// 带语义样式与标准 color 的文本（`delay` 只规定到期前不可见，`heading` 为结构性标题级别）。
-    StyledText {
-        key: String,
-        text: String,
-        styles: Vec<&'static str>,
-        color: u8,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        delay: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        heading: Option<u8>,
-    },
-    /// 图像（仅逻辑路径与替代文本，字节走 Resource 协议）。
-    Image {
-        key: String,
-        resource: String,
-        alt: String,
-        caption: Option<String>,
-    },
-    /// 具名区域（header/main/footer/bar/bar-stowed/dialog）。
-    Region {
-        key: String,
-        region: String,
-        nodes: Vec<HostNodeDto>,
-    },
-    /// 按 key 可被 Replace 定位的容器。
-    Container {
-        key: String,
-        nodes: Vec<HostNodeDto>,
-    },
-    /// 由宿主能力渲染的组件（properties 为纯数据，fallback 供不支持时降级）。
-    Component {
-        key: String,
-        capability: String,
-        version: u16,
-        properties: serde_json::Value,
-        fallback: Vec<HostNodeDto>,
-    },
-    /// 用新内容替换既有容器/区域。
-    Replace {
-        key: String,
-        target: HostReplaceTargetDto,
-        nodes: Vec<HostNodeDto>,
-    },
-    /// 纯客户端动作（如 dismiss）。
-    Action {
-        key: String,
-        label: String,
-        action: &'static str,
-        role: &'static str,
-    },
-    /// 复选框输入控件。
-    Checkbox {
-        key: String,
-        id: String,
-        unchecked: serde_json::Value,
-        checked: serde_json::Value,
-        selected: bool,
-    },
-    /// 单选输入控件（同组互斥）。
-    Radiobutton {
-        key: String,
-        id: String,
-        group: String,
-        value: serde_json::Value,
-        selected: bool,
-    },
-    /// 文本框输入控件。
-    Textbox {
-        key: String,
-        id: String,
-        value: String,
-    },
-    /// 链接式导航（link 角色）。
-    Navigation {
-        key: String,
-        id: String,
-        label: String,
-        target: String,
-    },
-    /// 按钮式导航（button 角色）。
-    Button {
-        key: String,
-        id: String,
-        label: String,
-        target: String,
-    },
-    /// 安全返回上一语境。
-    SafeReturn {
-        key: String,
-        id: String,
-        target: String,
-    },
-}
-
-/// Replace 的目标：整个区域或具名容器 key。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-pub enum HostReplaceTargetDto {
-    /// 替换整个区域。
-    Region(String),
-    /// 替换指定 key 的容器。
-    Key(String),
-}
-
-/// 一次事务产生的语义更新：当前 Passage 与节点树。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct HostUpdateDto {
-    /// 当前 Passage 名。
-    pub current: String,
-    /// 语义节点列表（按渲染顺序）。
-    pub nodes: Vec<HostNodeDto>,
-}
 
 /// 把 Core 的 HostUpdate 转换为 IPC DTO。
 pub fn convert(update: &HostUpdate) -> HostUpdateDto {
@@ -170,7 +50,12 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                 } => HostNodeDto::StyledText {
                     key,
                     text: unicode(text),
-                    styles: styles.iter().copied().map(text_style).collect(),
+                    styles: styles
+                        .iter()
+                        .copied()
+                        .map(text_style)
+                        .map(str::to_owned)
+                        .collect(),
                     color: color.index(),
                     delay: *delay,
                     heading: heading.map(HeadingLevel::level),
@@ -230,8 +115,8 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                 } => HostNodeDto::Action {
                     key,
                     label: unicode(label),
-                    action: surface_action(*action),
-                    role: action_role(*role),
+                    action: surface_action(*action).to_owned(),
+                    role: action_role(*role).to_owned(),
                 },
                 SurfaceNode::Input { id, binding } => match &binding.kind {
                     SurfaceInputKind::Checkbox {

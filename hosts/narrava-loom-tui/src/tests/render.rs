@@ -4,7 +4,28 @@ use narrava_loom_core::{
     expression::value::TextValue,
     semantic::{RegionId, TextColor},
 };
-use narrava_loom_protocol::{Surface, SurfaceKey, SurfaceNode, SurfaceTarget};
+use narrava_loom_script::protocol_adapter::{Surface, SurfaceKey, SurfaceNode, SurfaceTarget};
+
+#[test]
+fn runtime_dto_renders_without_borrowing_core_host_update() {
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Start"),
+        nodes: vec![narrava_loom_protocol::HostNodeDto::Region {
+            key: String::from("bar"),
+            region: String::from("bar"),
+            nodes: vec![narrava_loom_protocol::HostNodeDto::Navigation {
+                key: String::from("next"),
+                id: String::from("nav:next"),
+                label: String::from("继续"),
+                target: String::from("Next"),
+            }],
+        }],
+    };
+    let frame = crate::TuiRenderer::default().render_update(&update);
+    assert_eq!(frame.current, "Start");
+    assert_eq!(frame.interactions[0].id.as_deref(), Some("nav:next"));
+    assert_eq!(frame.interactions[0].label, "继续");
+}
 
 use crate::{
     TuiCommand, TuiCommandError, TuiFrame, TuiInput, TuiInteraction, TuiOperation, TuiRenderer,
@@ -121,7 +142,9 @@ fn terminal_commands_resolve_against_current_frame() {
                 label: String::from("( )"),
                 kind: "radiobutton",
                 input: Some(TuiInput::Radio {
-                    value: narrava_loom_protocol::SurfaceValue::Text(String::from("quiet")),
+                    value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(String::from(
+                        "quiet",
+                    )),
                     selected: false,
                 }),
             },
@@ -141,7 +164,7 @@ fn terminal_commands_resolve_against_current_frame() {
         TuiCommand::parse("1").unwrap().resolve(&frame).unwrap(),
         TuiOperation::Input {
             id: String::from("route:quiet"),
-            value: narrava_loom_protocol::SurfaceValue::Text(String::from("quiet")),
+            value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(String::from("quiet")),
         }
     );
     assert_eq!(
@@ -151,7 +174,7 @@ fn terminal_commands_resolve_against_current_frame() {
             .unwrap(),
         TuiOperation::Input {
             id: String::from("name"),
-            value: narrava_loom_protocol::SurfaceValue::Text(String::from("游侠")),
+            value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(String::from("游侠")),
         }
     );
     assert_eq!(

@@ -273,12 +273,7 @@ declare global {
   /** Event.subscribe 返回的不透明句柄。 */
   type NarravaEventSubscription = number & { readonly __eventSubscription: unique symbol }
   /** Engine 保留的五个 Passage 生命周期事件名，脚本不可 emit。 */
-  type NarravaPassageEventName =
-    | "passage:init"
-    | "passage:start"
-    | "passage:render"
-    | "passage:display"
-    | "passage:end"
+  type NarravaPassageEventName = NarravaBuiltinEventName
   /** Passage 生命周期事件的载荷：当前 Passage 名与 Tag 列表。 */
   interface NarravaPassageEventPayload {
     readonly passage: string

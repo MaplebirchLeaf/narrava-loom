@@ -8,14 +8,54 @@ use narrava_loom_core::{
     state::State,
 };
 
-use super::{BOOTSTRAP, EcmaBinding, EcmaRuntime, ScriptMacroOutcome, state_bridge, transpile};
+use super::{
+    EcmaBinding, EcmaRuntime, ScriptMacroOutcome, bootstrap_source, state_bridge, transpile,
+};
+
+const SCRIPT_CONTRACT: &str = include_str!("../../../bindings/script-contract.json");
+const TYPESCRIPT_API: &str = include_str!("../../../bindings/typescript/narrava.d.ts");
+const GENERATED_TYPESCRIPT_API: &str =
+    include_str!("../../../bindings/typescript/narrava-contract.generated.d.ts");
+
+fn contract_names(field: &str) -> Vec<String> {
+    let contract: serde_json::Value = serde_json::from_str(SCRIPT_CONTRACT).unwrap();
+    contract[field]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn typescript_covers_the_canonical_script_contract() {
+    for name in contract_names("globals") {
+        assert!(
+            TYPESCRIPT_API.contains(&format!("const {name}:")),
+            "TypeScript: {name}"
+        );
+    }
+    for builder in contract_names("surfaceBuilders") {
+        assert!(
+            TYPESCRIPT_API.contains(&format!("{builder}(")),
+            "TypeScript Surface: {builder}"
+        );
+    }
+    for event in contract_names("builtinEvents") {
+        assert!(
+            GENERATED_TYPESCRIPT_API.contains(&event),
+            "generated TypeScript event: {event}"
+        );
+    }
+}
 
 /// 启动脚本只暴露扁平全局 API，且不存在 `window`/`narrava` 浏览器对象。
 #[test]
 fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
     let mut context = Context::default();
+    let bootstrap = bootstrap_source();
     context
-        .eval(Source::from_bytes(BOOTSTRAP))
+        .eval(Source::from_bytes(&bootstrap))
         .expect("绑定启动脚本应可执行");
     let result = context
         .eval(Source::from_bytes(
@@ -59,8 +99,9 @@ fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
 #[test]
 fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
     let mut context = Context::default();
+    let bootstrap = bootstrap_source();
     context
-        .eval(Source::from_bytes(BOOTSTRAP))
+        .eval(Source::from_bytes(&bootstrap))
         .expect("绑定启动脚本应可执行");
     let result = context
         .eval(Source::from_bytes(
@@ -99,8 +140,9 @@ fn bootstrap_save_hooks_preserve_order_rewrite_targets_and_wait_for_completion()
     state_bridge::install(&mut context).expect("State bridge 应可安装");
     let mut state = State::new();
     let result = state_bridge::with_state(&mut context, &mut state, |context| {
+            let bootstrap = bootstrap_source();
             context
-                .eval(Source::from_bytes(BOOTSTRAP))
+                .eval(Source::from_bytes(&bootstrap))
                 .expect("绑定启动脚本应可执行");
             context.eval(Source::from_bytes(
                 r#"
@@ -476,4 +518,641 @@ fn host_builtin_passage_event_reaches_a_script_subscription() {
         Some(Value::string("passage:init"))
     );
     std::fs::remove_dir_all(root).unwrap();
+}
+
+mod runtime_session_state_machine {
+    use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+
+    use narrava_loom_core::{
+        SourceList,
+        bytecode::BytecodeProgram,
+        expression::{
+            evaluator::ScriptCallError,
+            value::{ScriptCallable, Value},
+        },
+        hir::HirStory,
+        lir::LirProgram,
+        mir::MirStory,
+        script::ScriptCallDispatcher,
+        state::State,
+        story::Story,
+        twee,
+    };
+    use narrava_loom_protocol::{
+        HostErrorDto, HostNodeDto, RuntimeCommand, RuntimeRequest, RuntimeSessionId, RuntimeUpdate,
+        SaveOperation,
+    };
+
+    use crate::session::RuntimePlatform;
+    use crate::{
+        RuntimeSession, RuntimeSessionDriver, ScriptAdapter, ScriptError, ScriptMacroOutcome,
+        ScriptPending,
+    };
+
+    enum ResumeStep {
+        Pending(u64),
+        Complete,
+    }
+
+    struct FakeAdapter {
+        calls: RefCell<VecDeque<u64>>,
+        resumes: RefCell<VecDeque<ResumeStep>>,
+    }
+
+    #[derive(Clone, Default)]
+    struct PlatformCalls(Rc<RefCell<Vec<String>>>);
+
+    struct FakePlatform(PlatformCalls);
+
+    struct ImportPlatform {
+        observed: Rc<RefCell<Vec<Option<Value>>>>,
+    }
+
+    impl<'hir, 'source> RuntimePlatform<'hir, 'source> for ImportPlatform {
+        fn prepare_save(
+            &mut self,
+            operation: SaveOperation,
+            _target: &str,
+            state: &State,
+            _story: &Story<'hir, 'source>,
+        ) -> Result<Option<String>, HostErrorDto> {
+            if operation == SaveOperation::Export {
+                self.observed
+                    .borrow_mut()
+                    .push(state.variables_get("route").cloned());
+            }
+            Ok(None)
+        }
+
+        fn complete_save(
+            &mut self,
+            operation: SaveOperation,
+            _target: &str,
+            _document: Option<String>,
+            state: &mut State,
+            _story: &mut Story<'hir, 'source>,
+        ) -> Result<(), HostErrorDto> {
+            if operation == SaveOperation::Import {
+                state.variables_set("route", Value::String("imported".into()));
+            }
+            Ok(())
+        }
+
+        fn select_language(
+            &mut self,
+            _locale: &str,
+        ) -> Result<Option<narrava_loom_core::i18n::I18nRuntimeLanguage>, HostErrorDto> {
+            Ok(None)
+        }
+    }
+
+    struct FailingSyncAdapter {
+        remaining_failures: RefCell<usize>,
+    }
+
+    impl ScriptCallDispatcher for FailingSyncAdapter {
+        fn call(
+            &self,
+            _callable: &ScriptCallable,
+            _arguments: Vec<Value>,
+            _state: &mut State,
+        ) -> Result<Value, ScriptCallError> {
+            Err(ScriptCallError::Unavailable)
+        }
+    }
+
+    impl ScriptAdapter for FailingSyncAdapter {
+        fn has_macro(&self, _name: &str) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+        fn call_macro(
+            &self,
+            _name: &str,
+            _arguments: &str,
+            _state: &mut State,
+        ) -> Result<ScriptMacroOutcome, ScriptError> {
+            Err(ScriptError::new("test.macro", "unexpected"))
+        }
+        fn resume_macro(
+            &self,
+            _pending: ScriptPending,
+            _state: &mut State,
+        ) -> Result<ScriptMacroOutcome, ScriptError> {
+            Err(ScriptError::new("test.resume", "unexpected"))
+        }
+        fn emit_builtin_event(
+            &self,
+            _name: &str,
+            _payload: &serde_json::Value,
+        ) -> Result<u64, ScriptError> {
+            Ok(1)
+        }
+        fn take_save(&self) -> Result<Option<(String, String)>, ScriptError> {
+            Ok(None)
+        }
+        fn complete_save(
+            &self,
+            _operation: &str,
+            _target: &str,
+            _result: Result<(), &str>,
+        ) -> Result<(), ScriptError> {
+            Ok(())
+        }
+        fn sync_variables(&self, _state: &State) -> Result<(), ScriptError> {
+            let mut remaining = self.remaining_failures.borrow_mut();
+            if *remaining > 0 {
+                *remaining -= 1;
+                return Err(ScriptError::new("test.sync", "sync failed"));
+            }
+            Ok(())
+        }
+        fn select_locale(&self, _locale: &str) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl<'hir, 'source> RuntimePlatform<'hir, 'source> for FakePlatform {
+        fn prepare_save(
+            &mut self,
+            operation: SaveOperation,
+            target: &str,
+            _state: &State,
+            _story: &Story<'hir, 'source>,
+        ) -> Result<Option<String>, HostErrorDto> {
+            self.0
+                .0
+                .borrow_mut()
+                .push(format!("save:{}:{target}", operation.as_str()));
+            Ok(None)
+        }
+
+        fn complete_save(
+            &mut self,
+            _operation: SaveOperation,
+            _target: &str,
+            _document: Option<String>,
+            _state: &mut State,
+            _story: &mut Story<'hir, 'source>,
+        ) -> Result<(), HostErrorDto> {
+            Ok(())
+        }
+
+        fn select_language(
+            &mut self,
+            locale: &str,
+        ) -> Result<Option<narrava_loom_core::i18n::I18nRuntimeLanguage>, HostErrorDto> {
+            self.0.0.borrow_mut().push(format!("language:{locale}"));
+            Ok(None)
+        }
+    }
+
+    impl FakeAdapter {
+        fn new(calls: impl IntoIterator<Item = u64>, resumes: Vec<ResumeStep>) -> Rc<Self> {
+            Rc::new(Self {
+                calls: RefCell::new(calls.into_iter().collect()),
+                resumes: RefCell::new(resumes.into()),
+            })
+        }
+
+        fn pending(id: u64) -> ScriptMacroOutcome {
+            ScriptMacroOutcome::Pending(ScriptPending::delay_operation(id, 1))
+        }
+    }
+
+    impl ScriptCallDispatcher for FakeAdapter {
+        fn call(
+            &self,
+            _callable: &ScriptCallable,
+            _arguments: Vec<Value>,
+            _state: &mut State,
+        ) -> Result<Value, ScriptCallError> {
+            Err(ScriptCallError::Unavailable)
+        }
+    }
+
+    impl ScriptAdapter for FakeAdapter {
+        fn has_macro(&self, name: &str) -> Result<bool, ScriptError> {
+            Ok(name == "wait")
+        }
+
+        fn call_macro(
+            &self,
+            _name: &str,
+            _arguments: &str,
+            _state: &mut State,
+        ) -> Result<ScriptMacroOutcome, ScriptError> {
+            self.calls
+                .borrow_mut()
+                .pop_front()
+                .map(Self::pending)
+                .ok_or_else(|| ScriptError::new("test.calls", "unexpected macro call"))
+        }
+
+        fn resume_macro(
+            &self,
+            _pending: ScriptPending,
+            _state: &mut State,
+        ) -> Result<ScriptMacroOutcome, ScriptError> {
+            match self.resumes.borrow_mut().pop_front() {
+                Some(ResumeStep::Pending(id)) => Ok(Self::pending(id)),
+                Some(ResumeStep::Complete) => Ok(ScriptMacroOutcome::Complete(Value::Null)),
+                None => Err(ScriptError::new("test.resumes", "unexpected resume")),
+            }
+        }
+
+        fn emit_builtin_event(
+            &self,
+            _name: &str,
+            _payload: &serde_json::Value,
+        ) -> Result<u64, ScriptError> {
+            Ok(1)
+        }
+
+        fn take_save(&self) -> Result<Option<(String, String)>, ScriptError> {
+            Ok(None)
+        }
+
+        fn complete_save(
+            &self,
+            _operation: &str,
+            _target: &str,
+            _result: Result<(), &str>,
+        ) -> Result<(), ScriptError> {
+            Ok(())
+        }
+
+        fn sync_variables(&self, _state: &State) -> Result<(), ScriptError> {
+            Ok(())
+        }
+
+        fn select_locale(&self, _locale: &str) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    fn with_runtime(
+        adapter: Rc<FakeAdapter>,
+        test: impl for<'hir, 'source> FnOnce(&mut RuntimeSession<'hir, 'source, FakeAdapter>),
+    ) {
+        let sources =
+            SourceList::discover("test-project").expect("RuntimeSession fixture should load");
+        let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
+        let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
+        let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
+        let lir = LirProgram::lower(&mir).expect("fixture should lower to LIR");
+        let bytecode = BytecodeProgram::compile(&lir);
+        let mut runtime = RuntimeSession::new(&hir, &bytecode, adapter, State::new());
+        test(&mut runtime);
+    }
+
+    fn with_runtime_platform(
+        calls: PlatformCalls,
+        test: impl for<'hir, 'source> FnOnce(&mut RuntimeSession<'hir, 'source, FakeAdapter>),
+    ) {
+        let sources =
+            SourceList::discover("test-project").expect("RuntimeSession fixture should load");
+        let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
+        let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
+        let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
+        let lir = LirProgram::lower(&mir).expect("fixture should lower to LIR");
+        let bytecode = BytecodeProgram::compile(&lir);
+        let mut runtime = RuntimeSession::with_platform(
+            &hir,
+            &bytecode,
+            FakeAdapter::new([], Vec::new()),
+            State::new(),
+            Box::new(FakePlatform(calls)),
+        );
+        test(&mut runtime);
+    }
+
+    fn pending_id(update: RuntimeUpdate) -> u64 {
+        let RuntimeUpdate::Pending { operation } = update else {
+            panic!("expected pending update")
+        };
+        operation.id()
+    }
+
+    #[test]
+    fn opaque_session_handle_rejects_a_request_routed_to_another_session() {
+        let sources =
+            SourceList::discover("test-project").expect("RuntimeSession fixture should load");
+        let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
+        let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
+        let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
+        let lir = LirProgram::lower(&mir).expect("fixture should lower to LIR");
+        let bytecode = BytecodeProgram::compile(&lir);
+        let session = RuntimeSession::new(
+            &hir,
+            &bytecode,
+            FakeAdapter::new([], Vec::new()),
+            State::new(),
+        );
+        let mut handle =
+            RuntimeSessionDriver::new(RuntimeSessionId::new("first").unwrap(), session);
+
+        let error = handle
+            .dispatch(RuntimeRequest::new(
+                RuntimeSessionId::new("second").unwrap(),
+                RuntimeCommand::Start,
+            ))
+            .unwrap_err();
+        assert_eq!(error.code, "runtime_session.id_mismatch");
+    }
+
+    #[test]
+    fn native_driver_rejects_an_unknown_runtime_protocol_version() {
+        let sources = SourceList::discover("test-project").unwrap();
+        let ast = twee::Story::build(&sources.items).unwrap();
+        let hir = HirStory::lower(&ast).unwrap();
+        let mir = MirStory::lower(&hir).unwrap();
+        let lir = LirProgram::lower(&mir).unwrap();
+        let bytecode = BytecodeProgram::compile(&lir);
+        let session = RuntimeSession::new(
+            &hir,
+            &bytecode,
+            FakeAdapter::new([], Vec::new()),
+            State::new(),
+        );
+        let mut driver = RuntimeSessionDriver::new(RuntimeSessionId::new("main").unwrap(), session);
+        let mut request = RuntimeRequest::new(
+            RuntimeSessionId::new("main").unwrap(),
+            RuntimeCommand::Start,
+        );
+        request.protocol_version += 1;
+
+        let error = driver.dispatch(request).unwrap_err();
+        assert_eq!(error.code, "runtime_session.protocol_version");
+    }
+
+    #[test]
+    fn commands_requiring_a_presented_surface_reject_the_unstarted_state() {
+        with_runtime(FakeAdapter::new([], Vec::new()), |runtime| {
+            let activate = runtime
+                .execute(RuntimeCommand::Activate {
+                    interaction: String::from("navigation:missing"),
+                })
+                .unwrap_err();
+            assert_eq!(activate.code, "runtime_session.not_started");
+
+            let input = runtime
+                .execute(RuntimeCommand::Input {
+                    interaction: String::from("input:missing"),
+                    value: serde_json::Value::Null,
+                })
+                .unwrap_err();
+            assert_eq!(input.code, "runtime_session.not_started");
+        });
+    }
+
+    #[test]
+    fn save_and_language_commands_are_routed_through_the_runtime_platform() {
+        let calls = PlatformCalls::default();
+        with_runtime_platform(calls.clone(), |runtime| {
+            let pending = runtime
+                .execute(RuntimeCommand::Save {
+                    operation: SaveOperation::Export,
+                    target: String::from("quick"),
+                })
+                .unwrap();
+            let save_id = pending_id(pending);
+            assert_eq!(
+                runtime
+                    .execute(RuntimeCommand::Resume {
+                        operation: save_id,
+                        result: Some(narrava_loom_protocol::PendingResult::Save { document: None }),
+                    })
+                    .unwrap(),
+                RuntimeUpdate::Applied
+            );
+            let pending = runtime
+                .execute(RuntimeCommand::SelectLanguage {
+                    locale: String::from("en"),
+                })
+                .unwrap();
+            let language_id = pending_id(pending);
+            assert_eq!(
+                runtime
+                    .execute(RuntimeCommand::Resume {
+                        operation: language_id,
+                        result: Some(narrava_loom_protocol::PendingResult::SelectLanguage),
+                    })
+                    .unwrap(),
+                RuntimeUpdate::Applied
+            );
+        });
+        assert_eq!(
+            *calls.0.borrow(),
+            [
+                String::from("save:export:quick"),
+                String::from("language:en")
+            ]
+        );
+    }
+
+    #[test]
+    fn platform_resume_rejects_a_result_for_another_operation_kind() {
+        let calls = PlatformCalls::default();
+        with_runtime_platform(calls, |runtime| {
+            let pending = runtime
+                .execute(RuntimeCommand::SelectLanguage {
+                    locale: String::from("en"),
+                })
+                .unwrap();
+            let error = runtime
+                .execute(RuntimeCommand::Resume {
+                    operation: pending_id(pending),
+                    result: Some(narrava_loom_protocol::PendingResult::Save { document: None }),
+                })
+                .unwrap_err();
+            assert_eq!(error.code, "runtime_session.platform_result_mismatch");
+        });
+    }
+
+    #[test]
+    fn failed_script_sync_rolls_back_an_import_before_the_next_command() {
+        let sources = SourceList::discover("test-project").unwrap();
+        let ast = twee::Story::build(&sources.items).unwrap();
+        let hir = HirStory::lower(&ast).unwrap();
+        let mir = MirStory::lower(&hir).unwrap();
+        let lir = LirProgram::lower(&mir).unwrap();
+        let bytecode = BytecodeProgram::compile(&lir);
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let adapter = Rc::new(FailingSyncAdapter {
+            remaining_failures: RefCell::new(1),
+        });
+        let mut state = State::new();
+        state.variables_set("route", Value::String("original".into()));
+        let mut runtime = RuntimeSession::with_platform(
+            &hir,
+            &bytecode,
+            adapter,
+            state,
+            Box::new(ImportPlatform {
+                observed: observed.clone(),
+            }),
+        );
+
+        let pending = runtime
+            .execute(RuntimeCommand::Save {
+                operation: SaveOperation::Import,
+                target: String::from("quick"),
+            })
+            .unwrap();
+        let error = runtime
+            .execute(RuntimeCommand::Resume {
+                operation: pending_id(pending),
+                result: Some(narrava_loom_protocol::PendingResult::Save {
+                    document: Some(String::from("{}")),
+                }),
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "test.sync");
+        let pending = runtime
+            .execute(RuntimeCommand::Save {
+                operation: SaveOperation::Export,
+                target: String::from("inspect"),
+            })
+            .unwrap();
+        runtime
+            .execute(RuntimeCommand::Resume {
+                operation: pending_id(pending),
+                result: Some(narrava_loom_protocol::PendingResult::Save { document: None }),
+            })
+            .unwrap();
+        assert_eq!(
+            observed.borrow().as_slice(),
+            [Some(Value::String("original".into()))]
+        );
+    }
+
+    #[test]
+    fn a_session_cannot_start_again_after_presenting_its_first_frame() {
+        with_runtime(
+            FakeAdapter::new([11, 22], vec![ResumeStep::Complete, ResumeStep::Complete]),
+            |runtime| {
+                assert_eq!(
+                    pending_id(runtime.execute(RuntimeCommand::Start).unwrap()),
+                    11
+                );
+                assert_eq!(
+                    pending_id(
+                        runtime
+                            .execute(RuntimeCommand::Resume {
+                                operation: 11,
+                                result: None
+                            })
+                            .unwrap()
+                    ),
+                    22
+                );
+                let RuntimeUpdate::Ready { .. } = runtime
+                    .execute(RuntimeCommand::Resume {
+                        operation: 22,
+                        result: None,
+                    })
+                    .unwrap()
+                else {
+                    panic!("the fixture should present its first frame")
+                };
+
+                let error = runtime.execute(RuntimeCommand::Start).unwrap_err();
+                assert_eq!(error.code, "runtime_session.already_started");
+            },
+        );
+    }
+
+    #[test]
+    fn pending_rejects_other_commands_preserves_mismatch_and_can_be_cancelled() {
+        with_runtime(
+            FakeAdapter::new([11], vec![ResumeStep::Complete]),
+            |runtime| {
+                assert_eq!(
+                    pending_id(runtime.execute(RuntimeCommand::Start).unwrap()),
+                    11
+                );
+
+                let busy = runtime.execute(RuntimeCommand::Start).unwrap_err();
+                assert_eq!(busy.code, "runtime_session.pending");
+
+                let mismatch = runtime
+                    .execute(RuntimeCommand::Resume {
+                        operation: 99,
+                        result: None,
+                    })
+                    .unwrap_err();
+                assert_eq!(mismatch.code, "runtime_session.operation_mismatch");
+
+                assert_eq!(
+                    runtime
+                        .execute(RuntimeCommand::Cancel { operation: 11 })
+                        .unwrap(),
+                    RuntimeUpdate::Applied
+                );
+                let gone = runtime
+                    .execute(RuntimeCommand::Resume {
+                        operation: 11,
+                        result: None,
+                    })
+                    .unwrap_err();
+                assert_eq!(gone.code, "runtime_session.unknown_operation");
+            },
+        );
+    }
+
+    #[test]
+    fn resume_can_pending_again_then_continue_through_a_special_region() {
+        with_runtime(
+            FakeAdapter::new(
+                [11, 33],
+                vec![
+                    ResumeStep::Pending(22),
+                    ResumeStep::Complete,
+                    ResumeStep::Complete,
+                ],
+            ),
+            |runtime| {
+                assert_eq!(
+                    pending_id(runtime.execute(RuntimeCommand::Start).unwrap()),
+                    11
+                );
+                assert_eq!(
+                    pending_id(
+                        runtime
+                            .execute(RuntimeCommand::Resume {
+                                operation: 11,
+                                result: None
+                            })
+                            .unwrap(),
+                    ),
+                    22
+                );
+                assert_eq!(
+                    pending_id(
+                        runtime
+                            .execute(RuntimeCommand::Resume {
+                                operation: 22,
+                                result: None
+                            })
+                            .unwrap(),
+                    ),
+                    33
+                );
+
+                let RuntimeUpdate::Ready { update } = runtime
+                    .execute(RuntimeCommand::Resume {
+                        operation: 33,
+                        result: None,
+                    })
+                    .unwrap()
+                else {
+                    panic!("special region should finish with a ready update")
+                };
+                assert_eq!(update.current, "Start");
+                assert!(update.nodes.iter().any(|node| {
+                    matches!(node, HostNodeDto::Region { region, .. } if region == "bar")
+                }));
+            },
+        );
+    }
 }

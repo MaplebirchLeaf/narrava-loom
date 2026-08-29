@@ -6,5 +6,9 @@
     "strict": true,
     "target": "ES2022"
   },
-  "files": ["narrava.d.ts", "../../examples/contents/scripts/main.ts"]
+  "files": [
+    "narrava-contract.generated.d.ts",
+    "narrava.d.ts",
+    "../../examples/contents/scripts/main.ts"
+  ]
 }

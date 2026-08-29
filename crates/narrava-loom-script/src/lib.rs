@@ -27,9 +27,17 @@ use oxc::{
     transformer::{TransformOptions, Transformer, TypeScriptOptions},
 };
 
+mod adapter;
 pub mod dispatch;
+pub mod protocol_adapter;
 mod resource_bridge;
+mod session;
+mod session_handle;
 mod state_bridge;
+
+pub use adapter::ScriptAdapter;
+pub use session::{RuntimeServices, RuntimeSession};
+pub use session_handle::{RuntimeSessionDriver, RuntimeSessionHandle};
 
 /// ECMAScript 装载、桥接或执行失败。
 ///
@@ -74,12 +82,14 @@ impl From<narrava_loom_protocol::HostErrorDto> for ScriptError {
 /// I18n/Surface 全局 API，并把跨语言数据经 `__narrava*` 桥接函数交还给 Rust。
 const BOOTSTRAP: &str = r#"
 (() => {
+  const contract = globalThis.__narravaContract;
+  delete globalThis.__narravaContract;
   const functions = new Map();
   let nextFunction = 1;
   const events = [];
   const eventSubscriptions = new Map();
   let nextEventSequence = 1;
-  const builtinEvents = new Set(["passage:init", "passage:start", "passage:render", "passage:display", "passage:end"]);
+  const builtinEvents = new Set(contract.builtinEvents);
   const logs = [];
   const macros = new Map();
   const subscriptions = new Map();
@@ -305,8 +315,20 @@ const BOOTSTRAP: &str = r#"
     },
     call(id, arguments_) { return functions.get(id)(...arguments_) },
   };
+  for (const name of contract.globals) {
+    if (globalThis[name] === undefined) throw new Error(`Script Contract 缺少全局：${name}`);
+  }
+  for (const name of contract.surfaceBuilders) {
+    if (typeof globalThis.Surface[name] !== "function") throw new Error(`Script Contract 缺少 Surface builder：${name}`);
+  }
 })();
 "#;
+
+const SCRIPT_CONTRACT_JSON: &str = include_str!("../../../bindings/script-contract.json");
+
+fn bootstrap_source() -> String {
+    format!("globalThis.__narravaContract = {SCRIPT_CONTRACT_JSON};\n{BOOTSTRAP}")
+}
 
 /// 持有 Boa 引擎上下文的脚本运行时（一次启动一个）。
 pub struct EcmaRuntime {
@@ -326,9 +348,27 @@ pub struct ScriptPending {
 }
 
 impl ScriptPending {
+    /// 建立一个 delay 挂起凭据。Adapter 选择 ID，Runtime 只将其视为不透明值。
+    pub fn delay_operation(id: u64, milliseconds: u64) -> Self {
+        Self {
+            id,
+            delay: Duration::from_millis(milliseconds),
+        }
+    }
+
+    /// Runtime 用来映射 resume/cancel 命令的不透明操作身份。
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
     /// 需等待的时长。
     pub fn delay(&self) -> Duration {
         self.delay
+    }
+
+    /// Protocol 使用整数毫秒传输等待时长，避免泄漏 Rust `Duration`。
+    pub fn milliseconds(&self) -> u64 {
+        u64::try_from(self.delay.as_millis()).unwrap_or(u64::MAX)
     }
 }
 
@@ -550,8 +590,9 @@ impl EcmaRuntime {
             .map(|module| transpile(module.path(), module.source()))
             .collect::<Result<Vec<_>, _>>()?;
         state_bridge::with_state(&mut context, state, |context| {
+            let bootstrap: String = bootstrap_source();
             context
-                .eval(Source::from_bytes(BOOTSTRAP))
+                .eval(Source::from_bytes(&bootstrap))
                 .map_err(|error| script_error("script.bootstrap", error))?;
             context
                 .eval(Source::from_bytes(configure.as_bytes()))

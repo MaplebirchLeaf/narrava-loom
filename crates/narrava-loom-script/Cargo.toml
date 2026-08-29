@@ -6,7 +6,7 @@ description = "Host-neutral ECMAScript script runtime for Narrava games (Boa eng
 
 [dependencies]
 narrava-loom-core = { path = "../.." }         # 语义与 State/Resource 边界
-narrava-loom-protocol = { path = "../narrava-loom-protocol" } # Surface builder 的协议值与受验证转换
+narrava-loom-protocol = { path = "../narrava-loom-protocol" } # RuntimeCommand/Update 与 Host DTO 纯数据契约
 boa_engine = "0.21.1"
 boa_gc = "0.21.1"
 oxc = { version = "0.137.0", features = ["transformer", "codegen", "semantic"] }
