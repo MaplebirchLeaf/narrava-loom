@@ -5,6 +5,11 @@
 关键字、Macro 结构和诊断只依据 Narrava Core 当前已实现契约；TextMate scope 使用通用命名，
 以适配常见 VS Code 主题。
 
+Expression 原生函数和方法支持悬停查看签名与用途。按住 `Ctrl`
+并左键单击（macOS 为 `Cmd+单击`）会跳到扩展随附的
+[`narrava-expression.d.ts`](references/narrava-expression.d.ts) 精确声明。该 DTS 只描述
+Twee Expression，不会把这些名称伪装成 JavaScript 全局 API。
+
 高亮范围包括金色 Passage 名、独立颜色的 Passage tag、HTML 标签与属性、内置及自定义 Macro、
 闭合 Macro、`$`/`_`/`@`/`setup` 变量链、Expression 内置函数、字符串、数字、
 运算符、反引号字符串及 `${...}`、`<<link [[label|target]]>>...<</link>>` 链接和 HTML entity。

@@ -24,6 +24,7 @@ pub(super) fn call_native_function(
             evaluate_object_assign(&arguments, argument_nodes, call_span, session)
         }
         NativeFunction::ObjectHasOwn => evaluate_object_has_own(&arguments, argument_nodes),
+        NativeFunction::Clone => Ok(arguments[0].detached_clone()),
         NativeFunction::Either | NativeFunction::Random => {
             evaluate_random_function(function, arguments, call_span, session)
         }
@@ -164,6 +165,7 @@ fn evaluate_conversion_function(
         NativeFunction::Abs
         | NativeFunction::Ceil
         | NativeFunction::Clamp
+        | NativeFunction::Clone
         | NativeFunction::Defined
         | NativeFunction::Empty
         | NativeFunction::Either
@@ -201,6 +203,7 @@ fn evaluate_numeric_function(
         | NativeFunction::Entries
         | NativeFunction::Keys
         | NativeFunction::Clamp
+        | NativeFunction::Clone
         | NativeFunction::Max
         | NativeFunction::Min
         | NativeFunction::Number
@@ -255,6 +258,7 @@ fn evaluate_range_numeric_function(
         NativeFunction::Abs
         | NativeFunction::Boolean
         | NativeFunction::Ceil
+        | NativeFunction::Clone
         | NativeFunction::Defined
         | NativeFunction::Empty
         | NativeFunction::Either
@@ -356,6 +360,7 @@ fn evaluate_collection_function(
         | NativeFunction::Boolean
         | NativeFunction::Ceil
         | NativeFunction::Clamp
+        | NativeFunction::Clone
         | NativeFunction::Defined
         | NativeFunction::Empty
         | NativeFunction::Either

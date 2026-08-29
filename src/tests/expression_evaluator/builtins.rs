@@ -1,6 +1,47 @@
 use super::*;
 
 #[test]
+fn clone_deep_copies_value_graph_without_sharing_array_or_object_identity() {
+    let nested = Value::array(vec![Value::Number(1.0)]);
+    let source = Value::object(vec![(String::from("nested"), nested.clone())]);
+    let context = SingleGlobalContext {
+        name: String::from("source"),
+        value: source.clone(),
+    };
+    let expression = parse("clone(source)").expect("clone 应成功解析");
+    let cloned = evaluate_with(&expression, &context).expect("clone 应深拷贝值图");
+    let identity = parse("clone(source) !== source && clone(source).nested !== source.nested")
+        .expect("引用身份检查应成功解析");
+
+    assert_eq!(
+        evaluate_with(&identity, &context).expect("应可比较 clone 引用身份"),
+        Value::Boolean(true)
+    );
+    let Value::Object(cloned_object) = cloned else {
+        panic!("clone 应保留 Object 类型")
+    };
+    let Value::Array(cloned_nested) = cloned_object.snapshot()[0].1.clone() else {
+        panic!("clone 应保留嵌套 Array")
+    };
+    cloned_nested.with_mut(|values| values.push(Value::Number(2.0)));
+    let Value::Array(original_nested) = nested else {
+        unreachable!("fixture 必须是 Array")
+    };
+    assert_eq!(original_nested.snapshot(), vec![Value::Number(1.0)]);
+}
+
+#[test]
+fn clone_accepts_exactly_one_argument() {
+    for source in ["clone()", "clone(1, 2)"] {
+        let expression = parse(source).expect("clone 参数数量应成功解析");
+        assert_eq!(
+            evaluate(&expression).expect_err("clone 必须只接收一个参数"),
+            EvalError::InvalidArgumentCount(expression.span)
+        );
+    }
+}
+
+#[test]
 fn evaluates_defined_builtin_function() {
     let cases: [(&str, bool); 6] = [
         ("defined(undefined)", false),

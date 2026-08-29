@@ -248,6 +248,7 @@ pub(super) enum NativeFunction {
     Boolean,
     Ceil,
     Clamp,
+    Clone,
     Defined,
     Empty,
     Entries,
@@ -278,6 +279,7 @@ impl NativeFunction {
             Self::Abs
             | Self::Boolean
             | Self::Ceil
+            | Self::Clone
             | Self::Defined
             | Self::Empty
             | Self::Entries

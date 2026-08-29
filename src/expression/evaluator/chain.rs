@@ -16,6 +16,7 @@ pub(crate) fn native_function(name: &str) -> Option<NativeFunction> {
         "boolean" => NativeFunction::Boolean,
         "ceil" => NativeFunction::Ceil,
         "clamp" => NativeFunction::Clamp,
+        "clone" => NativeFunction::Clone,
         "defined" => NativeFunction::Defined,
         "empty" => NativeFunction::Empty,
         "entries" => NativeFunction::Entries,

@@ -13,6 +13,9 @@ const language = JSON.parse(await readFile(new URL("language-configuration.json"
 const reference = await readFile(new URL("docs/reference/api-and-syntax.md", repository), "utf8")
 const hooks = await readFile(new URL("src/macro_runtime/hooks.rs", repository), "utf8")
 const evaluator = await readFile(new URL("src/expression/evaluator/chain.rs", repository), "utf8")
+const expressionDts = await readFile(new URL("references/narrava-expression.d.ts", root), "utf8")
+const providers = await readFile(new URL("src/providers.js", root), "utf8")
+const extension = await readFile(new URL("extension.js", root), "utf8")
 const gallery = await readFile(new URL("examples/contents/story/main.twee", repository), "utf8")
 const sharedWidgets = await readFile(
   new URL("examples/contents/story/widgets.twee", repository),
@@ -49,6 +52,7 @@ function scopesFor(line, text) {
 assert.equal(manifest.engines.vscode.startsWith("^"), true)
 assert.equal(manifest.main, "./extension.js")
 assert.equal(manifest.version, "0.3.5")
+assert.ok(manifest.files.includes("references/**"))
 assert.deepEqual(manifest.contributes.languages[0].extensions, [".twee"])
 assert.equal(manifest.contributes.grammars[0].scopeName, "source.narrava-twee")
 assert.equal(grammar.scopeName, "source.narrava-twee")
@@ -191,6 +195,14 @@ assert.equal(scopeFor(template, "$hero"), "variable.language.narrava-twee")
 assert.equal(scopeFor(template, "profile"), "variable.other.property.narrava-twee")
 assert.equal(scopeFor(template, "name"), "variable.other.property.narrava-twee")
 assert.equal(
+  scopeFor("<<print random()>>", "random"),
+  "support.function.builtin.expression.narrava-twee",
+)
+assert.equal(
+  scopeFor("<<run $items.splice(0, 1)>>", "splice"),
+  "support.function.builtin.expression.narrava-twee",
+)
+assert.equal(
   grammar.repository.link.captures["1"].name,
   "punctuation.definition.link.outer.narrava-twee",
 )
@@ -235,5 +247,13 @@ for (const name of new Set([...macroNames, ...functionNames])) {
   assert.ok(reference.includes(`\`${name}`), `quick reference should list ${name}`)
   assert.ok(serialized.includes(name), `grammar should highlight ${name}`)
 }
+for (const name of functionNames) {
+  assert.match(expressionDts, new RegExp(`\\b${name}(?:<[^>]+>)?\\(`))
+}
+
+assert.match(expressionDts, /\bclone<[^>]+>\(/)
+assert.ok(providers.includes("resolveExpressionApis"))
+assert.ok(providers.includes("narrava-expression.d.ts"))
+assert.ok(extension.includes("registerHoverProvider"))
 
 console.log("Narrava Twee VS Code extension manifest and grammar verified")

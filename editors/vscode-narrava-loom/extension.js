@@ -8,6 +8,7 @@ const { MacroWorkspace } = require("./src/workspace")
 const {
   completionProvider,
   definitionProvider,
+  hoverProvider,
   legend,
   semanticProvider,
 } = require("./src/providers")
@@ -30,6 +31,7 @@ async function activate(context) {
       legend,
     ),
     vscode.languages.registerDefinitionProvider(selector, definitionProvider(workspace)),
+    vscode.languages.registerHoverProvider(selector, hoverProvider()),
     vscode.languages.registerCompletionItemProvider(selector, completionProvider(workspace), "<"),
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (/\.(?:twee|ts|js)$/.test(event.document.uri.path)) scheduleRefresh()

@@ -78,6 +78,7 @@
         { "include": "#number" },
         { "include": "#variable" },
         { "include": "#native-function" },
+        { "include": "#native-method" },
         { "include": "#function-call" },
         { "include": "#native-namespace" },
         { "include": "#constant" },
@@ -89,7 +90,11 @@
       ]
     },
     "native-function": {
-      "match": "\\b(abs|boolean|ceil|clamp|defined|either|empty|entries|floor|keys|max|min|number|random|round|string|values)\\b(?=\\s*\\()",
+      "match": "\\b(abs|boolean|ceil|clamp|clone|defined|either|empty|entries|floor|keys|max|min|number|random|round|string|values)\\b(?=\\s*\\()",
+      "name": "support.function.builtin.expression.narrava-twee"
+    },
+    "native-method": {
+      "match": "(?<=\\.)(at|concat|endsWith|includes|indexOf|join|pop|push|shift|slice|splice|split|startsWith|toLowerCase|toUpperCase|trim|unshift)(?=\\s*\\()",
       "name": "support.function.builtin.expression.narrava-twee"
     },
     "function-call": {

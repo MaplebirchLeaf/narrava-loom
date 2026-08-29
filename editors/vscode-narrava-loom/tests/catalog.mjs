@@ -13,6 +13,7 @@ const {
   scanScriptFunctions,
   scanTwee,
 } = require("../src/catalog")
+const { EXPRESSION_APIS, expressionApi } = require("../src/expression-api")
 
 const first = scanTwee(`
 /% <<widget "ignored">> <<ignored>> %/
@@ -62,6 +63,12 @@ assert.deepEqual(
   ["scriptedGreeting", "Object.assign"],
 )
 assert.equal(expressionCalls.functionCalls[0].length, "scriptedGreeting".length)
+assert.ok(EXPRESSION_APIS.length > 30)
+assert.equal(expressionApi("random").signature, "random(): number")
+assert.equal(expressionApi("Object.assign").kind, "namespace")
+assert.equal(expressionApi("array.splice").kind, "array")
+assert.equal(expressionApi("string.startsWith").kind, "string")
+assert.equal(expressionApi("clone").signature, "clone<T>(value: T): T")
 
 const known = knownNames([...first.definitions, ...scripts])
 for (const name of ["if", "link", "widget", "crossFileCard", "scriptCard", "updatedCard"]) {

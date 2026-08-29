@@ -68,6 +68,7 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `boolean(value)` | 1 | 转换为布尔值 |
 | `ceil(value)` | 1 | 向上取整 |
 | `clamp(value, min, max)` | 3 | 限制数值范围 |
+| `clone(value)` | 1 | 深拷贝值图，断开原 Array/Object 引用并保留拷贝内部共享和循环 |
 | `defined(value)` | 1 | 是否不是 `undefined` |
 | `empty(value)` | 1 | 字符串、Array 或 Object 是否为空 |
 | `entries(value)` | 1 | Array/Object 的键值对 |
