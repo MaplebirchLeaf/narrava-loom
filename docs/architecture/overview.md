@@ -1,8 +1,8 @@
 # Narrava 第三版架构纲要
 
-> 状态：基础结构实现中
+> 状态：基础 Runtime 已闭合，公开边界收敛中
 >
-> 更新日期：2026-08-22
+> 更新日期：2026-08-29
 
 ## 1. 项目定位
 
@@ -33,7 +33,7 @@ Narrava 是一个以 Rust 为核心、可嵌入不同宿主环境的叙事内容
 3. 发布包保留可重建的基础输入，模组变化后从基础内容重新生成有效构建。
 4. 内嵌模组顺序来自 `config.toml`；玩家模组默认禁用，并由游戏内界面管理。
 5. 已完成最小可运行闭环；当前收束可嵌入基础游戏 Runtime 与 Host 边界。
-6. 本体、I18n 与 Script Bundle 位于 `narrava-loom-core` crate；Surface 协议语义与跨 Host 传输层位于 `narrava-loom-protocol` crate（依赖 Core）；ECMAScript 游戏脚本执行与宏分发位于 `narrava-loom-script` crate（依赖 Core 与 Protocol），Host 同时消费三者。ModLoader 是只依赖 Core 的独立项目。所有依赖保持单向，Core 不反向依赖上层 crate。
+6. 本体、I18n 与 Script Bundle 位于 `narrava-loom-core`；零 Core 依赖的拥有型消息位于 `narrava-loom-protocol`；ECMAScript 执行、RuntimeSession 与 Core/Surface 适配位于 `narrava-loom-script`。ModLoader 是只依赖 Core 的独立项目。
 
 具体目录、依赖方向与产物归属见[仓库布局与文件归属](../development/repository-layout.md)。
 
@@ -91,7 +91,7 @@ NarravaProject/
 [game]
 id = "example.forest"
 name = "Forest"
-version = "0.3.1"
+version = "0.4.0"
 default_locale = "zh-CN"
 ```
 
@@ -188,7 +188,7 @@ Twine 是所属生态，Twee 是文件格式。识别 SourceKind 只表示完成
 | `twee`、`hir`、`expression` | 编译和表达式语义 |
 | `macro_runtime`、`runtime` | Macro 与 HIR 执行 |
 | `state`、`story`、`engine` | 游戏状态、导航与事务 |
-| `surface` | 最小宿主无关语义输出 |
+| `semantic` | Core 内部的最小宿主无关语义输出 |
 | `i18n` | 稳定文本身份与默认语言目录 |
 | `diagnostic`、`logger` | 问题数据与可观察记录 |
 
@@ -267,7 +267,10 @@ I18n 后的修改仍分两层：
 
 ## 8. Runtime
 
-Core 向 Host API 暴露 `Engine`、`State`、`Macro`、`Story`、`Logger`、`ModLoader`、`ModUtils`、`Resource`、`Save`、`Event`、`I18n` 等稳定能力。Renderer 不属于 Core 控制器；Host 通过 Surface Protocol 取得语义输出，再交给自己的 Renderer。详细五层边界见 [/docs/architecture/protocol.md](/docs/architecture/protocol.md)。
+Core 提供 `Engine`、`State`、`Macro`、`Story`、`Logger`、`Resource`、`Save`、`Event` 与 `I18n`
+等基础能力；`ModLoader` 和 `ModUtils` 不属于当前 Core 公开面。Native Host 通过 RuntimeSession
+驱动单局生命周期，并以 Protocol DTO 连接自己的 Renderer。详细边界见
+[/docs/architecture/protocol.md](/docs/architecture/protocol.md)。
 
 普通 Passage 的语义输出若不包含导航动作，Engine 会追加 SafeReturn，指向 history 中最近的安全普通 Passage。Core 只定义动作语义与目标，不规定它显示成按钮、链接、3D 对象或终端选项。`[exit]` Passage 执行逻辑但不产生可显示输出，也不进入安全返回目标集合。
 
@@ -275,7 +278,10 @@ Core 向 Host API 暴露 `Engine`、`State`、`Macro`、`Story`、`Logger`、`Mo
 
 Engine 负责启动、Passage 生命周期与事务，不直接实现任何平台表现。Native Twee 正文按字面进入宿主无关的语义 Text；动态求值必须通过 `print` 等显式 Macro 产生 Text。Macro 解析并执行显式动态 Twee 片段。Binding 只转换类型与生命周期，Host Renderer 决定最终表现。脚本模块之间的 `import` 仍可用于组织代码，只是不因此自动进入 `State.global`。
 
-启动顺序保持显式：加载 Core 与游戏、建立 Host API/Binding、注册可选能力、验证必需能力，最后由 `Engine.start()` 进入起始 Passage。首个真实 Host 选择 Tauri，在原生 Rust 后端直接复用 Core；WebView 只实现该 Host 的表现层。Godot 作为第二个结构不同的 Host 验证同一协议，浏览器、TUI、Python 和 Java 后续再通过各自 Binding 接入。任何缺失能力或注册错误都应在 Story 开始前形成 Diagnostic，并可由 Logger 观察。
+启动顺序保持显式：加载 Core 与游戏、建立 Script Adapter 和 RuntimeSession、验证必需能力，最后发送
+`RuntimeCommand::Start` 进入起始 Passage。Tauri 与 TUI 已共同验证这条边界：前者用 WebView
+Renderer，后者用终端 Renderer。Godot、浏览器、Python 和 Java Binding 尚未开始，不属于当前完成度。
+任何缺失能力或注册错误都应在 Story 开始前形成 Diagnostic，并可由 Logger 观察。
 
 Rust crate 已以 `src/lib.rs` 提供 Core，`src/main.rs` 只是使用该 library 的最小 CLI Host。后续 Host API 应从 library 边界增量收束，不能把平台事件循环或 Renderer 重新放回 Core。
 
