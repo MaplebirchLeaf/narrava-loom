@@ -19,7 +19,8 @@
 - 提供可恢复错误的输入循环，以及帮助、重绘和退出命令。
 
 `run_terminal` 是可复用的纯输入／输出循环；`host::run` 负责装载开发目录或发行 `game.nar`、
-执行 ECMAScript Binding、驱动 Core 并返回下一帧。当前 TUI 尚无 Save／I18n 菜单和终端尺寸
+建立共享 RuntimeSession、等待 PendingOperation 并返回下一帧。Engine、生命周期事件、脚本
+interaction 与特殊区域都由 RuntimeSession 编排。当前 TUI 尚无 Save／I18n 菜单和终端尺寸
 自适应布局，因此不能写成“与 Tauri 游戏能力完全等价”。
 
 ## 快速验证
@@ -79,6 +80,6 @@ printf 'help\nquit\n' | cargo run --locked -p narrava-loom-tui -- examples
 
 ## 当前完成标准
 
-TUI 已能加载完整开发目录或发行包、执行 ECMAScript Binding、处理 `Host.delay` 并产生经验证的
-Host 操作。仍缺 Save／I18n 文件菜单和非阻塞式终端唤醒；后续应继续收束共享 Native Runtime
-驱动，不让 TUI 依赖 Tauri crate。
+TUI 已能加载完整开发目录或发行包、通过共享 RuntimeSession 执行 ECMAScript Binding、处理
+`Host.delay` 并产生经验证的 Host 操作。仍缺 Save／I18n 文件菜单和非阻塞式终端唤醒；这些是
+终端平台入口，不应重新把 Narrava 生命周期编排放回 TUI。

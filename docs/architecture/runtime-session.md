@@ -1,0 +1,70 @@
+# Runtime Session 收敛规格
+
+> 状态：Tauri 与 TUI 已接入
+>
+> 更新日期：2026-08-29
+
+## 目标
+
+统一 Native Host 对 Engine、Macro continuation、脚本事件和挂起操作的编排。Tauri 与 TUI
+只负责装载平台文件、等待平台操作、Renderer 与玩家输入，不各自保存第二套 Narrava 生命周期。
+
+统一边界为：
+
+```text
+RuntimeCommand → RuntimeSession → RuntimeUpdate | PendingOperation
+```
+
+## 所有权
+
+- 零 Core 依赖的 `narrava-loom-protocol` 拥有可序列化的 `RuntimeCommand`、`RuntimeUpdate`、`PendingOperation` 与 Host DTO；
+- `narrava-loom-script::protocol_adapter` 负责 Surface builder 校验与 Core 输出到拥有型 DTO 的转换；
+- Native RuntimeSession 内部借用已准备的 HIR/Bytecode，独占 State、Story、interaction 与 continuation；
+- 跨语言侧只保存无 Rust 生命周期的 `RuntimeSessionHandle`；Native registry 以 `RuntimeSessionDriver` 保存实际编译借用与 ScriptAdapter；
+- Script Contract 由 `ScriptAdapter` 表达，Boa/Oxc 的 `EcmaBinding` 只是当前实现；
+- Host 只保存平台资源和 IO 句柄，不读取 Engine continuation；
+- Boa/Oxc 是 `narrava-loom-script` 的 ECMAScript Adapter，不进入 Script Contract 或 Protocol；
+- JavaScript `Surface` 只构造 Protocol 已定义的 Surface 节点，不拥有第二套语义。
+
+`narrava-loom-script::RuntimeSession` 是内部 Native 实现，Tauri/TUI 共同消费
+`RuntimeSessionDriver`，跨语言调用方只看到 `RuntimeSessionHandle`。两端不再直接调用
+`HostApi::start_mir`、`advance_mir`、`resume_pending` 或 `render_special_mir`，也不保存
+`HostPendingExecutions`。Host 按 `PendingOperation` 完成 delay、Save 文件 IO 或语言平台确认，
+再用同一 operation ID 和拥有型 `PendingResult` 恢复 Runtime。
+
+## 当前命令
+
+- `start`：启动当前单局 Session；首帧产生后再次启动会被拒绝；
+- `activate`：激活上一份更新公开的 interaction；
+- `input`：提交上一份更新公开且校验通过的输入值；
+- `save`：Runtime 先准备拥有型平台请求；Host 只读写文件，Resume 后由 Session 验证、恢复并同步 Script State；
+- `selectLanguage`：产生平台挂起请求，Resume 后由 Session 原子提交 Script locale 与当前语言；
+- `resume`／`cancel`：以不透明 operation ID 恢复或取消挂起操作。
+
+命令集合只归纳现有能力，不增加新的作者 API。
+
+RuntimeSession 的状态机测试直接替换 `ScriptAdapter`，覆盖未启动命令、挂起期拒绝新命令、
+operation mismatch 不丢失 continuation、cancel、再次 pending 以及特殊区域 pending。
+
+## 挂起模型
+
+`Host.delay`、Save 与语言选择共用一个 pending/resume 状态机。RuntimeSession 保存真实 Engine
+continuation和平台事务上下文；Protocol 只公开拥有型请求、operation ID 与完成结果。Host 不得持有
+或伪造 VM frame，也不能直接修改 State/Story。未来操作只能增加新的 tagged variant。
+
+## Canonical Script Contract
+
+[`bindings/script-contract.json`](../../bindings/script-contract.json) 是作者脚本全局名称、内建事件和
+Surface builder 种类的 canonical 清单。`bun run contract:generate` 从中生成 Rust 名称目录和
+TypeScript 标签联合类型、Runtime command/update/pending/result/envelope 结构与协议版本；
+`bun run contract:check` 禁止生成物漂移。Boa Bootstrap 在启动时读取
+同一清单建立内建事件集合，并验证全部全局对象与 Surface builder 已真实安装。
+
+Save 文件读写是 Host IO，但存档捕获、解析、兼容校验、State/Story 恢复和 Script 同步均在
+RuntimeSession 的恢复事务内完成。内部 `RuntimeServices` 只准备/应用 Core 数据，不执行文件选择和读写；
+直接 UI 操作与脚本请求进入同一命令流。
+
+## 本阶段不包含
+
+ModLoader、Godot Host、Python/Java Binding、新 Renderer、新 Host capability，以及事件链或二维
+坐标系统均不属于本阶段。

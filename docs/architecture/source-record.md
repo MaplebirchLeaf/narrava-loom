@@ -50,7 +50,8 @@ CLI 不是 Core 的所有者。Compiler、Runtime、Engine 与状态模块都由
 | `src/script.rs` | `.ts/.js` Script Bundle、加载上下文与宿主 Binding 契约 |
 | `src/save/` | Save JSON、Value 引用图与 State／Story 原子恢复 |
 | `hosts/narrava-loom-tauri/` | 共享 Tauri Worker、DTO 与 Renderer；桌面入口可运行，移动平台工程尚未初始化 |
-| `crates/narrava-loom-protocol/` | Surface 协议语义（`surface`）、Core 语义到协议的双向转换（`conversion`）、`HostErrorDto`、节点/更新 DTO；依赖 Core |
+| `crates/narrava-loom-protocol/` | 拥有型、可序列化的 Runtime/Host 命令、更新、挂起操作与 DTO；不依赖 Core |
+| `crates/narrava-loom-script/src/protocol_adapter/` | Script Surface builder 校验与 Core 语义到 Protocol DTO 的 Runtime 适配 |
 | `crates/narrava-loom-script/` | ECMAScript 游戏脚本执行（`EcmaBinding`，Boa + Oxc）、State/Resource 桥与共享宏分发（`dispatch`）；依赖 Core/Protocol |
 | `bindings/typescript/narrava.d.ts` | 游戏 scripts 使用的宿主无关 TypeScript API 声明；不作为 Core Source 编译 |
 

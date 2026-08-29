@@ -36,8 +36,6 @@ I18n 的 `.nlang` 校验、导入和运行时语言链已经由 Core 实现；�
 ```text
 narrava-loom-modloader
         ↓
-narrava-loom-protocol
-        ↓
 narrava-loom-core public API
 
 Tauri / TUI / Renderer 不进入 ModLoader

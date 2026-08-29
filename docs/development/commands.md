@@ -31,7 +31,9 @@
 
 | 命令 | 作用 |
 |---|---|
-| `bun run check` | 依次执行 TypeScript、Oxlint、Oxfmt、Tauri 前端测试和 VS Code 扩展测试 |
+| `bun run check` | 依次检查 canonical contract、TypeScript、Oxlint、Oxfmt、Tauri 前端和 VS Code 扩展 |
+| `bun run contract:generate` | 从 `bindings/script-contract.json` 更新 Rust 与 TypeScript 生成目录 |
+| `bun run contract:check` | 检查生成目录与 canonical contract 完全同步，不写文件 |
 | `bun run typecheck` | 只检查 TypeScript 声明与示例脚本 |
 | `bun run lint` | 只运行 Oxlint |
 | `bun run format:check` | 检查 JS、TS、JSON 格式 |

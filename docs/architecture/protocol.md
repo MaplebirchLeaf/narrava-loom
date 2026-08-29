@@ -1,8 +1,12 @@
 # Narrava Protocol
 
-> 状态：独立 `narrava-loom-protocol` crate（单向依赖 Core）；Tauri 与 TUI 均已接入
+Native Host 的生命周期编排正在收敛为 `RuntimeCommand → RuntimeSession → RuntimeUpdate /
+PendingOperation`；本页只描述展示协议，Session 的所有权与阶段边界见
+[Runtime Session](runtime-session.md)。
+
+> 状态：`narrava-loom-protocol` 是零 Core 依赖的纯数据协议；Core 转换属于 Script Runtime 适配层
 >
-> 更新日期：2026-08-27
+> 更新日期：2026-08-29
 
 ## 目标
 
@@ -10,32 +14,33 @@ Narrava Core 是可嵌入的叙事 Runtime/VM。它决定游戏状态、控制�
 
 ## 当前模块边界
 
-Protocol 是独立必选 crate `narrava-loom-protocol`，单向依赖 `narrava-loom-core`。依赖树：
+Protocol 只有一个物理 crate。跨语言稳定契约不依赖 Core，Rust 语义转换是 Script Runtime 的内部适配：
 
 ```text
-narrava-loom-core         语义执行（semantic::SemanticOutput 等内部输出类型）
-       ↑
-narrava-loom-protocol     Surface 协议语义（surface）+ 双向同构转换（conversion）+ 传输 DTO
-       ↑
-hosts/*                   Tauri、TUI 同时依赖 Core、Protocol 与 Script Binding
+narrava-loom-core ────────────┐
+                              ├─→ narrava-loom-script::protocol_adapter
+narrava-loom-protocol ────────┘                    │
+              │                                    └─→ RuntimeSession
+              └───────────────────────────────────────→ hosts/*（纯数据命令与更新）
 ```
 
 独立 ModLoader 只依赖 Core 的游戏身份、源码、资源与模组契约，不消费 Surface Protocol。
 
-`Surface` 文本继续使用 Core 的 `TextValue`（与 Expression、State、Save 一致的 UTF-16 值），
-避免退化为有损的 Rust `String`。Core 内部执行直接构造 `semantic::SemanticOutput`（不依赖
-Protocol），Host 消费前由 Protocol 的 `conversion` 层做结构同构的逐节点转换；脚本 Surface
-builder 产生的协议值也经同一层转回语义输出进入 Macro 执行。因此依赖保持单向，不制造循环依赖。
+Core 内部的 `semantic::SemanticOutput` 继续使用 `TextValue`，保持 Expression、State 与 Save
+共享的 UTF-16 语义。跨 Runtime/Host 边界时，Script Runtime 的 `protocol_adapter` 才把文本转换为
+拥有型 UTF-8 `String` DTO；孤立代理项会在边界处形成错误，不能泄漏到 IPC。脚本 `Surface`
+builder 也由该适配层验证并转回 Core 语义输出。纯 Protocol crate 不认识 `TextValue`、Surface
+builder 或 Core conversion，因此依赖保持单向。
 
 ## 五层职责
 
 | 层 | 拥有 | 不拥有 |
 |---|---|---|
 | Core | Compiler、HIR/MIR/VM、Expression、Macro、State、Story、Engine、Save、I18n、Mod、Resource 身份、Diagnostic/Logger/Event | DOM、CSS、Godot Node、终端控件和平台 Renderer |
-| Host API | Core 的启动、输入、推进、存取状态和语义输出契约 | 布局、绘制、平台事件循环 |
-| Surface Protocol | 平台无关的有序语义和稳定身份 | HTML 标签、CSS selector、具体控件类 |
-| Binding | Rust ABI 与目标语言/引擎之间的类型、生命周期和错误转换 | 游戏规则、表现策略 |
-| Host Renderer | 把语义映射为当前平台画面和交互，并把玩家动作送回 Host API | Core 状态真相和 Story 控制流 |
+| Runtime Session | 单局启动、输入、推进、挂起、存取状态和语义输出编排 | 布局、绘制、平台事件循环 |
+| Protocol | 平台无关的拥有型命令、更新、节点和稳定身份 | Core、HTML 标签、CSS selector、具体控件类 |
+| Adapter / Binding | Core、Protocol 与目标语言之间的类型、生命周期和错误转换 | 游戏规则、表现策略 |
+| Host Renderer | 把语义映射为当前平台画面和交互，并把玩家动作送回 RuntimeSession | Core 状态真相和 Story 控制流 |
 
 依赖方向保持单向：
 
@@ -43,14 +48,14 @@ builder 产生的协议值也经同一层转回语义输出进入 Macro 执行�
 Game Source
 → Compiler
 → Core Runtime / VM
-→ Surface Protocol
-→ Binding / Host Adapter
+→ Runtime Session
+→ Protocol DTO
 → Host Renderer
 
 Player Input
 → Host Renderer
-→ Binding / Host Adapter
-→ Host API
+→ Protocol Command
+→ Runtime Session
 → Engine / Story / State
 ```
 
@@ -58,7 +63,8 @@ Core 不反向调用 DOM、Godot、WebView、TUI 或其他平台对象。Binding
 
 ## Surface 所有权
 
-Surface Protocol 只表达 Narrava 必须理解的跨宿主语义。当前 `narrava-loom-protocol` 的 `surface` 模块提供：
+Surface 语义由 Core 定义，Runtime 将其转换为 `narrava-loom-protocol`
+中的拥有型 `HostNodeDto`。当前节点包括：
 
 - Text、HardBreak，以及可组合的 `TextStyle + TextColor`；
 - Resource 逻辑路径 Image，以及开放的 `RegionId`；
@@ -109,9 +115,9 @@ fallback。WebView 的 HTML、CSS 和 DOM 实现始终只属于 Tauri Host。
 
 ## Host 契约
 
-- Core 只产生语义输出（`semantic::SemanticOutput`），经 Protocol 转换层成为 `Surface`，并以不透明 `InteractionId` 接收玩家动作；Renderer 不进入 Core。
-- `HostApi::start_mir()` 和 `advance_mir()` 驱动到 Ready 或 Pending；Binding 不编排 VM 内部阶段。
-- Resume／Cancel 只传递 `HostExecutionToken`。Continuation、检查点、作用域和平台句柄留在后端。
+- Core 只产生 `semantic::SemanticOutput`；Script Runtime adapter 将其转换为拥有型 Protocol DTO，并以不透明 `InteractionId` 接收玩家动作；Renderer 不进入 Core。
+- Host 只发送 `RuntimeCommand` 并接收 `RuntimeUpdate`；Core 的 `HostApi` 与 execution token 不越过 RuntimeSession。
+- Resume／Cancel 只回传 Protocol 的不透明 operation ID。Continuation、检查点和作用域留在 RuntimeSession。
 - State 与 Story 在同一事务中提交或回滚；容器 Macro 正文与目标 Passage 也属于同一事务。
 - Tauri、TUI 与其他 Host 并列依赖 Core，彼此不得依赖，也不得保存第二份 State／Story。
 

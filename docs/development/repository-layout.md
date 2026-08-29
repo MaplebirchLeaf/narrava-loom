@@ -12,8 +12,8 @@ Narrava Loom/
 │   ├── narrava-loom-tauri/         官方 Tauri Host；桌面可运行，移动共享层待平台工程
 │   └── narrava-loom-tui/           Host-neutral 终端 Renderer 与输入前端
 ├── crates/
-│   ├── narrava-loom-protocol/      跨 Host 的 Surface 协议语义、双向转换与传输 DTO，依赖 Core
-│   ├── narrava-loom-script/        ECMAScript 游戏脚本执行（Boa + Oxc）与宏分发，依赖 Core/Protocol
+│   ├── narrava-loom-protocol/      零 Core 依赖的拥有型 Runtime/Host DTO
+│   ├── narrava-loom-script/        ECMAScript 执行、RuntimeSession 与 Core/Protocol 适配
 │   └── narrava-loom-modloader/     独立演进的可选附属，不属于 Core workspace
 ├── bindings/typescript/            游戏脚本 TypeScript 契约
 ├── editors/vscode-narrava-loom/    Twee 编辑器扩展源码
@@ -28,9 +28,8 @@ Narrava Loom/
 ## 存放规则
 
 - Core 公共语义、编译器和运行时放在 `src/`；不得导入 Tauri、DOM、CSS 或 ModLoader 类型。
-- 平台实现放在 `hosts/<host>/`，Host 只通过 Core 的公开类型消费 Surface 和 Runtime；
-  Host 与 Core 之间的传输 DTO 与脚本 bridge 位于 `crates/narrava-loom-protocol/`，
-  依赖方向固定为 `host → narrava-loom-protocol → narrava-loom-core`。
+- 平台实现放在 `hosts/<host>/`，Host 以 `narrava-loom-protocol` 的拥有型命令与更新驱动 Runtime；
+  Core 与 Protocol 之间的转换位于 `narrava-loom-script/src/protocol_adapter/`。
 - 游戏作者可直接复制或修改的内容放在 `examples/`；示例不得要求作者编写 Rust。
 - 游戏脚本声明只在 `bindings/typescript/narrava.d.ts` 维护，编辑器扩展从公开语义目录提供辅助。
 - 仓库操作脚本放在 `scripts/`；Host 内部的构建逻辑留在对应 Host crate。
@@ -42,15 +41,12 @@ Narrava Loom/
 ## Rust 依赖方向
 
 ```text
-narrava-loom-core
-       ↑
-narrava-loom-protocol   （Surface 语义 + 双向转换 + 传输 DTO）
-       ↑
-narrava-loom-script     （ECMAScript 执行 + 宏分发）
-       ↑
-Host / Binding / narrava-loom-modloader
-       ↑
-Host Renderer
+narrava-loom-core ─────────┐
+                           ├─→ narrava-loom-script ──→ Host
+narrava-loom-protocol ─────┘               ↑
+              └────────────────────────────┘
+
+narrava-loom-modloader ──→ narrava-loom-core
 ```
 
 `narrava-loom-modloader` 可以依赖 Core，Core 不能感知 ModLoader。Host 若需要模组能力，应显式依赖

@@ -29,7 +29,8 @@ CSS。默认 CSS 由 Host 提供，游戏作者可以完全不写 CSS。
 
 ```text
 Narrava Core Bytecode VM
-→ HostUpdate
+→ RuntimeSession
+→ RuntimeUpdate / PendingOperation
 → Tauri Host DTO
 → Tauri command
 → WebView Renderer
@@ -40,12 +41,15 @@ Narrava Core Bytecode VM
 独立 workspace crate 位于 `hosts/narrava-loom-tauri/`，Tauri 依赖不会进入 Core 或
 ModLoader。`TauriHost::spawn(relative_game_path)` 建立专用 Runtime Worker：
 
-- Worker 在线程栈中长期拥有 Source、AST、HIR、MIR、LIR、Bytecode、State、Story 与上一份输出；
+- Worker 在线程栈中长期拥有 Source、AST、HIR、MIR、LIR 与 Bytecode；RuntimeSession 独占
+  State、Story、interaction、continuation 与上一份输出；
 - Tauri managed state 只保存可克隆的命令发送端，不持有自引用 IR；
 - `start_game` command 启动固定 `Start` Passage；
 - `activate` command 只接受上一份 Surface 中的 Interaction ID；
 - Rust DTO 以 serde tagged enum 输出 Text、Navigation 与 SafeReturn；
 - 错误统一输出稳定 `code + message`，不把 Rust 错误对象交给 WebView。
+- Worker 执行 `PendingOperation` 描述的 Delay、Save 文件 IO 和语言平台确认，再回送带拥有型结果的
+  `RuntimeCommand::Resume`；它不读取 Engine continuation，也不直接修改 State／Story。
 
 游戏 Worker 中可用的 TypeScript 契约位于 `bindings/typescript/narrava.d.ts`。
 
