@@ -70,7 +70,7 @@ fn rejects_incomplete_interaction_target_syntax() {
 #[test]
 fn parses_expressions_and_interaction_targets_in_source_order() {
     let arguments: Vec<MacroArgument<'_>> =
-        parse_argument_list("\"Maple\" [[确认前往|Map]] ($count + 1)")
+        parse_argument_list("\"Author\" [[确认前往|Map]] ($count + 1)")
             .expect("混合参数列表应可解析");
 
     assert_eq!(arguments.len(), 3);
@@ -85,13 +85,13 @@ fn parses_expressions_and_interaction_targets_in_source_order() {
                 label: "确认前往",
                 target: "Map",
             },
-            label_offset: 10,
-            target_offset: 23,
+            label_offset: 11,
+            target_offset: 24,
         }
     );
     assert!(matches!(
         &arguments[2],
-        MacroArgument::Expression { offset: 29, .. }
+        MacroArgument::Expression { offset: 30, .. }
     ));
 }
 
@@ -153,7 +153,7 @@ fn keeps_nested_evaluation_span_in_argument_issue() {
 #[test]
 fn prepares_mixed_arguments_as_ordered_runtime_values() {
     let arguments: Vec<MacroArgument<'_>> =
-        parse_argument_list("\"Maple\" [[确认前往|Map]] (1 + 1)").expect("参数列表应可解析");
+        parse_argument_list("\"Author\" [[确认前往|Map]] (1 + 1)").expect("参数列表应可解析");
     let base: EmptyEvaluationContext = EmptyEvaluationContext;
 
     let values: Vec<Value> =
@@ -163,7 +163,7 @@ fn prepares_mixed_arguments_as_ordered_runtime_values() {
     assert_eq!(
         values,
         vec![
-            Value::string("Maple"),
+            Value::string("Author"),
             Value::object(vec![
                 (String::from("label"), Value::string("确认前往")),
                 (String::from("target"), Value::string("Map")),
@@ -176,7 +176,7 @@ fn prepares_mixed_arguments_as_ordered_runtime_values() {
 #[test]
 fn enters_a_call_with_prepared_args_for_handler_access() {
     let arguments: Vec<MacroArgument<'_>> =
-        parse_argument_list("\"Maple\" [[确认前往|Map]]").expect("参数列表应可解析");
+        parse_argument_list("\"Author\" [[确认前往|Map]]").expect("参数列表应可解析");
     let base: EmptyEvaluationContext = EmptyEvaluationContext;
     let mut locals: MacroLocalScopes<Value> = MacroLocalScopes::new();
 

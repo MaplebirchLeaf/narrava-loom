@@ -393,7 +393,7 @@ fn input_builtins_create_state_bound_semantic_controls() {
     )
     .expect("radiobutton 应接受文字状态");
     let text_output: BodyExecution =
-        textbox("$name", &Value::string("Maple"), identity, 3).expect("textbox 应接受文字状态");
+        textbox("$name", &Value::string("Author"), identity, 3).expect("textbox 应接受文字状态");
 
     let SemanticNode::Input { binding, .. } = &checkbox_output.output.nodes()[0] else {
         panic!("checkbox 应产生 Input")

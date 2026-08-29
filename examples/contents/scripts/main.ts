@@ -81,7 +81,7 @@ Macro.add("barDemo", {
       Surface.hardBreak(),
       Surface.text("天气：小雨 · 17°C", { key: "bar-weather", color: 34 }),
       Surface.hardBreak(),
-      Surface.text("人物：Maple", { key: "bar-character", styles: ["strong"] }),
+      Surface.text("人物：Author", { key: "bar-character", styles: ["strong"] }),
       Surface.hardBreak(),
       Surface.text("状态：轻微疼痛", { key: "bar-condition", color: 34 }),
       Surface.hardBreak(),

@@ -17,7 +17,7 @@ fn state_routes_each_namespace_and_rejects_macro_locals() {
     let mut state: State = State::new();
 
     state
-        .set_global("formatName", Value::string("Maple"))
+        .set_global("formatName", Value::string("Author"))
         .expect("global 应可写入");
     state
         .set_setup(Value::object(vec![(
@@ -32,7 +32,7 @@ fn state_routes_each_namespace_and_rejects_macro_locals() {
         .set_variable(VariableScope::Temporary, "turn", Value::Number(2.0))
         .expect("_ 变量应可写入");
 
-    assert_eq!(state.global("formatName"), Some(&Value::string("Maple")));
+    assert_eq!(state.global("formatName"), Some(&Value::string("Author")));
     assert_eq!(
         state.variable(VariableScope::Variables, "score"),
         Some(&Value::Number(8.0))

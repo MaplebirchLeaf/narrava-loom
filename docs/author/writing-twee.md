@@ -71,7 +71,7 @@
 <<set setup.chapter to 1>>
 
 :: Start
-<<set $hero to "Maple">>
+<<set $hero to "Author">>
 <<set $coins to 3>>
 <<set _cost to 2>>
 你好，<<print $hero>>。你有 <<print $coins>> 枚金币。

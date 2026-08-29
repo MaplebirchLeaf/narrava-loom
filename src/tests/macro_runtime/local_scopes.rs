@@ -43,7 +43,7 @@ fn rejects_suspending_an_empty_scope_chain() {
 #[test]
 fn exposes_current_call_arguments_as_args_array() {
     let mut locals: MacroLocalScopes<Value> = MacroLocalScopes::new();
-    locals.enter_call(vec![Value::string("Maple"), Value::Number(2.0)]);
+    locals.enter_call(vec![Value::string("Author"), Value::Number(2.0)]);
     let base: EmptyEvaluationContext = EmptyEvaluationContext;
     let context: MacroEvaluationContext<'_> = MacroEvaluationContext::new(&base, &locals);
     let expression = parse("@args[1]").expect("@args 索引应可解析");
@@ -69,9 +69,9 @@ fn keeps_args_reserved_for_the_current_call() {
 fn stores_widget_arguments_for_args_access() {
     let mut locals: MacroLocalScopes<&str> = MacroLocalScopes::new();
 
-    locals.enter_call(vec!["Maple", "2", "extra"]);
+    locals.enter_call(vec!["Author", "2", "extra"]);
 
-    assert_eq!(locals.args(), Some(&["Maple", "2", "extra"][..]));
+    assert_eq!(locals.args(), Some(&["Author", "2", "extra"][..]));
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn captures_only_named_visible_locals_for_delayed_execution() {
     let mut locals: MacroLocalScopes<Value> = MacroLocalScopes::new();
     locals.enter();
     let _previous: Option<Value> = locals
-        .set("outer", Value::string("Maple"))
+        .set("outer", Value::string("Author"))
         .expect("外层局部变量应可写入");
     locals.enter();
     let _previous: Option<Value> = locals
@@ -101,7 +101,7 @@ fn captures_only_named_visible_locals_for_delayed_execution() {
     let captured: CapturedMacroLocals<Value> = locals.capture(&["outer", "missing"]);
     let restored: MacroLocalScopes<Value> = captured.into_scopes();
 
-    assert_eq!(restored.get("outer"), Some(&Value::string("Maple")));
+    assert_eq!(restored.get("outer"), Some(&Value::string("Author")));
     assert_eq!(restored.get("inner"), None);
     assert_eq!(restored.get("missing"), None);
     assert_eq!(restored.args(), Some(&[][..]));

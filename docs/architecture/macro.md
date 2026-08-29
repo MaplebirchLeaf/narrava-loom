@@ -148,7 +148,7 @@ HIR 已使用专用 Widget 节点保存名称与正文。定义使用引号包�
 
 `@args` 是调用帧保留名，普通局部变量 API 不允许覆盖或删除。`MacroEvaluationContext` 在求值开始时组合基础 State 上下文与当前 Macro 帧：global、setup、`$`、`_` 继续交给基础上下文，`@` 和 `@args` 只由 Macro 提供。
 
-采用标准 Expression 实参的 Macro 使用顶层空白分隔，例如 `<<name "Maple" ($count + 1) { active: true }>>`。复合 Expression 用括号明确边界，实参之间不使用逗号或分号；数组、对象和函数调用内部仍使用各自语法。公共 `parse_list()` 负责生成有序 AST 列表；具体 Macro 仍可声明自己的 Raw 参数格式，因此 HIR 不会强制把 `link` 的 `[[文本|目标]]` 等专用语法解析为 Expression。
+采用标准 Expression 实参的 Macro 使用顶层空白分隔，例如 `<<name "Author" ($count + 1) { active: true }>>`。复合 Expression 用括号明确边界，实参之间不使用逗号或分号；数组、对象和函数调用内部仍使用各自语法。公共 `parse_list()` 负责生成有序 AST 列表；具体 Macro 仍可声明自己的 Raw 参数格式，因此 HIR 不会强制把 `link` 的 `[[文本|目标]]` 等专用语法解析为 Expression。
 
 `MacroDefinition` 通过必填的 `MacroArgumentKind` 固定参数契约：`Raw` 把整段原文交给自定义 Handler；`ArgumentList` 使用顶层空白分隔，每一项可以是普通 Expression 或 `[[显示文本|目标]]`。参数格式属于可替换的 Runtime Definition，不写入通用 HIR，也不由调用文本自动猜测。
 

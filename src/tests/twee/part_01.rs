@@ -163,7 +163,7 @@ fn keeps_markup_like_content_as_text_without_native_surface_semantics() {
     )
     .expect("示例源码应可读取");
     let markup_like_text: &str =
-        "第一行<br>\n<div class=\"dialog\" data-speaker=\"Maple\">正文</div>\n";
+        "第一行<br>\n<div class=\"dialog\" data-speaker=\"Author\">正文</div>\n";
     let tokens: Vec<Token<'_>> = vec![
         token(
             &source,

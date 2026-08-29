@@ -375,13 +375,13 @@ fn parses_empty_and_populated_calls() {
 #[test]
 fn parses_whitespace_separated_expression_list() {
     let expressions: Vec<Expression<'_>> =
-        parse_list("'Maple' ($count + 1) { active: true } max(1, 2)")
+        parse_list("'Author' ($count + 1) { active: true } max(1, 2)")
             .expect("Macro 实参列表应可解析");
 
     assert_eq!(expressions.len(), 4);
     assert!(matches!(
         expressions[0].kind,
-        ExpressionKind::String("Maple")
+        ExpressionKind::String("Author")
     ));
     assert!(matches!(expressions[1].kind, ExpressionKind::Group(_)));
     assert!(matches!(expressions[2].kind, ExpressionKind::Object(_)));

@@ -196,7 +196,7 @@ ECMAScript `export/import` 只组织脚本模块，不会自动进入 Twee；脚
 
 ```ts
 State.global.set("gameTitle", "Forest")
-State.global.extend({ difficulty: 2, author: "Maple" })
+State.global.extend({ difficulty: 2, author: "Author" })
 State.global.set("sum", sum)
 ```
 

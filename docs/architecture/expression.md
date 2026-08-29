@@ -18,7 +18,7 @@ Expression 可以在执行时通过受控上下文访问 State，但不拥有 St
 
 Macro Runtime 已通过只读 `MacroEvaluationContext` 提供当前调用的 `@args` 数组，因此普通索引表达式可直接求值 `@args[0]`。Expression 只读取组合后的 Context，不知道调用帧结构，也不让 State 保存 Macro 局部数据。
 
-公共 `parse_list()` 使用顶层空白解析零个或多个 Expression，供声明采用标准实参列表的 Macro 定义复用。括号、数组、对象与调用内部的空白不会分隔实参；Macro 实参之间不使用逗号或分号。包含空白的复合 Expression 应使用括号明确边界，例如 `"Maple" ($count + 1) { active: true }`。
+公共 `parse_list()` 使用顶层空白解析零个或多个 Expression，供声明采用标准实参列表的 Macro 定义复用。括号、数组、对象与调用内部的空白不会分隔实参；Macro 实参之间不使用逗号或分号。包含空白的复合 Expression 应使用括号明确边界，例如 `"Author" ($count + 1) { active: true }`。
 
 规划中的反引号 Template String 与 JavaScript 采用相同的显式插值边界：`` `$name` `` 是普通文本，`` `${$name}` `` 才读取变量。Template String 仍属于 Narrava Expression AST，不会交给 JavaScript `eval`。单双引号字符串继续保持普通字符串语义，不执行 `${...}`。
 

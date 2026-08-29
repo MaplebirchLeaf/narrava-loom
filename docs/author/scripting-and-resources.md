@@ -19,7 +19,7 @@ State.global.set("greeting", greeting)
 然后在 Twee 中调用：
 
 ```twee
-<<print greeting("Maple")>>
+<<print greeting("Author")>>
 ```
 
 重要规则：

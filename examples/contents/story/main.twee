@@ -8,7 +8,7 @@
 <<barStowedDemo>>
 
 :: Start
-<<set $hero to "Maple">>
+<<set $hero to "Author">>
 <<set $visits to 1>>
 欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。<br>
 <<link [[进入大厅|Hall]]>><</link>>
@@ -43,7 +43,7 @@
 提示开关：<<checkbox "$tips_enabled" false true>><br>
 安静路线：<<radiobutton "$route" "quiet">><br>
 探索路线：<<radiobutton "$route" "explore">><br>
-玩家姓名：<<textbox "$player_name" "Maple">><br>
+玩家姓名：<<textbox "$player_name" "Author">><br>
 当前值：提示=<<print $tips_enabled>>，路线=<<print $route>>，姓名=<<print $player_name>>。<br>
 <<button [[确认表单并返回|Hall]]>>
   <<set $form_confirmed to true>>
@@ -192,7 +192,7 @@ switch：按值严格匹配，命中输出该分支：<br>
   本注释中的 <<set $ignored to true>> 不应按 Macro 着色。
 %/
 :: HighlightGallery [reference exit]
-<<set $hero.profile.name to "Maple">>
+<<set $hero.profile.name to "Author">>
 <<set _counter to 42>>
 <<set @choice.label to 'Library'>>
 <<set setup.build.channel to "nightly">>
