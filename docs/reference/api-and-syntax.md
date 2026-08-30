@@ -158,6 +158,7 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 - 订阅：`subscribe(filter?)`、`take(subscription)`、`unsubscribe(subscription)`
 - Engine 保留事件：`passage:init`、`passage:start`、`passage:render`、
   `passage:display`、`passage:end`
+- 完整使用方式与事件链见 [Event](../author/event.md)
 
 ### `Reaction`
 

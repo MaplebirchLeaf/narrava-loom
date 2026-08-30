@@ -230,6 +230,7 @@ declare global {
       readonly lifecycle?: never
       readonly passage?: never
       readonly exit?: never
+      /** 可同时检查 Event payload 与当前活动 State（例如 `V.quest_open === true`）。 */
       readonly cond?: (payload: NarravaData) => boolean
     }
   type NarravaStateReactionDefinition = NarravaReactionEffect &
@@ -239,6 +240,7 @@ declare global {
       readonly lifecycle?: never
       readonly passage?: never
       readonly exit?: never
+      /** 可同时检查本路径变化与当前活动 State 中的其他变量。 */
       readonly cond?: (change: {
         readonly before: NarravaData
         readonly after: NarravaData
@@ -253,6 +255,7 @@ declare global {
         | NarravaReactionPassageMatcher
         | readonly NarravaReactionPassageMatcher[]
         | NarravaReactionPassageSelector
+      /** 可通过 `V` 检查进入 Passage 时的当前活动 State。 */
       readonly cond?: () => boolean
     }
   type NarravaReactionDefinition =
@@ -379,14 +382,14 @@ declare global {
     readonly sequence: number
     /** Exact, case-sensitive author-defined event name. */
     readonly name: string
-    /** Data snapshot supplied to Event.emit. */
+    /** Data supplied when the event was published. */
     readonly payload: NarravaData
   }
   /** 作者事件总线：emit 返回记录序号；订阅只接收之后发生的事件。 */
   interface NarravaEvent {
     /** Emit an author-defined event. The five `passage:*` names are Engine-reserved. */
     emit(name: string, payload?: NarravaData): number
-    /** Subscribe to future events only; omit name to receive every author event. */
+    /** Subscribe to future events only; omit name to receive author and Engine events. */
     subscribe(filter?: { name?: string }): NarravaEventSubscription
     /** Drain pending records. Returns undefined only when the subscription does not exist. */
     take(subscription: NarravaEventSubscription): NarravaEventRecord[] | undefined

@@ -3,6 +3,7 @@
 
 // setup 是启动配置，不进入存档；脚本模块加载时建立本示例需要的稳定字段。
 setup.build = "grand-tour"
+V.reaction_enabled = V.reaction_enabled ?? true
 
 /** 记录客人名到 temporary 并返回欢迎语。 */
 function scriptedGreeting(name: string): string {
@@ -50,7 +51,8 @@ Reaction.add({
     typeof payload === "object" &&
     payload !== null &&
     "quest" in payload &&
-    payload.quest === "old_mine",
+    payload.quest === "old_mine" &&
+    V.reaction_enabled === true,
   widget: '<<highlightCard "Event Reaction：旧矿井任务已结算。">>',
   replace: "reaction-result",
   limit: 3,

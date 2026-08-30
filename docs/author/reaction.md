@@ -42,7 +42,13 @@ Reaction.add({
 Event.emit("quest:completed", { quest: "old_mine" })
 ```
 
-`event` 精确匹配事件名称，`cond(payload)` 接收 payload。`Event.emit` 只把事实加入队列，不会从 setter 或脚本调用栈中重入 Engine。
+`event` 精确匹配事件名称，`cond(payload)` 接收 payload。条件也可以读取当前活动 State：
+
+```ts
+cond: (payload) => payload.quest === "old_mine" && V.quest_open === true
+```
+
+`Event.emit` 只把事实加入队列，不会从 setter 或脚本调用栈中重入 Engine。事件名称、订阅与 Engine 保留事件见 [Event](event.md)。
 
 ### State
 
@@ -56,9 +62,21 @@ Event.emit("quest:completed", { quest: "old_mine" })
 - Reaction 效果若继续修改 State，Runtime 会以“本轮效果前 → 本轮效果后”进入下一轮。
 - 前后值严格相等时，该路径没有 State Reaction 候选。
 
+State 条件不限于被观察路径，也可以组合其他游戏状态：
+
+```ts
+cond: ({ before, after }) => before < 50 && after >= 50 && V.chapter >= 3
+```
+
 ### Lifecycle
 
 `lifecycle: true` 在普通 Passage 的 Start 之后、正文之前执行。特殊 Passage 与 `include` fragment 不产生新的 lifecycle。
+
+Lifecycle 没有触发参数，但仍可直接读取 `V`：
+
+```ts
+cond: () => V.lockdown === true
+```
 
 `passage` 仅能用于 lifecycle，可写成：
 
@@ -123,7 +141,7 @@ Reaction.add({
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `cond` | 始终成立 | Event 接收 payload，State 接收 `{ before, after }`，lifecycle 无参数 |
+| `cond` | 始终成立 | 除各触发源参数外，三者都能读取当前活动 `V` State |
 | `enabled` | `true` | 初始启用状态 |
 | `once` | `false` | 首次成功后销毁，不能与 `limit` 同时使用 |
 | `limit` | 无限制 | 正整数；达到次数后禁用 |

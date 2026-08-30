@@ -273,13 +273,14 @@ fn ecma_binding_resolves_event_conditions_and_publishes_emitted_events() {
           Reaction.add({
             id: "alice.quest.complete",
             event: "quest:completed",
-            cond: ({ quest }) => quest === "old_mine",
+            cond: ({ quest }) => quest === "old_mine" && V.reactions_enabled === true,
             emit: { name: "alice:friendship", payload: { stage: "friend" } },
             limit: 1,
           });
           Reaction.add({
             id: "alice.friendship.notice",
             event: "alice:friendship",
+            cond: () => V.friendship_notice_enabled === true,
             widget: '<<friendshipNotice>>',
           });
           Event.emit("quest:completed", { quest: "old_mine" });
@@ -288,6 +289,8 @@ fn ecma_binding_resolves_event_conditions_and_publishes_emitted_events() {
     .unwrap();
     let sources = SourceList::discover(&root).unwrap();
     let mut state = State::new();
+    state.variables_set("reactions_enabled", Value::Boolean(true));
+    state.variables_set("friendship_notice_enabled", Value::Boolean(true));
     let binding = EcmaBinding::load(
         &sources,
         &ResourceCatalog::default(),
