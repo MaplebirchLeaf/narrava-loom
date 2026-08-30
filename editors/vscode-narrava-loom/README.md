@@ -53,16 +53,16 @@ Widget 的规范定义形式是 `<<widget "name">>`：定义位置的 `"name"` �
 打包安装（产物统一输出到仓库 `dist/vscode-narrava-loom/`）：
 
 ```bash
-cd ../.. && scripts/build-vscode-extension.sh
+cd ../.. && bun run vsix
 ```
 
-脚本会在缺少依赖时运行 `npm ci`，随后执行回归测试，并把精确版本的 VSIX 写入
+先在仓库根目录运行 `bun install`。打包命令会执行回归测试，并把精确版本的 VSIX 写入
 `dist/vscode-narrava-loom/`。构建并立即安装：
 
 ```bash
-scripts/build-vscode-extension.sh --install
+bun run vsix --install
 # VSCodium 等兼容编辑器：
-scripts/build-vscode-extension.sh --install --editor codium
+bun run vsix --install --editor codium
 ```
 
 扩展不访问网络。它只读取当前工作区的 `.twee`、`.js` 和 `.ts` 文件来建立 Macro 索引。

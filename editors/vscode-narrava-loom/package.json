@@ -6,6 +6,11 @@
   "categories": [
     "Programming Languages"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MaplebirchLeaf/narrava-loom.git",
+    "directory": "editors/vscode-narrava-loom"
+  },
   "publisher": "narrava-loom",
   "files": [
     "extension.js",

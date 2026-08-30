@@ -59,8 +59,10 @@ continuation和平台事务上下文；Protocol 只公开拥有型请求、opera
 [`bindings/script-contract.json`](../../bindings/script-contract.json) 是作者脚本全局名称、内建事件和
 Surface builder 种类的 canonical 清单。`bun run contract:generate` 从中生成 Rust 名称目录和
 TypeScript 标签联合类型、Runtime command/update/pending/result/envelope 结构与协议版本；
-`bun run contract:check` 禁止生成物漂移。Boa Bootstrap 在启动时读取
-同一清单建立内建事件集合，并验证全部全局对象与 Surface builder 已真实安装。
+`bun run contract:check` 禁止生成物漂移。内部 Bootstrap 源码按职责位于
+`crates/narrava-loom-script/bootstrap/`；开发时由 Bun 打包为一个已提交的 IIFE，Rust 仅通过
+`include_str!` 在编译期嵌入该生成文件。最终 Runtime 仍由 Boa 执行 ECMAScript，不携带或调用 Bun。
+Bootstrap 读取同一 canonical 清单建立内建事件集合，并验证全部全局对象与 Surface builder 已真实安装。
 
 Save 文件读写是 Host IO，但存档捕获、解析、兼容校验、State/Story 恢复和 Script 同步均在
 RuntimeSession 的恢复事务内完成。内部 `RuntimeServices` 只准备/应用 Core 数据，不执行文件选择和读写；

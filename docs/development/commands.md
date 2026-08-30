@@ -32,6 +32,9 @@
 | 命令 | 作用 |
 |---|---|
 | `bun run check` | 依次检查 canonical contract、TypeScript、Oxlint、Oxfmt、Tauri 前端和 VS Code 扩展 |
+| `bun run bootstrap:build` | 将 Script Runtime 的内部 TypeScript bootstrap 打包为 Rust 编译期嵌入的单文件 JS |
+| `bun run bootstrap:check` | 检查 bootstrap 生成物同步并严格检查内部 bridge 类型；不改文件 |
+| `bun run vsix` | 测试并打包 Twee 扩展到 `dist/vscode-narrava-loom/`；可追加 `--install` |
 | `bun run contract:generate` | 从 `bindings/script-contract.json` 更新 Rust 与 TypeScript 生成目录 |
 | `bun run contract:check` | 检查生成目录与 canonical contract 完全同步，不写文件 |
 | `bun run typecheck` | 只检查 TypeScript 声明与示例脚本 |
@@ -49,7 +52,7 @@
 cargo build --release --locked -p narrava-loom-tauri
 cargo run --release --locked -p narrava-loom-core -- \
   build examples dist/NarravaGame target/release/narrava-loom-tauri
-scripts/build-vscode-extension.sh
+bun run vsix
 ```
 
 第一条构建桌面 Host，第二条生成可移动桌面游戏目录，第三条输出 VSIX。构建器不会覆盖已经

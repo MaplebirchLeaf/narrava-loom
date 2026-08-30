@@ -60,12 +60,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: editors/vscode-narrava-loom/package-lock.json
-      - run: scripts/build-vscode-extension.sh
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: bun run vsix
       - uses: actions/upload-artifact@v4
         with:
           name: narrava-loom-twee-vsix

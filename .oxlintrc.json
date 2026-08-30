@@ -13,7 +13,32 @@
   },
   "ignorePatterns": ["dist/**", "node_modules/**", "target/**", "hosts/narrava-loom-tauri/gen/**"],
   "rules": {
-    "no-underscore-dangle": ["error", { "allow": ["__TAURI__"] }],
+    "no-underscore-dangle": [
+      "error",
+      {
+        "allow": [
+          "__TAURI__",
+          "__narrava",
+          "__narravaCallable",
+          "__narravaReactionAdd",
+          "__narravaReactionDisable",
+          "__narravaReactionEnable",
+          "__narravaReactionGet",
+          "__narravaReactionReset",
+          "__narravaResourceHas",
+          "__narravaResourceInfo",
+          "__narravaResourcePaths",
+          "__narravaResourceRead",
+          "__narravaResourceText",
+          "__narravaStateDel",
+          "__narravaStateGet",
+          "__narravaStateHas",
+          "__narravaStateReplace",
+          "__narravaStateSet",
+          "__narravaStateSnapshot"
+        ]
+      }
+    ],
     "unicorn/require-module-specifiers": "off"
   }
 }

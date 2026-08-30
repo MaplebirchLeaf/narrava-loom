@@ -6,19 +6,23 @@
     "editors/vscode-narrava-loom"
   ],
   "scripts": {
-    "check": "bun run contract:check && bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "check": "bun run contract:check && bun run bootstrap:check && bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "bootstrap:build": "bun scripts/build-bootstrap.mjs",
+    "bootstrap:check": "bun scripts/build-bootstrap.mjs --check && tsc -p crates/narrava-loom-script/bootstrap/tsconfig.json",
+    "vsix": "bun scripts/build-vscode-extension.mjs",
     "contract:generate": "node scripts/generate-script-contract.mjs",
     "contract:check": "node scripts/generate-script-contract.mjs --check",
     "typecheck": "tsc -p bindings/typescript/tsconfig.json",
-    "lint": "oxlint --deny-warnings bindings editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts scripts/*.mjs",
-    "format": "oxfmt --write package.json .oxfmtrc.json .oxlintrc.json bindings/typescript editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts scripts/*.mjs",
-    "format:check": "oxfmt --check package.json .oxfmtrc.json .oxlintrc.json bindings/typescript editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts scripts/*.mjs",
+    "lint": "oxlint --deny-warnings bindings crates/narrava-loom-script/bootstrap editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts scripts/*.mjs",
+    "format": "oxfmt --write package.json .oxfmtrc.json .oxlintrc.json bindings/typescript crates/narrava-loom-script/bootstrap editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts scripts/*.mjs",
+    "format:check": "oxfmt --check package.json .oxfmtrc.json .oxlintrc.json bindings/typescript crates/narrava-loom-script/bootstrap editors/vscode-narrava-loom hosts/narrava-loom-tauri/frontend examples/contents/scripts scripts/*.mjs",
     "test": "bun run test:frontend && bun run test:vscode",
     "test:frontend": "node hosts/narrava-loom-tauri/frontend/main.test.mjs",
     "test:vscode": "bun run --cwd editors/vscode-narrava-loom test"
   },
   "devDependencies": {
     "@narrava-loom/types": "workspace:*",
+    "@vscode/vsce": "3.6.2",
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
     "typescript": "^7.0.2"
