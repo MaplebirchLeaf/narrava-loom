@@ -19,7 +19,7 @@ use std::{
     thread,
 };
 
-use narrava_loom_core::resource::ResourceCatalog;
+use narrava_loom_core::{nar::ValidatedNarPackage, resource::ResourceCatalog};
 use serde::Serialize;
 
 pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
@@ -48,28 +48,39 @@ pub struct TauriHost {
 impl TauriHost {
     /// 读取配置并启动 Runtime Worker；游戏目录同时是开发目录或含 `game.nar` 的发行目录。
     pub fn spawn(game_path: &str) -> Result<Self, HostErrorDto> {
-        let config = load_tauri_config(Path::new(game_path))?;
-        Self::spawn_configured(game_path, config.developer())
+        let root = Path::new(game_path);
+        let release = load_release_package(root)?;
+        let config = resolved_tauri_config(root, release.as_ref())?;
+        Self::spawn_configured(
+            game_path,
+            config.developer(),
+            config.title().to_owned(),
+            release,
+        )
     }
 
     /// 按显式 developer 开关启动 Worker（供 `spawn` 与 `run` 复用）。
-    fn spawn_configured(game_path: &str, developer: bool) -> Result<Self, HostErrorDto> {
+    fn spawn_configured(
+        game_path: &str,
+        developer: bool,
+        title: String,
+        release: Option<ValidatedNarPackage>,
+    ) -> Result<Self, HostErrorDto> {
         let (sender, receiver): (Sender<WorkerRequest>, Receiver<WorkerRequest>) = mpsc::channel();
         let root = Path::new(game_path);
-        let resources = Arc::new(match load_release_package(root)? {
+        let resources = Arc::new(match release.as_ref() {
             Some(package) => package.resources().clone(),
             None => ResourceCatalog::discover(root)
                 .map_err(|error| HostErrorDto::new("tauri_host.resource", error.to_string()))?,
         });
-        let config: TauriProjectConfig = load_tauri_config(root)?;
         let mut assets: HostAssetsDto = HostAssetsDto::discover_with_catalog(root, &resources)?;
-        assets.title = config.title().to_owned();
+        assets.title = title;
         let assets = Arc::new(assets);
         let game_path: String = game_path.to_owned();
         let worker_resources: Arc<ResourceCatalog> = Arc::clone(&resources);
         thread::Builder::new()
             .name(String::from("narrava-runtime"))
-            .spawn(move || run_worker(game_path, receiver, worker_resources))
+            .spawn(move || run_worker(game_path, receiver, worker_resources, release))
             .map_err(|error: std::io::Error| {
                 HostErrorDto::new("tauri_host.worker_spawn", error.to_string())
             })?;
@@ -98,6 +109,15 @@ impl TauriHost {
                 interaction: interaction.to_owned(),
                 reply,
             })
+            .map_err(|_| worker_stopped())?;
+        result.recv().map_err(|_| worker_stopped())?
+    }
+
+    /// 沿 Story 历史向前或向后移动。
+    pub fn history(&self, backward: bool) -> Result<HostUpdateDto, HostErrorDto> {
+        let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
+        self.requests
+            .send(WorkerRequest::History { backward, reply })
             .map_err(|_| worker_stopped())?;
         result.recv().map_err(|_| worker_stopped())?
     }
@@ -180,10 +200,28 @@ pub fn game_path_from_args(args: impl IntoIterator<Item = String>) -> String {
     })
 }
 
+/// 优先复用已经完成 ZIP/哈希校验的发行包配置，开发目录才单独读取 config.toml。
+fn resolved_tauri_config(
+    game_path: &Path,
+    release: Option<&ValidatedNarPackage>,
+) -> Result<TauriProjectConfig, HostErrorDto> {
+    match release {
+        Some(package) => package
+            .config_toml()
+            .ok_or_else(|| HostErrorDto::new("tauri_host.config", "game.nar 缺少 config.toml"))
+            .and_then(|text| {
+                TauriProjectConfig::parse(text)
+                    .map_err(|error| HostErrorDto::new("tauri_host.config", error.to_string()))
+            }),
+        None => load_tauri_config(game_path),
+    }
+}
+
 /// 启动共享 Tauri Host；当前仓库的可运行调用方是桌面入口。
 pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
-    let project_config = load_tauri_config(Path::new(game_path))?;
-    let release_package = load_release_package(Path::new(game_path))?;
+    let root = Path::new(game_path);
+    let release_package = load_release_package(root)?;
+    let project_config = resolved_tauri_config(root, release_package.as_ref())?;
     let packaged_icon = match (release_package.as_ref(), project_config.icon()) {
         (Some(package), Some(path)) => package
             .resources()
@@ -192,7 +230,12 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             .map(<[u8]>::to_vec),
         _ => None,
     };
-    let host: TauriHost = TauriHost::spawn_configured(game_path, project_config.developer())?;
+    let host: TauriHost = TauriHost::spawn_configured(
+        game_path,
+        project_config.developer(),
+        project_config.title().to_owned(),
+        release_package,
+    )?;
     let protocol_resources = host.resources.clone();
     let game_path: PathBuf = PathBuf::from(game_path);
     tauri::Builder::default()
@@ -203,6 +246,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         .invoke_handler(tauri::generate_handler![
             commands::start_game,
             commands::activate,
+            commands::history,
             commands::input,
             commands::host_assets,
             commands::save_game,

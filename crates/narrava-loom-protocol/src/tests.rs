@@ -26,6 +26,8 @@ fn runtime_messages_round_trip_without_runtime_objects() {
     let update = RuntimeUpdate::Ready {
         update: HostUpdateDto {
             current: String::from("Start"),
+            can_back: false,
+            can_forward: false,
             nodes: vec![HostNodeDto::Text {
                 key: String::from("start:0:text"),
                 text: String::from("Hello"),
@@ -33,6 +35,10 @@ fn runtime_messages_round_trip_without_runtime_objects() {
         },
     };
     let encoded = serde_json::to_string(&update).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(json["update"]["can_back"], false);
+    assert_eq!(json["update"]["can_forward"], false);
+    assert!(json["update"].get("canBack").is_none());
     assert_eq!(
         serde_json::from_str::<RuntimeUpdate>(&encoded).unwrap(),
         update
@@ -91,6 +97,8 @@ fn session_identity_rejects_values_that_are_unsafe_for_external_registries() {
 fn runtime_protocol_discriminators_match_the_canonical_contract() {
     let commands = [
         RuntimeCommand::Start,
+        RuntimeCommand::Back,
+        RuntimeCommand::Forward,
         RuntimeCommand::Activate {
             interaction: String::new(),
         },
@@ -118,6 +126,8 @@ fn runtime_protocol_discriminators_match_the_canonical_contract() {
 
     let empty_update = HostUpdateDto {
         current: String::new(),
+        can_back: false,
+        can_forward: false,
         nodes: Vec::new(),
     };
     let updates = [

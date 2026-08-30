@@ -22,6 +22,12 @@ pub fn activate(
     host.activate(interaction.as_str())
 }
 
+/// 沿 Story 历史游标移动。
+#[tauri::command]
+pub fn history(backward: bool, host: State<'_, TauriHost>) -> Result<HostUpdateDto, HostErrorDto> {
+    host.history(backward)
+}
+
 /// 写回输入控件值。
 #[tauri::command]
 pub fn input(

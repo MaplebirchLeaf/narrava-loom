@@ -1,7 +1,6 @@
-# Narrava Loom 超级无敌菜鸟游戏制作手册
+# Narrava Loom 入门
 
 > 适用版本：仓库当前 `0.4.0` 开发版
-> 更新日期：2026-08-23
 > 读者：不会 Rust、不会编译器、第一次写互动叙事的人
 
 这份手册从零开始。你不需要理解 Rust，也不需要修改 `src/`、`hosts/` 或 `crates/`。
@@ -51,7 +50,7 @@ cargo run --locked -p narrava-loom-tauri -- examples
 
 ## 你需要安装什么
 
-### 2.1 必需
+### 必需
 
 1. 支持 Rust 2024 Edition 的稳定 Rust 工具链；推荐通过 rustup 安装。
 2. Git，用于取得和更新仓库。
@@ -60,7 +59,7 @@ cargo run --locked -p narrava-loom-tauri -- examples
 各 Linux 发行版、Windows 和 macOS 的系统包不同，不要直接使用其他系统的安装命令。请使用
 [Tauri 官方前置要求](https://v2.tauri.app/start/prerequisites/)中与你的系统对应的一节。
 
-### 2.2 写游戏时不必安装
+### 写游戏时不必安装
 
 - 不必会 Rust；
 - 不必安装 Node.js、npm、Bun 或前端打包器；

@@ -6,26 +6,25 @@
 use narrava_loom_core::{
     expression::value::TextValue,
     host::HostUpdate,
-    semantic::{ActionRole, HeadingLevel, NavigationRole, TextStyle},
+    semantic::{
+        ActionRole, HeadingLevel, NavigationRole, SemanticAction, SemanticInputKind, SemanticNode,
+        SemanticOutput, SemanticTarget, SemanticValue, TextStyle,
+    },
 };
 pub use narrava_loom_protocol::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
-use super::surface::{
-    Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
-};
-
 /// 把 Core 的 HostUpdate 转换为 IPC DTO。
-pub fn convert(update: &HostUpdate) -> HostUpdateDto {
-    // Core 执行输出（semantic）经同构转换成为 Host 消费的 Surface 协议表示。
-    let surface = Surface::from(update.surface());
+pub fn convert(update: &HostUpdate, can_back: bool, can_forward: bool) -> HostUpdateDto {
     HostUpdateDto {
         current: update.current().to_owned(),
-        nodes: convert_output(&surface, &format!("passage:{}", update.current())),
+        nodes: convert_output(update.surface(), &format!("passage:{}", update.current())),
+        can_back,
+        can_forward,
     }
 }
 
 /// 递归转换输出树；无 key 的节点用 `scope:index:kind` 生成稳定 key。
-fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
+fn convert_output(output: &SemanticOutput, scope: &str) -> Vec<HostNodeDto> {
     output
         .nodes()
         .iter()
@@ -36,12 +35,12 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                 |key| key.as_str().to_owned(),
             );
             match node {
-                SurfaceNode::Text(text) => HostNodeDto::Text {
+                SemanticNode::Text(text) => HostNodeDto::Text {
                     key,
                     text: unicode(text),
                 },
-                SurfaceNode::HardBreak => HostNodeDto::HardBreak { key },
-                SurfaceNode::StyledText {
+                SemanticNode::HardBreak => HostNodeDto::HardBreak { key },
+                SemanticNode::StyledText {
                     text,
                     styles,
                     color,
@@ -60,7 +59,7 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                     delay: *delay,
                     heading: heading.map(HeadingLevel::level),
                 },
-                SurfaceNode::Image {
+                SemanticNode::Image {
                     resource,
                     alt,
                     caption,
@@ -70,16 +69,16 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                     alt: unicode(alt),
                     caption: caption.as_ref().map(unicode),
                 },
-                SurfaceNode::Region { region, content } => HostNodeDto::Region {
+                SemanticNode::Region { region, content } => HostNodeDto::Region {
                     nodes: convert_output(content, &key),
                     key,
                     region: region.as_str().to_owned(),
                 },
-                SurfaceNode::Container { content } => HostNodeDto::Container {
+                SemanticNode::Container { content } => HostNodeDto::Container {
                     nodes: convert_output(content, &key),
                     key,
                 },
-                SurfaceNode::Component {
+                SemanticNode::Component {
                     capability,
                     version,
                     properties,
@@ -96,19 +95,19 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                             .collect(),
                     ),
                 },
-                SurfaceNode::Replace { target, content } => HostNodeDto::Replace {
+                SemanticNode::Replace { target, content } => HostNodeDto::Replace {
                     key: key.clone(),
                     target: match target {
-                        SurfaceTarget::Region(region) => {
+                        SemanticTarget::Region(region) => {
                             HostReplaceTargetDto::Region(region.as_str().to_owned())
                         }
-                        SurfaceTarget::Key(target) => {
+                        SemanticTarget::Key(target) => {
                             HostReplaceTargetDto::Key(target.as_str().to_owned())
                         }
                     },
                     nodes: convert_output(content, &key),
                 },
-                SurfaceNode::Action {
+                SemanticNode::Action {
                     label,
                     action,
                     role,
@@ -118,8 +117,8 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                     action: surface_action(*action).to_owned(),
                     role: action_role(*role).to_owned(),
                 },
-                SurfaceNode::Input { id, binding } => match &binding.kind {
-                    SurfaceInputKind::Checkbox {
+                SemanticNode::Input { id, binding } => match &binding.kind {
+                    SemanticInputKind::Checkbox {
                         unchecked,
                         checked,
                         selected,
@@ -130,7 +129,7 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                         checked: surface_value(checked),
                         selected: *selected,
                     },
-                    SurfaceInputKind::Radio {
+                    SemanticInputKind::Radio {
                         group,
                         value,
                         selected,
@@ -141,13 +140,13 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                         value: surface_value(value),
                         selected: *selected,
                     },
-                    SurfaceInputKind::Text { value } => HostNodeDto::Textbox {
+                    SemanticInputKind::Text { value } => HostNodeDto::Textbox {
                         key,
                         id: id.as_str().to_owned(),
                         value: unicode(value),
                     },
                 },
-                SurfaceNode::Navigation {
+                SemanticNode::Navigation {
                     id,
                     label,
                     target,
@@ -166,7 +165,7 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
                         target: target.clone(),
                     },
                 },
-                SurfaceNode::SafeReturn { id, target } => HostNodeDto::SafeReturn {
+                SemanticNode::SafeReturn { id, target } => HostNodeDto::SafeReturn {
                     key,
                     id: id.as_str().to_owned(),
                     target: target.clone(),
@@ -177,31 +176,31 @@ fn convert_output(output: &Surface, scope: &str) -> Vec<HostNodeDto> {
 }
 
 /// 节点种类名（用于生成匿名节点 key）。
-fn node_kind(node: &SurfaceNode) -> &'static str {
+fn node_kind(node: &SemanticNode) -> &'static str {
     match node {
-        SurfaceNode::Text(_) => "text",
-        SurfaceNode::HardBreak => "hard-break",
-        SurfaceNode::StyledText { .. } => "styled-text",
-        SurfaceNode::Image { .. } => "image",
-        SurfaceNode::Region { .. } => "region",
-        SurfaceNode::Container { .. } => "container",
-        SurfaceNode::Component { .. } => "component",
-        SurfaceNode::Replace { .. } => "replace",
-        SurfaceNode::Action { .. } => "action",
-        SurfaceNode::Input { binding, .. } => match binding.kind {
-            SurfaceInputKind::Checkbox { .. } => "checkbox",
-            SurfaceInputKind::Radio { .. } => "radiobutton",
-            SurfaceInputKind::Text { .. } => "textbox",
+        SemanticNode::Text(_) => "text",
+        SemanticNode::HardBreak => "hard-break",
+        SemanticNode::StyledText { .. } => "styled-text",
+        SemanticNode::Image { .. } => "image",
+        SemanticNode::Region { .. } => "region",
+        SemanticNode::Container { .. } => "container",
+        SemanticNode::Component { .. } => "component",
+        SemanticNode::Replace { .. } => "replace",
+        SemanticNode::Action { .. } => "action",
+        SemanticNode::Input { binding, .. } => match binding.kind {
+            SemanticInputKind::Checkbox { .. } => "checkbox",
+            SemanticInputKind::Radio { .. } => "radiobutton",
+            SemanticInputKind::Text { .. } => "textbox",
         },
-        SurfaceNode::Navigation { .. } => "navigation",
-        SurfaceNode::SafeReturn { .. } => "safe-return",
+        SemanticNode::Navigation { .. } => "navigation",
+        SemanticNode::SafeReturn { .. } => "safe-return",
     }
 }
 
 /// 动作枚举 → IPC 名。
-fn surface_action(action: SurfaceAction) -> &'static str {
+fn surface_action(action: SemanticAction) -> &'static str {
     match action {
-        SurfaceAction::Dismiss => "dismiss",
+        SemanticAction::Dismiss => "dismiss",
     }
 }
 
@@ -216,17 +215,17 @@ fn action_role(role: ActionRole) -> &'static str {
 }
 
 /// Surface 值 → JSON（用于组件属性与控件取值）。
-fn surface_value(value: &SurfaceValue) -> serde_json::Value {
+fn surface_value(value: &SemanticValue) -> serde_json::Value {
     match value {
-        SurfaceValue::Null => serde_json::Value::Null,
-        SurfaceValue::Boolean(value) => serde_json::Value::Bool(*value),
-        SurfaceValue::Number(value) => serde_json::Number::from_f64(*value)
+        SemanticValue::Null => serde_json::Value::Null,
+        SemanticValue::Boolean(value) => serde_json::Value::Bool(*value),
+        SemanticValue::Number(value) => serde_json::Number::from_f64(*value)
             .map_or(serde_json::Value::Null, serde_json::Value::Number),
-        SurfaceValue::Text(value) => serde_json::Value::String(value.clone()),
-        SurfaceValue::List(values) => {
+        SemanticValue::Text(value) => serde_json::Value::String(value.clone()),
+        SemanticValue::List(values) => {
             serde_json::Value::Array(values.iter().map(surface_value).collect())
         }
-        SurfaceValue::Map(values) => serde_json::Value::Object(
+        SemanticValue::Map(values) => serde_json::Value::Object(
             values
                 .iter()
                 .map(|(name, value)| (name.clone(), surface_value(value)))

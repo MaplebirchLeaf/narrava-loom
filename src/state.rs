@@ -1,6 +1,9 @@
 //! State 的游戏变量命名空间。
 
-use std::{collections::BTreeMap, rc::Rc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    rc::Rc,
+};
 
 use crate::expression::{
     VariableScope,
@@ -11,10 +14,10 @@ use crate::script::ScriptCallDispatcher;
 
 /// Twee 与 scripts 共用的受控游戏变量存储。
 pub struct State {
-    global: BTreeMap<String, Value>,
+    global: HashMap<String, Value>,
     setup: Value,
-    variables: BTreeMap<String, Value>,
-    temporary: BTreeMap<String, Value>,
+    variables: HashMap<String, Value>,
+    temporary: HashMap<String, Value>,
     script_dispatcher: Option<Rc<dyn ScriptCallDispatcher>>,
 }
 
@@ -25,10 +28,10 @@ pub struct StateSnapshot {
 
 /// 一次覆盖全部 State 命名空间的短期运行事务检查点。
 pub struct StateCheckpoint {
-    global: BTreeMap<String, Value>,
+    global: HashMap<String, Value>,
     setup: Value,
-    variables: BTreeMap<String, Value>,
-    temporary: BTreeMap<String, Value>,
+    variables: HashMap<String, Value>,
+    temporary: HashMap<String, Value>,
 }
 
 /// 一次新游戏重置实际移除的游戏状态数量。
@@ -76,10 +79,10 @@ impl State {
     /// 建立空 State；`setup` 从一开始就是可读取的空对象。
     pub fn new() -> Self {
         Self {
-            global: BTreeMap::new(),
+            global: HashMap::new(),
             setup: Value::object(Vec::new()),
-            variables: BTreeMap::new(),
-            temporary: BTreeMap::new(),
+            variables: HashMap::new(),
+            temporary: HashMap::new(),
             script_dispatcher: None,
         }
     }
@@ -116,9 +119,7 @@ impl State {
 
     /// 按名称遍历普通全局表。
     pub fn global_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
-        self.global
-            .iter()
-            .map(|(name, value)| (name.as_str(), value))
+        sorted_entries(&self.global).into_iter()
     }
 
     /// 写入全局名称，并返回被替换的旧值。
@@ -159,9 +160,7 @@ impl State {
 
     /// 按名称遍历持久游戏变量表。
     pub fn variables_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
-        self.variables
-            .iter()
-            .map(|(name, value)| (name.as_str(), value))
+        sorted_entries(&self.variables).into_iter()
     }
 
     /// 写入 `$name`，并返回被替换的旧值。
@@ -186,9 +185,7 @@ impl State {
 
     /// 按名称遍历临时游戏变量表。
     pub fn temporary_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
-        self.temporary
-            .iter()
-            .map(|(name, value)| (name.as_str(), value))
+        sorted_entries(&self.temporary).into_iter()
     }
 
     /// 写入 `_name`，并返回被替换的旧值。
@@ -231,7 +228,7 @@ impl State {
     ///
     /// `global` 与 `setup` 由当前启动环境管理，因此保持不变。
     pub fn restore(&mut self, snapshot: StateSnapshot) {
-        self.variables = snapshot.variables;
+        self.variables = snapshot.variables.into_iter().collect();
         let _removed: usize = self.temporary_clear();
     }
 
@@ -253,16 +250,16 @@ impl State {
         values.extend(self.temporary.values().cloned());
 
         let detached: Vec<Value> = Value::detached_clone_many(&values);
-        let global: BTreeMap<String, Value> = global_names
+        let global: HashMap<String, Value> = global_names
             .into_iter()
             .zip(detached[..global_count].iter().cloned())
             .collect();
         let setup: Value = detached[setup_index].clone();
-        let variables: BTreeMap<String, Value> = variable_names
+        let variables: HashMap<String, Value> = variable_names
             .into_iter()
             .zip(detached[variable_start..temporary_start].iter().cloned())
             .collect();
-        let temporary: BTreeMap<String, Value> = temporary_names
+        let temporary: HashMap<String, Value> = temporary_names
             .into_iter()
             .zip(detached[temporary_start..].iter().cloned())
             .collect();
@@ -293,6 +290,16 @@ impl State {
             temporary_removed,
         }
     }
+}
+
+/// HashMap 保持热路径平均 O(1)，公开遍历则在边界排序以维持稳定存档与工具输出。
+fn sorted_entries(values: &HashMap<String, Value>) -> Vec<(&str, &Value)> {
+    let mut entries: Vec<(&str, &Value)> = values
+        .iter()
+        .map(|(name, value)| (name.as_str(), value))
+        .collect();
+    entries.sort_unstable_by_key(|(name, _)| *name);
+    entries
 }
 
 impl EvaluationContext for State {

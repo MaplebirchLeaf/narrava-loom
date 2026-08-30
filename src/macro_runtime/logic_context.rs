@@ -34,6 +34,8 @@ where
     story: &'a mut Story,
     locals: &'a mut MacroLocalScopes<Value>,
     args: Option<Value>,
+    execution_limit: usize,
+    executed_steps: usize,
 }
 
 impl<'a, Story> MacroLogicContext<'a, Story>
@@ -54,7 +56,28 @@ where
             story,
             locals,
             args,
+            execution_limit: 1_000_000,
+            executed_steps: 0,
         }
+    }
+
+    /// 覆盖当前逻辑正文的节点/循环迭代预算。
+    pub fn with_execution_limit(mut self, limit: usize) -> Self {
+        self.execution_limit = limit;
+        self
+    }
+
+    /// 消费一个同步逻辑步骤；false 表示本次正文必须立即终止。
+    pub(crate) fn consume_execution_step(&mut self) -> bool {
+        if self.executed_steps >= self.execution_limit {
+            return false;
+        }
+        self.executed_steps += 1;
+        true
+    }
+
+    pub(crate) fn execution_limit(&self) -> usize {
+        self.execution_limit
     }
 
     /// 只读访问 State。

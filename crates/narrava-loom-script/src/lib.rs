@@ -7,6 +7,18 @@ use std::{cell::RefCell, error::Error, fmt, path::Path, rc::Rc, time::Duration};
 
 use boa_engine::{Context, JsValue, Source};
 
+/// 官方 Runtime 单个 ECMAScript 循环允许执行的最大迭代次数。
+const DEFAULT_SCRIPT_LOOP_LIMIT: u64 = 1_000_000;
+
+/// 建立带明确执行上限的 Boa Context，避免作者脚本永久占住 Runtime Worker。
+fn runtime_context(loop_limit: u64) -> Context {
+    let mut context = Context::default();
+    context
+        .runtime_limits_mut()
+        .set_loop_iteration_limit(loop_limit);
+    context
+}
+
 use narrava_loom_core::{
     SourceList,
     expression::{
@@ -78,8 +90,8 @@ impl From<narrava_loom_protocol::HostErrorDto> for ScriptError {
     }
 }
 
-/// 注入到 Boa 的绑定启动脚本：定义 State/Macro/Event/Host/Engine/Story/Save/Resource/
-/// I18n/Surface 全局 API，并把跨语言数据经 `__narrava*` 桥接函数交还给 Rust。
+/// 注入到 Boa 的绑定启动脚本：定义 State、V/T/setup 与其余扁平全局 API，
+/// 并把跨语言数据经 `__narrava*` 桥接函数交还给 Rust。
 const BOOTSTRAP: &str = r#"
 (() => {
   const contract = globalThis.__narravaContract;
@@ -121,6 +133,34 @@ const BOOTSTRAP: &str = r#"
       return { inserted, replaced };
     },
   });
+  // V/T/setup 只把自然的属性语法映射到活动 Rust State；Proxy 不缓存值，
+  // 因此脚本函数每次调用都能看到 Engine、存档恢复或其他脚本写入后的最新状态。
+  const propertyApi = (name) => new Proxy(Object.create(null), {
+    get: (_target, key) => typeof key === "string"
+      ? fromHostValue(__narravaStateGet(name, key))
+      : undefined,
+    set: (_target, key, value) => {
+      if (typeof key !== "string") return false;
+      __narravaStateSet(name, key, toHostValue(key, value));
+      return true;
+    },
+    deleteProperty: (_target, key) => {
+      if (typeof key !== "string") return false;
+      __narravaStateDel(name, key);
+      return true;
+    },
+    has: (_target, key) => typeof key === "string" && __narravaStateHas(name, key),
+    ownKeys: () => Object.keys(__narravaStateSnapshot(name)),
+    getOwnPropertyDescriptor: (_target, key) => {
+      if (typeof key !== "string" || !__narravaStateHas(name, key)) return undefined;
+      return {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: fromHostValue(__narravaStateGet(name, key)),
+      };
+    },
+  });
   globalThis.State = Object.seal({
     global: api("global"), variables: api("variables"), temporary: api("temporary"),
     setup: {
@@ -128,6 +168,9 @@ const BOOTSTRAP: &str = r#"
       set: (value) => fromHostValue(__narravaStateSet("setup", "", toHostValue("setup", value))),
     },
   });
+  globalThis.V = propertyApi("variables");
+  globalThis.T = propertyApi("temporary");
+  globalThis.setup = propertyApi("setup-properties");
   globalThis.Macro = Object.seal({
     add: (name, value) => { const old = macros.get(name); macros.set(name, value); return old },
     update: (name, value) => { if (!macros.has(name)) throw new Error(`Macro 不存在：${name}`); const old = macros.get(name); macros.set(name, value); return old },
@@ -272,7 +315,7 @@ const BOOTSTRAP: &str = r#"
       delay: options.delay,
       heading: options.heading,
     }),
-    hardBreak: (options = {}) => surfaceNode("hard-break", { key: options.key }),
+    hardBreak: () => surfaceNode("hard-break", {}),
     image: (resource, options = {}) => surfaceNode("image", {
       resource: String(resource), key: options.key,
       alt: options.alt ?? "", caption: options.caption,
@@ -572,7 +615,7 @@ impl EcmaRuntime {
         default_locale: &str,
         state: &mut State,
     ) -> Result<Self, ScriptError> {
-        let mut context = Context::default();
+        let mut context = runtime_context(DEFAULT_SCRIPT_LOOP_LIMIT);
         state_bridge::install(&mut context)
             .map_err(|error| script_error("script.state_bridge", error))?;
         resource_bridge::install(&mut context, resources.clone())

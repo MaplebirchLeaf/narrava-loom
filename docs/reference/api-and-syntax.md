@@ -116,11 +116,20 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 
 ## 5. Worker ECMAScript 全局 API
 
-游戏脚本直接使用下列大写全局；完整类型签名位于
+游戏脚本直接使用下列全局；完整类型签名位于
 [`bindings/typescript/narrava.d.ts`](../../bindings/typescript/narrava.d.ts)。Worker 没有
 `window`、`document` 或 Tauri API，也不存在统一的 `narrava` 聚合对象。
 
 ### `State`
+
+日常状态使用属性语法：
+
+- `V.name`：持久变量，与 Twee `$name` 相同，进入存档；
+- `T.name`：临时变量，与 Twee `_name` 相同，恢复存档时清空；
+- `setup.name`：启动配置，与 Twee `setup.name` 相同。
+
+三者支持读取、赋值、动态方括号、`in`、`Object.keys()` 和 `delete`，并直接代理活动 Rust
+State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整 `State` API：
 
 - `State.global/variables/temporary.get(name)`、`has(name)`、`set(name, value)`、`del(name)`
 - `State.global/variables/temporary.extend(values)`
@@ -172,6 +181,7 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 ### `Surface`
 
 - `text(text, { key?, styles?, color?, delay?, heading? })`
+- `hardBreak()`
 - `image(resource, { key?, alt?, caption? })`
 - `region(region, children, { key? })`
 - `component(capability, version, properties, fallback, { key? })`

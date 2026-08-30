@@ -11,6 +11,8 @@ const passageHeader = document.querySelector(".passage-header")
 const passageFooter = document.querySelector("#passage-footer-surface")
 const bar = document.querySelector("nv-ui-bar")
 const barToggle = document.querySelector("#ui-bar-toggle")
+const historyBackward = document.querySelector("#history-backward")
+const historyForward = document.querySelector("#history-forward")
 const barSurface = document.querySelector("#bar-surface")
 const status = document.querySelector("#status")
 const dialog = document.querySelector("#nv-dialog")
@@ -51,6 +53,8 @@ function render(update) {
   const focusedKey = document.activeElement?.closest?.("[data-surface-key]")?.dataset.surfaceKey
   passageRoot.dataset.passage = update.current
   passageRoot.setAttribute("aria-label", update.current)
+  historyBackward.disabled = !update.can_back
+  historyForward.disabled = !update.can_forward
 
   const regions = new Map()
   const main = []
@@ -441,13 +445,29 @@ async function activate(interaction) {
   try {
     const update = await invoke("activate", { interaction })
     render(update)
-    return structuredClone(update)
   } catch (error) {
     showError(error)
   } finally {
     setBusy(false)
   }
 }
+
+/** Story 历史由 RuntimeSession 重放；WebView 不使用浏览器 history 冒充游戏状态。 */
+async function moveHistory(backward) {
+  setBusy(true, backward ? "正在返回上一页…" : "正在前往下一页…")
+  historyBackward.disabled = true
+  historyForward.disabled = true
+  try {
+    render(await invoke("history", { backward }))
+  } catch (error) {
+    showError(error)
+  } finally {
+    setBusy(false)
+  }
+}
+
+historyBackward.addEventListener("click", () => void moveHistory(true))
+historyForward.addEventListener("click", () => void moveHistory(false))
 
 /** 输入先由 Worker 校验并写入 State；失败时调用方负责恢复控件的已提交值。 */
 async function submitInput(interaction, value) {

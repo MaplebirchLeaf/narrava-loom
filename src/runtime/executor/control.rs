@@ -106,6 +106,7 @@ where
         loop_node: &HirWhile<'source>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         loop {
+            self.consume_execution_step()?;
             let condition: Value = self.evaluate(&loop_node.condition)?;
             if !condition.is_truthy() {
                 return Ok(BodyControl::Continue);
@@ -140,6 +141,7 @@ where
             .map_err(RuntimeExecutionError::Logic)?;
 
         for value in values {
+            self.consume_execution_step()?;
             self.assign(&loop_node.target.value, value)?;
             match self.execute_body(&loop_node.body)? {
                 BodyControl::Continue | BodyControl::ContinueLoop => continue,
@@ -189,6 +191,7 @@ where
         } else {
             current >= end_number
         } {
+            self.consume_execution_step()?;
             self.assign(&loop_node.target.value, Value::Number(current))?;
             match self.execute_body(&loop_node.body)? {
                 BodyControl::Continue | BodyControl::ContinueLoop => {}

@@ -177,6 +177,7 @@ pub struct ValidatedNarPackage {
     sources: SourceList,
     bytecode: BytecodeProgram,
     resources: ResourceCatalog,
+    config_toml: Option<String>,
 }
 
 /// `.nar` 构建或校验阶段的稳定失败原因。
@@ -411,11 +412,13 @@ impl NarPackage {
         }
         let resources =
             ResourceCatalog::new(resource_inputs).map_err(NarPackageError::InvalidResource)?;
+        let config_toml: Option<String> = self.config_toml().map(str::to_owned);
         Ok(ValidatedNarPackage {
             game,
             sources,
             bytecode,
             resources,
+            config_toml,
         })
     }
 
@@ -451,6 +454,11 @@ impl ValidatedNarPackage {
     /// 包内资源目录。
     pub fn resources(&self) -> &ResourceCatalog {
         &self.resources
+    }
+
+    /// 返回已经随包哈希校验过的作者配置文本。
+    pub fn config_toml(&self) -> Option<&str> {
+        self.config_toml.as_deref()
     }
 
     /// 使用已反序列化的拥有型 Bytecode，并把借用 Script Bundle 限定在回调内。

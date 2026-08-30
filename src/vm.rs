@@ -44,6 +44,8 @@ pub enum MirStep {
 /// LIR 单步执行不能继续的稳定原因。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MirExecutionError {
+    /// 单条执行链消耗的 Bytecode 指令超过显式预算。
+    InstructionLimitExceeded { limit: usize },
     /// 引用的 Passage 不在当前 Bytecode 程序内。
     MissingPassage,
     /// 给定的运行语言不属于当前程序的 I18n 目录。
@@ -74,7 +76,12 @@ pub struct MirExecutionFrame {
     output: SemanticOutput,
     navigation: Option<String>,
     includes_entered: usize,
+    instruction_limit: usize,
+    instructions_executed: usize,
 }
+
+/// 官方 Runtime 单条连续执行链的默认 Bytecode 指令预算。
+pub const DEFAULT_INSTRUCTION_LIMIT: usize = 1_000_000;
 
 /// 单个活动 Passage／Macro 正文的执行帧：当前位置、临时槽与静默输出状态。
 #[derive(Debug, PartialEq)]
@@ -179,6 +186,8 @@ impl MirExecutionFrame {
             output: SemanticOutput::default(),
             navigation: None,
             includes_entered: 0,
+            instruction_limit: DEFAULT_INSTRUCTION_LIMIT,
+            instructions_executed: 0,
         }
     }
 
@@ -189,7 +198,15 @@ impl MirExecutionFrame {
             output: SemanticOutput::default(),
             navigation: None,
             includes_entered: 0,
+            instruction_limit: DEFAULT_INSTRUCTION_LIMIT,
+            instructions_executed: 0,
         }
+    }
+
+    /// 覆盖本执行帧的指令预算；主要供 Host 策略与确定性测试使用。
+    pub fn with_instruction_limit(mut self, limit: usize) -> Self {
+        self.instruction_limit = limit;
+        self
     }
 
     /// 读取 Macro 正文当前位置尚未由 Macro 控制器处理的动态调用。
@@ -243,6 +260,7 @@ impl MirExecutionFrame {
         if self.navigation.is_some() {
             return Ok(MirStep::NavigationPending);
         }
+        self.consume_instructions(1)?;
         let instruction: &BytecodeInstruction = body
             .instruction(self.location().instruction())
             .ok_or(MirExecutionError::InvalidInstructionPointer)?;
@@ -351,6 +369,17 @@ impl MirExecutionFrame {
             .next(instruction_count)
             .ok_or(MirExecutionError::InvalidInstructionPointer)?;
         self.current_mut().location = next;
+        Ok(())
+    }
+
+    pub(super) fn consume_instructions(&mut self, count: usize) -> Result<(), MirExecutionError> {
+        let next: usize = self.instructions_executed.saturating_add(count);
+        if next > self.instruction_limit {
+            return Err(MirExecutionError::InstructionLimitExceeded {
+                limit: self.instruction_limit,
+            });
+        }
+        self.instructions_executed = next;
         Ok(())
     }
 

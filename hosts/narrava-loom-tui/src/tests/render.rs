@@ -10,6 +10,8 @@ use narrava_loom_script::protocol_adapter::{Surface, SurfaceKey, SurfaceNode, Su
 fn runtime_dto_renders_without_borrowing_core_host_update() {
     let update = narrava_loom_protocol::HostUpdateDto {
         current: String::from("Start"),
+        can_back: false,
+        can_forward: false,
         nodes: vec![narrava_loom_protocol::HostNodeDto::Region {
             key: String::from("bar"),
             region: String::from("bar"),

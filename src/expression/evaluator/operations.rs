@@ -251,8 +251,7 @@ fn contains_member(
             let key: String = key
                 .to_unicode_string()
                 .ok_or(EvalError::InvalidStringConversion(needle_span))?;
-            Ok(properties
-                .with(|values: &Vec<(String, Value)>| values.iter().any(|(name, _)| name == &key)))
+            Ok(properties.contains_key(&key))
         }
         Value::String(text) => {
             let Value::String(fragment) = needle else {

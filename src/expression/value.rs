@@ -117,6 +117,8 @@ impl PartialEq for ArrayValue {
 #[derive(Clone, Debug)]
 pub struct ObjectValue {
     reference: ValueReference<Vec<(String, Value)>>,
+    /// 属性仍按插入顺序保存；首次按名读取后建立共享哈希索引，写入时失效。
+    index: Rc<RefCell<Option<HashMap<String, usize>>>>,
 }
 
 impl ObjectValue {
@@ -124,6 +126,7 @@ impl ObjectValue {
     pub fn new(properties: Vec<(String, Value)>) -> Self {
         Self {
             reference: ValueReference::new(properties),
+            index: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -140,6 +143,56 @@ impl ObjectValue {
     /// 克隆全部属性；结果与共享引用脱离关系。
     pub fn snapshot(&self) -> Vec<(String, Value)> {
         self.reference.with(Clone::clone)
+    }
+
+    /// 按属性名进行平均 O(1) 查找；返回 Value 句柄克隆而不复制集合图。
+    pub fn get(&self, name: &str) -> Option<Value> {
+        let position: usize = self.position(name)?;
+        self.reference
+            .with(|properties| properties.get(position).map(|(_, value)| value.clone()))
+    }
+
+    /// 查询自身属性是否存在，不进入任何原型语义。
+    pub fn contains_key(&self, name: &str) -> bool {
+        self.position(name).is_some()
+    }
+
+    /// 写入自身属性并返回旧值；已有属性保持原位置，新属性追加到末尾。
+    pub fn insert(&self, name: impl Into<String>, value: Value) -> Option<Value> {
+        let name: String = name.into();
+        if let Some(position) = self.position(&name) {
+            return self.reference.with_mut(|properties| {
+                *self.index.borrow_mut() = None;
+                properties
+                    .get_mut(position)
+                    .map(|(_, current)| std::mem::replace(current, value))
+            });
+        }
+        self.with_mut(|properties| properties.push((name, value)));
+        None
+    }
+
+    /// 删除自身属性并返回旧值；后续哈希索引会按剩余顺序惰性重建。
+    pub fn remove(&self, name: &str) -> Option<Value> {
+        let position: usize = self.position(name)?;
+        self.with_mut(|properties| Some(properties.remove(position).1))
+    }
+
+    fn position(&self, name: &str) -> Option<usize> {
+        if self.index.borrow().is_none() {
+            let index: HashMap<String, usize> = self.reference.with(|properties| {
+                properties
+                    .iter()
+                    .enumerate()
+                    .map(|(position, (name, _))| (name.clone(), position))
+                    .collect()
+            });
+            *self.index.borrow_mut() = Some(index);
+        }
+        self.index
+            .borrow()
+            .as_ref()
+            .and_then(|index| index.get(name).copied())
     }
 
     /// 两个句柄是否指向同一共享对象。
@@ -159,6 +212,8 @@ impl ObjectValue {
 
     /// 受控可变访问共享属性，修改会跨克隆保留。
     pub(crate) fn with_mut<R>(&self, write: impl FnOnce(&mut Vec<(String, Value)>) -> R) -> R {
+        // 先失效可保证 write panic 时也不会留下指向旧位置的索引。
+        *self.index.borrow_mut() = None;
         self.reference.with_mut(write)
     }
 }

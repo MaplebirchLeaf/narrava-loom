@@ -1,8 +1,6 @@
 # Runtime Session 收敛规格
 
 > 状态：Tauri 与 TUI 已接入
->
-> 更新日期：2026-08-29
 
 ## 目标
 
@@ -35,6 +33,7 @@ RuntimeCommand → RuntimeSession → RuntimeUpdate | PendingOperation
 ## 当前命令
 
 - `start`：启动当前单局 Session；首帧产生后再次启动会被拒绝；
+- `back`／`forward`：沿 Story 游标重放历史 Passage，不新增访问记录；
 - `activate`：激活上一份更新公开的 interaction；
 - `input`：提交上一份更新公开且校验通过的输入值；
 - `save`：Runtime 先准备拥有型平台请求；Host 只读写文件，Resume 后由 Session 验证、恢复并同步 Script State；
@@ -45,6 +44,9 @@ RuntimeCommand → RuntimeSession → RuntimeUpdate | PendingOperation
 
 RuntimeSession 的状态机测试直接替换 `ScriptAdapter`，覆盖未启动命令、挂起期拒绝新命令、
 operation mismatch 不丢失 continuation、cancel、再次 pending 以及特殊区域 pending。
+
+每份 Ready 更新携带 `can_back`／`can_forward`。Tauri 据此启用侧栏历史按钮，TUI 使用
+`back`／`forward`（简写 `b`／`f`）；Host 不用浏览器或终端自己的历史代替 Story。
 
 ## 挂起模型
 

@@ -30,20 +30,21 @@ State.global.set("greeting", greeting)
 - 当前执行环境是 Rust Worker，不提供浏览器或 Tauri API；
 - 可保存数据只能是 Narrava 数据，函数句柄不能进入存档变量图。
 
-### 13.1 为什么游戏脚本直接使用顶层单例
+### 为什么游戏脚本直接使用顶层单例
 
 游戏脚本在 Rust 内的 ECMAScript Runtime 中执行。
 
 Script Binding 直接提供职责明确的顶层单例，不再套一层 `narrava` 命名空间：
 
 ```ts
-State.variables.set("coins", 10)
+V.coins = 10
 Logger.info("game", "脚本已加载")
 Event.emit("game:ready", { coins: 10 })
 ```
 
-`Engine`、`State`、`Macro`、`Story`、`Logger`、`Event`、`Host`、`Save`、`Resource`、`I18n`
-和 `Surface` 是彼此独立的公开契约。Worker 中不存在 `narrava.Save` 或聚合对象
+`Engine`、`State`、`V`、`T`、`setup`、`Macro`、`Story`、`Logger`、`Event`、`Host`、
+`Save`、`Resource`、`I18n` 和 `Surface` 是彼此独立的公开契约。Worker 中不存在
+`narrava.Save` 或聚合对象
 `globalThis.narrava`。
 
 WebView DevTools（F12）只属于开发模式调试桥，不是游戏脚本 API，发布模式不会注入。
@@ -54,7 +55,20 @@ WebView DevTools（F12）只属于开发模式调试桥，不是游戏脚本 API
 
 ## State 脚本 API
 
-四个入口：
+日常变量操作直接使用属性语法：
+
+```ts
+V.coins = 3                 // State.variables：进入存档
+T.result = "ok"             // State.temporary：读档时清空
+setup.difficulty = "normal" // State.setup：启动配置
+
+const coins = V.coins
+const dynamic = V[variableName]
+delete T.result
+```
+
+`V`、`T` 和 `setup` 是活动 Rust State 的代理，不是 JavaScript 副本；读取、赋值、`in`、
+`Object.keys` 与 `delete` 都立即作用于同一份状态。需要动态键、旧值或批量写入时使用完整入口：
 
 ```ts
 State.global.get("name")
@@ -63,8 +77,6 @@ State.global.set("name", value)
 State.global.del("name")
 State.global.extend({ one: 1, two: 2 })
 
-State.variables.set("coins", 3)
-State.temporary.set("result", "ok")
 State.setup.set({ difficulty: "normal" })
 ```
 

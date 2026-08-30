@@ -1,11 +1,20 @@
 /// <reference types="@narrava-loom/types" />
-// 综合示例脚本：演示脚本全局（State/Resource/Story/Engine/Save/Logger/I18n/Event）
-// 与 Surface 宏的用法；这些函数经 State.global 暴露后可在 .twee 中调用。
+// 综合示例脚本：先定义供 Twee 调用的函数，再注册 Surface Macro，最后统一公开函数。
+
+// setup 是启动配置，不进入存档；脚本模块加载时建立本示例需要的稳定字段。
+setup.build = "grand-tour"
 
 /** 记录客人名到 temporary 并返回欢迎语。 */
 function scriptedGreeting(name: string): string {
-  State.temporary.set("lastGuest", name)
+  T.lastGuest = name
   return `欢迎阅读，${name}`
+}
+
+/** 演示 V/T/setup 与 Twee 的 $/_/setup 共享同一份活动 Rust State。 */
+function inspectState(): string {
+  V.scriptChecks = typeof V.scriptChecks === "number" ? V.scriptChecks + 1 : 1
+  T.lastTool = "state"
+  return `脚本检查 ${V.scriptChecks} 次；build=${String(setup.build)}`
 }
 
 /** 按优先级挑选并读取指南文本；找不到时给出提示。 */
@@ -214,6 +223,7 @@ Event.emit("game:ready", { locale: I18n.locale, resources: Resource.paths().leng
 Logger.info("example.script", `综合示例脚本已加载：${I18n.locale}`)
 State.global.extend({
   scriptedGreeting,
+  inspectState,
   resourceSummary,
   returnToHall,
   saveGame,

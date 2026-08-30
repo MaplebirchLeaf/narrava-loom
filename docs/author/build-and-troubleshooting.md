@@ -2,7 +2,7 @@
 
 ## 运行、检查、构建：三个命令不是一回事
 
-### 22.1 只检查游戏
+### 只检查游戏
 
 ```bash
 cargo run -p narrava-loom-core -- my-game
@@ -10,7 +10,7 @@ cargo run -p narrava-loom-core -- my-game
 
 它检查配置、Source、Resource、Twee、HIR、MIR、LIR 与 Bytecode，不打开窗口。
 
-### 22.2 开发时打开 Tauri
+### 开发时打开 Tauri
 
 ```bash
 cargo run -p narrava-loom-tauri -- my-game
@@ -24,7 +24,7 @@ target/debug/narrava-loom-tauri
 
 开发二进制没有内置游戏；请继续显式传入游戏目录。
 
-### 22.3 生成优化后的裸二进制
+### 生成优化后的裸二进制
 
 ```bash
 cargo build --release -p narrava-loom-tauri
@@ -44,7 +44,7 @@ bundle，避免生成身份仍叫 Narrava Loom、又没有携带游戏包的错�
 仓库约定：所有构建输出统一写入 `dist/`（不入库），不要写进 `target/`。游戏发行目录
 输出到 `dist/NarravaGame/`，VS Code 扩展包输出到 `dist/vscode-narrava-loom/`。
 
-### 22.4 生成正式可移动游戏目录
+### 生成正式可移动游戏目录
 
 先构建优化后的官方 Host，再让 Core 打包游戏：
 
@@ -155,19 +155,6 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 | 窗口启动后空白 | 启动或 Renderer 报错 | 看错误 Dialog 和终端输出，先运行 Core 检查命令 |
 | 再次启动说端口占用 | 通常是你另开的开发服务 | Tauri Host 本身不要求作者启动 HTTP 服务 |
 
-## 新手最容易犯的十个错误
-
-1. 修改引擎 `src/`，却以为是在写游戏。
-2. 把游戏放到 `examples/contents/` 里面，而不是复制整个 `examples/`。
-3. 把 `Start` 写成 `start`。
-4. 在正文直接写 `$variable`，期待自动替换。
-5. 把 `[[目标|显示文字]]` 写反。
-6. 在 Worker 脚本中使用 `window`、`document`、浏览器 fetch 或 Tauri API。
-7. Resource 路径写成 `resources/images/a.png`。
-8. 认为没有 CSS 就不能运行。
-9. 认为 `cargo build` 已生成玩家安装包。
-10. 把 ModLoader/ModUtils 当成基础游戏 API。
-
 ## 推荐的制作顺序
 
 1. 只写 `config.toml` 和一个 `Start`。
@@ -180,28 +167,6 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 8. 再加入 Resource。
 9. 最后加入可选 CSS 和语言包。
 10. 最后用 `:: Bar` 中的 `<<barDemo>>` 入口验证存档、语言和日志；模组能力等待独立 ModLoader。
-
-## 当前能力状态表
-
-| 能力 | 状态 | 作者现在怎么用 |
-|---|---|---|
-| 配置、Source、Resource 发现 | 已可用 | 直接按目录约定编写 |
-| Twee → Bytecode → VM | 已可用 | Core CLI 检查，Tauri 运行 |
-| 文本、变量、逻辑与导航 | 已可用 | Twee |
-| Tauri 窗口和默认 Renderer | 已可用 | `cargo run -p narrava-loom-tauri` |
-| 可选游戏 CSS | 已可用 | `styles/**/*.css` |
-| TS 去类型和 ECMAScript 执行 | 已可用 | `contents/**/*.ts/js` |
-| 脚本函数供 Expression 调用 | 已验证 | `State.global.set/extend` |
-| Resource 脚本读取 | 已可用 | `Resource.*` |
-| 同步与异步 Promise Macro | 已可用 | 外部等待使用 `await Host.delay(ms)` |
-| I18n 数据模型与 fallback | 已可用 | 游戏脚本使用 `I18n`，界面由作者定义 |
-| Save 数据模型与命名槽位 | 已可用 | 游戏脚本使用 `Save.export/import`，界面由作者定义 |
-| 作者自定义 Event 总线 | 已可用 | `Event` |
-| Passage 内置生命周期事件 | 已可用 | `passage:init/start/render/display/end` |
-| Story/Save 其他内置事件 | 尚无 | 不要猜测事件名 |
-| Host 诊断记录 | 已可用 | Host 保存有界记录；游戏内日志界面由作者定义 |
-| ModLoader/ModUtils | 本体之外 | 等 `narrava-loom-modloader` |
-| 正式发布流水线 | 已配置 | tag 或手动触发 `Release packages` |
 
 ## 一个可直接复制的最小游戏
 

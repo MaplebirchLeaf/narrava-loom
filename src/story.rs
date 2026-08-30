@@ -182,6 +182,17 @@ impl<'hir, 'source> Story<'hir, 'source> {
         self.position
     }
 
+    /// 当前游标之前是否还有历史项。
+    pub fn can_back(&self) -> bool {
+        self.position.is_some_and(|position| position > 0)
+    }
+
+    /// 当前游标之后是否还有历史项。
+    pub fn can_forward(&self) -> bool {
+        self.position
+            .is_some_and(|position| position.saturating_add(1) < self.history.len())
+    }
+
     /// 按区分大小写的 PassageName 统计已经确认的访问记录。
     pub fn visits(&self, name: &str) -> usize {
         let visits: usize = self

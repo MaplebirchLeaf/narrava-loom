@@ -18,6 +18,7 @@ use super::{BodyControl, execute_hir_body};
 /// 首组逻辑节点执行时保留各自所属边界的错误。
 #[derive(Debug, PartialEq)]
 pub enum LogicNodeError<StoryError> {
+    ExecutionLimitExceeded { limit: usize },
     Evaluation(EvalError),
     InvalidText(crate::expression::Span),
     Story(StoryMacroError<StoryError>),
@@ -28,6 +29,11 @@ impl<StoryError> LogicNodeError<StoryError> {
     /// 产生稳定 Diagnostic；源码位置由持有 HIR Passage 的上层附加。
     pub fn diagnostic(self, convert_story: impl FnOnce(StoryError) -> Diagnostic) -> Diagnostic {
         match self {
+            Self::ExecutionLimitExceeded { limit } => Diagnostic::new(
+                "runtime.logic.execution_limit_exceeded",
+                DiagnosticSeverity::Error,
+                &format!("同步逻辑执行超过步骤预算：{limit}"),
+            ),
             Self::Evaluation(error) => error.diagnostic(),
             Self::InvalidText(_) => Diagnostic::new(
                 "runtime.invalid_text_value",
@@ -52,6 +58,11 @@ pub fn execute_logic_node<Story>(
 where
     Story: MacroStoryAccess + ?Sized,
 {
+    if !context.consume_execution_step() {
+        return Err(LogicNodeError::ExecutionLimitExceeded {
+            limit: context.execution_limit(),
+        });
+    }
     match &node.kind {
         HirBodyKind::Text(_) => Ok(BodyControl::Continue),
         HirBodyKind::Print(HirPrint::Literal(_)) => Ok(BodyControl::Continue),
@@ -116,6 +127,11 @@ where
     };
 
     for value in values {
+        if !context.consume_execution_step() {
+            return Err(LogicNodeError::ExecutionLimitExceeded {
+                limit: context.execution_limit(),
+            });
+        }
         if let Some(control) = execute_for_value(loop_node, value, context)? {
             return Ok(control);
         }
@@ -167,6 +183,11 @@ where
     } else {
         current >= end_number
     } {
+        if !context.consume_execution_step() {
+            return Err(LogicNodeError::ExecutionLimitExceeded {
+                limit: context.execution_limit(),
+            });
+        }
         if let Some(control) = execute_for_value(loop_node, Value::Number(current), context)? {
             return Ok(control);
         }
@@ -250,6 +271,11 @@ where
     Story: MacroStoryAccess + ?Sized,
 {
     loop {
+        if !context.consume_execution_step() {
+            return Err(LogicNodeError::ExecutionLimitExceeded {
+                limit: context.execution_limit(),
+            });
+        }
         let condition: Value =
             evaluate_with_mut(&loop_node.condition, context).map_err(LogicNodeError::Evaluation)?;
         if !condition.is_truthy() {

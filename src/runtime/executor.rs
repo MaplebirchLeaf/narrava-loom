@@ -35,6 +35,8 @@ use super::{
 /// 上层节点分派保留逻辑节点与动态 Macro 各自的错误类型。
 #[derive(Debug, PartialEq)]
 pub enum RuntimeExecutionError<StoryError> {
+    /// 同步 HIR 正文消耗的节点/循环步骤超过预算。
+    ExecutionLimitExceeded { limit: usize },
     /// HIR 逻辑节点（求值、Story 请求等）失败。
     Logic(LogicNodeError<StoryError>),
     /// Widget 调用或正文执行失败。
@@ -88,6 +90,8 @@ pub struct RuntimeExecutionContext<'runtime, 'hir, 'source, Story: ?Sized, Nativ
     native_macros: Option<&'runtime mut dyn NativeMacroCallbacks<Native, Story>>,
     include_limit: Option<usize>,
     included_passages: usize,
+    execution_limit: usize,
+    executed_steps: usize,
     capture_names: Vec<&'source str>,
     /// 当前执行链按源码顺序累积的有序输出；公共入口结束时取走。
     output: SemanticOutput,
@@ -116,6 +120,8 @@ where
             native_macros: None,
             include_limit: None,
             included_passages: 0,
+            execution_limit: 1_000_000,
+            executed_steps: 0,
             capture_names: Vec::new(),
             output: SemanticOutput::default(),
         }
@@ -144,6 +150,7 @@ where
         &mut self,
         node: &HirBodyNode<'source>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
+        self.consume_execution_step()?;
         match &node.kind {
             HirBodyKind::Text(text) => {
                 // 静态正文直接进入 SemanticOutput，不进行二次语法解释。
@@ -185,6 +192,16 @@ where
                 execute_logic_node(node, &mut context).map_err(RuntimeExecutionError::Logic)
             }
         }
+    }
+
+    fn consume_execution_step(&mut self) -> Result<(), RuntimeExecutionError<Story::Error>> {
+        if self.executed_steps >= self.execution_limit {
+            return Err(RuntimeExecutionError::ExecutionLimitExceeded {
+                limit: self.execution_limit,
+            });
+        }
+        self.executed_steps += 1;
+        Ok(())
     }
 
     /// 按顺序执行正文，并在首个非 Continue 控制信号处停止。

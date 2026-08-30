@@ -56,7 +56,7 @@ enum Waiting<'hir, 'source> {
         execution: narrava_loom_core::host::HostExecutionToken,
     },
     Special(Box<SpecialWaiting<'hir, 'source>>),
-    Platform(PlatformWaiting),
+    Platform(Box<PlatformWaiting>),
 }
 
 enum PlatformAction {
@@ -102,7 +102,7 @@ pub struct RuntimeSession<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDisp
     pending: HostPendingExecutions<EngineMirContinuation<'hir, 'source, ScriptPending>>,
     scheduled: Option<ScriptPending>,
     waiting: Option<Waiting<'hir, 'source>>,
-    presented: Option<HostUpdate>,
+    presented: Option<Rc<HostUpdate>>,
     language: Option<I18nRuntimeLanguage>,
     sequence: u64,
     platform: Box<dyn RuntimePlatform<'hir, 'source> + 'hir>,
@@ -171,6 +171,8 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let processes_script_save: bool = matches!(
             &command,
             RuntimeCommand::Start
+                | RuntimeCommand::Back
+                | RuntimeCommand::Forward
                 | RuntimeCommand::Activate { .. }
                 | RuntimeCommand::Input { .. }
                 | RuntimeCommand::Resume { .. }
@@ -179,6 +181,8 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             matches!(&command, RuntimeCommand::Input { .. }).then(|| self.state.checkpoint());
         let update: RuntimeUpdate = match command {
             RuntimeCommand::Start => self.start(),
+            RuntimeCommand::Back => self.history(true),
+            RuntimeCommand::Forward => self.history(false),
             RuntimeCommand::Activate { interaction } => self.activate(&interaction),
             RuntimeCommand::Input { interaction, value } => self.input(&interaction, value),
             RuntimeCommand::Save { operation, target } => {
@@ -273,7 +277,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
 
     fn activate(&mut self, interaction: &str) -> Result<RuntimeUpdate, HostErrorDto> {
         self.ensure_idle()?;
-        let previous: HostUpdate = self.presented.clone().ok_or_else(|| {
+        let previous: Rc<HostUpdate> = self.presented.clone().ok_or_else(|| {
             HostErrorDto::new("runtime_session.not_started", "必须先启动 Runtime")
         })?;
         let id: InteractionId = InteractionId::parse(interaction)
@@ -282,7 +286,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
         let language: Option<I18nRuntimeLanguage> = self.language.clone();
         let request = HostMirAdvanceRequest {
-            presented: &previous,
+            presented: previous.as_ref(),
             input: HostInput::activate(id.clone()),
             params: &params,
             identity,
@@ -356,13 +360,60 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         self.drive_main(result)
     }
 
+    fn history(&mut self, backward: bool) -> Result<RuntimeUpdate, HostErrorDto> {
+        self.ensure_idle()?;
+        if self.presented.is_none() {
+            return Err(HostErrorDto::new(
+                "runtime_session.not_started",
+                "必须先启动 Runtime",
+            ));
+        }
+        if (backward && !self.story.can_back()) || (!backward && !self.story.can_forward()) {
+            return Err(HostErrorDto::new(
+                "runtime_session.history_unavailable",
+                "Story 历史中没有该方向的条目",
+            ));
+        }
+        let params = Value::Null;
+        let identity = self.identity(STORY_ID);
+        let language = self.language.clone();
+        let result = HostApi::history_mir(
+            &mut self.pending,
+            &mut self.state,
+            &mut self.story,
+            self.bytecode,
+            backward,
+            HostMirRequest {
+                params: &params,
+                identity,
+                limits: limits(),
+                language: language.as_ref(),
+            },
+            |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+            |invocation, state, requests, scopes| {
+                dispatch_macro(
+                    self.script.as_ref(),
+                    self.hir,
+                    &mut self.interactions,
+                    &mut self.scheduled,
+                    invocation,
+                    state,
+                    requests,
+                    scopes,
+                )
+            },
+        )
+        .map_err(|error| diagnostic(error.diagnostic.clone()));
+        self.drive_main(result)
+    }
+
     fn input(
         &mut self,
         interaction: &str,
         value: serde_json::Value,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         self.ensure_idle()?;
-        let previous: &HostUpdate = self.presented.as_ref().ok_or_else(|| {
+        let previous: &HostUpdate = self.presented.as_deref().ok_or_else(|| {
             HostErrorDto::new("runtime_session.not_started", "必须先启动 Runtime")
         })?;
         let id: InteractionId = InteractionId::parse(interaction).map_err(|error| {
@@ -427,7 +478,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 self.drive_main(result)
             }
             Waiting::Special(waiting) => self.resume_special(*waiting),
-            Waiting::Platform(waiting) => self.resume_platform(waiting, _result),
+            Waiting::Platform(waiting) => self.resume_platform(*waiting, _result),
         }
     }
 
@@ -592,10 +643,9 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 }
             }
         }
-        self.presented = Some(update.clone());
-        Ok(RuntimeUpdate::Ready {
-            update: convert(&update),
-        })
+        let dto = convert(&update, self.story.can_back(), self.story.can_forward());
+        self.presented = Some(Rc::new(update));
+        Ok(RuntimeUpdate::Ready { update: dto })
     }
 
     fn resume_special(

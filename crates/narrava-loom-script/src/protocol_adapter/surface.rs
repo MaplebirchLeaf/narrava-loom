@@ -10,47 +10,28 @@ use narrava_loom_core::{
     expression::value::TextValue,
     semantic::{
         ActionRole, ComponentCapability, HeadingLevel, InputGroupId, InteractionId, NavigationRole,
-        RegionId, TextColor, TextStyle,
+        RegionId, SemanticKey, TextColor, TextStyle,
     },
 };
 
-/// Renderer 跨更新复用语义节点的稳定身份。
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SurfaceKey(String);
+/// Script Surface 与 Core 共用同一种稳定身份，避免重复包装和再次校验。
+pub type SurfaceKey = SemanticKey;
 
 /// SurfaceKey 在公开边界的验证错误。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SurfaceKeyError {
-    Empty,
     Duplicate(String),
 }
 
 impl fmt::Display for SurfaceKeyError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Empty => formatter.write_str("Surface key 不能为空"),
             Self::Duplicate(key) => write!(formatter, "Surface key 重复：{key}"),
         }
     }
 }
 
 impl Error for SurfaceKeyError {}
-
-impl SurfaceKey {
-    /// 校验并构造 key；空字符串被拒绝。
-    pub fn parse(key: impl Into<String>) -> Result<Self, SurfaceKeyError> {
-        let key: String = key.into();
-        if key.is_empty() {
-            return Err(SurfaceKeyError::Empty);
-        }
-        Ok(Self(key))
-    }
-
-    /// 稳定字符串表示，供 Host 跨更新引用。
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
 
 /// `replace` 可跨 Host 解析的目标；不包含 CSS selector 或终端坐标。
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -231,7 +212,7 @@ impl Surface {
             .flatten()
             .any(|candidate| candidate == &key)
         {
-            return Err(SurfaceKeyError::Duplicate(key.0));
+            return Err(SurfaceKeyError::Duplicate(key.as_str().to_owned()));
         }
         self.nodes.push(node);
         self.keys.push(Some(key));

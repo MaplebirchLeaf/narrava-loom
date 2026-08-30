@@ -8,6 +8,81 @@ impl HostApi {
         HostStateView::new(state)
     }
 
+    /// 沿 Story 历史游标重新执行上一项或下一项，不制造新的访问记录。
+    #[allow(clippy::too_many_arguments)]
+    pub fn history_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        backward: bool,
+        request: HostMirRequest<'_>,
+        mut lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        let state_checkpoint = state.checkpoint();
+        let story_snapshot = story.snapshot();
+        let current = if backward {
+            story.back()
+        } else {
+            story.forward()
+        }
+        .copied()
+        .map_err(|error| {
+            Box::new(HostDriveError {
+                diagnostic: host_error("story.history.unavailable", &error.to_string()),
+                pending: None,
+            })
+        })?;
+        let boundary = Engine::begin_mir_chain_from_entry(
+            state,
+            story,
+            mir,
+            current,
+            request.params,
+            request.identity,
+            request.limits,
+            request.language,
+            state_checkpoint,
+            story_snapshot,
+            &mut lifecycle,
+        )
+        .map_err(|error| {
+            Box::new(HostDriveError {
+                diagnostic: mir_begin_diagnostic(error, state, story),
+                pending: None,
+            })
+        })?;
+        Self::drive_stable(
+            HostStable {
+                execution: HostExecutionToken::from_identity(request.identity),
+                boundary,
+            },
+            pending,
+            state,
+            story,
+            mir,
+            lifecycle,
+            dispatch,
+        )
+    }
+
     /// 验证玩家看到的导航，并一次性取得对应的延迟 Macro 动作。
     ///
     /// 验证全部成功前不会消费动作；Binding 因此不能用伪造 ID 或目标触发 HIR 正文。

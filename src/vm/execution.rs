@@ -19,6 +19,7 @@ impl MirExecutionFrame {
         if self.navigation.is_some() {
             return Ok(MirStep::NavigationPending);
         }
+        self.consume_instructions(1)?;
         let location: MirExecutionPosition = self.location();
         let passage: &BytecodePassage = story
             .passage_by_id(location.passage())
@@ -91,6 +92,8 @@ impl MirExecutionFrame {
             }
             part_count += 1;
         }
+        // 入口已经消费第一条；同一 I18n 消息折叠执行的其余指令也必须计入预算。
+        self.consume_instructions(part_count.saturating_sub(1))?;
 
         let resolved = match language {
             Some(language) => language.resolve(story.i18n(), &id, &values, &dictionary_values),

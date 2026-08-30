@@ -185,6 +185,27 @@ fn logic_while_consumes_continue_and_break_at_its_boundary() {
 }
 
 #[test]
+fn logic_while_stops_when_the_synchronous_step_budget_is_exhausted() {
+    let body: Vec<HirBodyNode<'_>> = vec![logic_node(HirBodyKind::While(Box::new(HirWhile {
+        condition: parse("true").expect("while 条件应可解析"),
+        body: Vec::new(),
+    })))];
+    let mut state = LogicStateContext {
+        count: Value::Number(0.0),
+    };
+    let mut story = LogicStoryContext::default();
+    let mut locals: MacroLocalScopes<Value> = MacroLocalScopes::new();
+    locals.enter_call(Vec::new());
+    let mut context =
+        MacroLogicContext::new(&mut state, &mut story, &mut locals).with_execution_limit(4);
+
+    assert_eq!(
+        execute_logic_body(&body, &mut context),
+        Err(LogicNodeError::ExecutionLimitExceeded { limit: 4 })
+    );
+}
+
+#[test]
 fn logic_while_propagates_stop_passage() {
     let loop_node: HirWhile<'_> = HirWhile {
         condition: parse("true").expect("while 条件应可解析"),

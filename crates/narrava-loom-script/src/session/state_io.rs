@@ -182,13 +182,13 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             target: target.clone(),
             document,
         };
-        self.waiting = Some(Waiting::Platform(PlatformWaiting {
+        self.waiting = Some(Waiting::Platform(Box::new(PlatformWaiting {
             operation: operation_id,
             action: PlatformAction::Save { operation, target },
             after,
             script_save,
             input_checkpoint,
-        }));
+        })));
         Ok(RuntimeUpdate::Pending { operation: pending })
     }
 
@@ -200,7 +200,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         self.ensure_idle()?;
         let operation_id: u64 = self.sequence;
         self.sequence = self.sequence.saturating_add(1);
-        self.waiting = Some(Waiting::Platform(PlatformWaiting {
+        self.waiting = Some(Waiting::Platform(Box::new(PlatformWaiting {
             operation: operation_id,
             action: PlatformAction::SelectLanguage {
                 locale: locale.clone(),
@@ -208,7 +208,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             after,
             script_save: false,
             input_checkpoint: None,
-        }));
+        })));
         Ok(RuntimeUpdate::Pending {
             operation: PendingOperation::SelectLanguage {
                 operation: operation_id,

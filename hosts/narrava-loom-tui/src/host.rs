@@ -98,6 +98,12 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             .map_err(|error| HostErrorDto::new("tui_host.command", error.to_string()))?
         {
             crate::TuiOperation::Help => continue,
+            crate::TuiOperation::Back => {
+                update = ready_update(execute_blocking(&mut runtime, RuntimeCommand::Back)?)?;
+            }
+            crate::TuiOperation::Forward => {
+                update = ready_update(execute_blocking(&mut runtime, RuntimeCommand::Forward)?)?;
+            }
             crate::TuiOperation::Redraw => continue,
             crate::TuiOperation::Quit => break,
             crate::TuiOperation::Activate { id } => {
@@ -237,5 +243,8 @@ fn json_from_surface(value: &SurfaceValue) -> serde_json::Value {
 }
 
 fn write_help_prompt(writer: &mut impl io::Write) -> io::Result<()> {
-    writeln!(writer, "输入编号选择动作；h 帮助、r 重绘、q 退出")
+    writeln!(
+        writer,
+        "输入编号选择动作；b 后退、f 前进、h 帮助、r 重绘、q 退出"
+    )
 }

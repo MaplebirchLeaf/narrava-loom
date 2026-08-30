@@ -194,18 +194,14 @@ fn validate_delete_segments(
     match (current, segment) {
         (Value::Object(properties), segment) => {
             let (name, span): (String, Span) = object_key(segment)?;
-            properties.with(|values: &Vec<(String, Value)>| {
-                if last {
-                    return Ok(());
-                }
-                let value: &Value = values
-                    .iter()
-                    .find_map(|(stored, value): &(String, Value)| {
-                        (stored == &name).then_some(value)
-                    })
+            if last {
+                Ok(())
+            } else {
+                let value: Value = properties
+                    .get(&name)
                     .ok_or(EvalError::UnknownMember(span))?;
-                validate_delete_segments(value, remaining)
-            })
+                validate_delete_segments(&value, remaining)
+            }
         }
         (Value::Array(items), AssignmentSegment::Index { key, span }) => {
             let position: usize =
@@ -234,17 +230,14 @@ fn validate_segments(current: &Value, segments: &[AssignmentSegment]) -> Result<
     match (current, segment) {
         (Value::Object(properties), segment) => {
             let (name, span): (String, Span) = object_key(segment)?;
-            properties.with(|values: &Vec<(String, Value)>| {
-                let existing: Option<&Value> =
-                    values.iter().find_map(|(stored, value): &(String, Value)| {
-                        (stored == &name).then_some(value)
-                    });
-                if last {
-                    Ok(())
-                } else {
-                    validate_segments(existing.ok_or(EvalError::UnknownMember(span))?, remaining)
-                }
-            })
+            if last {
+                Ok(())
+            } else {
+                let existing: Value = properties
+                    .get(&name)
+                    .ok_or(EvalError::UnknownMember(span))?;
+                validate_segments(&existing, remaining)
+            }
         }
         (Value::Array(items), AssignmentSegment::Index { key, span }) => {
             let position: usize =
@@ -273,15 +266,10 @@ fn read_segments(current: &Value, segments: &[AssignmentSegment]) -> Result<Valu
     match (current, segment) {
         (Value::Object(properties), segment) => {
             let (name, span): (String, Span) = object_key(segment)?;
-            properties.with(|values: &Vec<(String, Value)>| {
-                let value: &Value = values
-                    .iter()
-                    .find_map(|(stored, value): &(String, Value)| {
-                        (stored == &name).then_some(value)
-                    })
-                    .ok_or(EvalError::UnknownMember(span))?;
-                read_segments(value, remaining)
-            })
+            let value: Value = properties
+                .get(&name)
+                .ok_or(EvalError::UnknownMember(span))?;
+            read_segments(&value, remaining)
         }
         (Value::Array(items), AssignmentSegment::Index { key, span }) => {
             let position: usize =

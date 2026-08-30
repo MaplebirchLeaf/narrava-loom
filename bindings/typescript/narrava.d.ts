@@ -117,8 +117,8 @@ declare global {
         readonly heading?: 1 | 2
       },
     ): NarravaSurfaceNode
-    /** 结构化硬换行。 */
-    hardBreak(options?: { readonly key?: string }): NarravaSurfaceNode
+    /** 插入一个结构性硬换行。硬换行没有内容或稳定身份，因此不接受参数。 */
+    hardBreak(): NarravaSurfaceNode
     /** 引用 Resource 逻辑路径的图片；alt/caption 可选。 */
     image(
       resource: string,
@@ -178,6 +178,13 @@ declare global {
     readonly setup: { get(): NarravaData; set(value: NarravaData): NarravaData }
   }
   const State: NarravaState
+
+  /** `$variables` 的属性代理。点语法与动态方括号语法都直接读写活动 Rust State。 */
+  const V: { [name: string]: NarravaData }
+  /** `_temporary` 的属性代理；恢复存档时会随临时变量一起清空。 */
+  const T: { [name: string]: NarravaData }
+  /** 启动配置对象的属性代理，与 Twee 中的 `setup.name` 指向同一份数据。 */
+  const setup: { [name: string]: NarravaData }
 
   /** Macro.before/after 订阅返回的不透明句柄。 */
   type NarravaMacroSubscription = number & { readonly __macroSubscription: unique symbol }

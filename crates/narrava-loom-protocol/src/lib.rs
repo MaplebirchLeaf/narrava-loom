@@ -188,6 +188,10 @@ pub struct HostUpdateDto {
     pub current: String,
     /// 按渲染顺序排列的顶层节点。
     pub nodes: Vec<HostNodeDto>,
+    /// 当前 Story 游标能否回到上一条历史。
+    pub can_back: bool,
+    /// 当前 Story 游标能否前进到下一条历史。
+    pub can_forward: bool,
 }
 
 /// Host 交给 RuntimeSession 的平台无关命令。
@@ -196,8 +200,13 @@ pub struct HostUpdateDto {
 pub enum RuntimeCommand {
     /// 启动一局游戏。
     Start,
+    /// 沿 Story 历史移动，不新增访问记录。
+    Back,
+    Forward,
     /// 激活上一份 Surface 公开的交互。
-    Activate { interaction: String },
+    Activate {
+        interaction: String,
+    },
     /// 向上一份 Surface 公开的输入提交值。
     Input {
         interaction: String,
@@ -209,7 +218,9 @@ pub enum RuntimeCommand {
         target: String,
     },
     /// 选择已安装语言；具体语言包装载仍由平台 adapter 完成。
-    SelectLanguage { locale: String },
+    SelectLanguage {
+        locale: String,
+    },
     /// 恢复指定的挂起操作；平台操作必须携带拥有型完成结果。
     Resume {
         operation: u64,
@@ -217,7 +228,9 @@ pub enum RuntimeCommand {
         result: Option<PendingResult>,
     },
     /// 取消指定的挂起操作。
-    Cancel { operation: u64 },
+    Cancel {
+        operation: u64,
+    },
 }
 
 /// Runtime 支持的存档方向。

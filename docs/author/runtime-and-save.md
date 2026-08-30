@@ -24,7 +24,7 @@ Engine.restart()
 
 ## Logger 与 Event
 
-### 19.1 当前到底有哪些基础事件
+### 当前有哪些基础事件
 
 当前有 5 个 Engine 自动发出的内置 Passage 事件：
 
@@ -67,7 +67,7 @@ const records = Event.take(subscription)
 Event.unsubscribe(subscription)
 ```
 
-### 19.2 Event 四个方法的精确行为
+### Event 的四个方法
 
 - `emit(name, payload)`：记录并投递事件，返回从 1 开始递增的序号；
 - `subscribe({ name })`：只接收订阅之后发生、名称完全相等的事件；

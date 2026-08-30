@@ -55,6 +55,8 @@ pub enum TuiCommand {
     Select(usize),
     Set { index: usize, value: String },
     Help,
+    Back,
+    Forward,
     Redraw,
     Quit,
 }
@@ -68,6 +70,12 @@ impl TuiCommand {
         }
         if matches!(trimmed, "h" | "help" | "?") {
             return Ok(Self::Help);
+        }
+        if matches!(trimmed, "b" | "back") {
+            return Ok(Self::Back);
+        }
+        if matches!(trimmed, "f" | "forward") {
+            return Ok(Self::Forward);
         }
         if matches!(trimmed, "q" | "quit" | "exit") {
             return Ok(Self::Quit);
@@ -110,6 +118,8 @@ impl TuiCommand {
                 })
             }
             Self::Help => Ok(TuiOperation::Help),
+            Self::Back => Ok(TuiOperation::Back),
+            Self::Forward => Ok(TuiOperation::Forward),
             Self::Redraw => Ok(TuiOperation::Redraw),
             Self::Quit => Ok(TuiOperation::Quit),
         }
@@ -123,6 +133,8 @@ pub enum TuiOperation {
     Input { id: String, value: SurfaceValue },
     Dismiss,
     Help,
+    Back,
+    Forward,
     Redraw,
     Quit,
 }

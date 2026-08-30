@@ -150,6 +150,40 @@ fn frame_steps_text_and_print_until_halt_without_losing_position() {
 }
 
 #[test]
+fn frame_rejects_an_execution_chain_that_exhausts_its_instruction_budget() {
+    let body: Vec<HirBodyNode<'_>> = vec![
+        node(HirBodyKind::Set(Box::new(
+            parse("$first = true").expect("首条 set 应有效"),
+        ))),
+        node(HirBodyKind::Set(Box::new(
+            parse("$second = true").expect("第二条 set 应有效"),
+        ))),
+        node(HirBodyKind::Set(Box::new(
+            parse("$third = true").expect("第三条 set 应有效"),
+        ))),
+    ];
+    let mir: MirMacroBody<'_, '_> = MirMacroBody::lower(&body).expect("正文应进入 MIR");
+    let bytecode = crate::bytecode::BytecodeMacroBody::compile(&mir);
+    let mut frame: MirExecutionFrame =
+        MirExecutionFrame::new_macro(&bytecode).with_instruction_limit(2);
+    let mut state: State = State::new();
+
+    assert_eq!(
+        frame.step_macro(&bytecode, &mut state),
+        Ok(MirStep::Running)
+    );
+    assert_eq!(
+        frame.step_macro(&bytecode, &mut state),
+        Ok(MirStep::Running)
+    );
+    assert_eq!(
+        frame.step_macro(&bytecode, &mut state),
+        Err(MirExecutionError::InstructionLimitExceeded { limit: 2 })
+    );
+    assert_eq!(state.variables_get("third"), None);
+}
+
+#[test]
 fn frame_uses_validated_translation_to_reorder_and_translate_dynamic_values() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),

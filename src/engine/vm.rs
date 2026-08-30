@@ -127,7 +127,7 @@ impl Engine {
         story: &mut Story<'hir, 'source>,
         mir: &BytecodeProgram,
         checkpoint: EngineMirBeginCheckpointRequest<'hir, 'source, '_>,
-        mut lifecycle: impl FnMut(
+        lifecycle: impl FnMut(
             PassageLifecyclePhase,
             PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
@@ -149,6 +149,41 @@ impl Engine {
         let current = *story.goto(name).map_err(|error| {
             EngineMirBeginError::Preparation(EngineNavigationError::Navigation(error))
         })?;
+        Self::begin_mir_chain_from_entry(
+            state,
+            story,
+            mir,
+            current,
+            params,
+            identity,
+            limits,
+            language,
+            state_checkpoint,
+            story_snapshot,
+            lifecycle,
+        )
+    }
+
+    /// 从已经由 Story 历史游标选中的条目继续执行，不追加新的历史记录。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn begin_mir_chain_from_entry<'hir, 'source, LifecycleError>(
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        current: crate::story::StoryHistoryEntry<'hir, 'source>,
+        params: &Value,
+        identity: RuntimeExecutionIdentity,
+        limits: EngineExecutionLimits,
+        language: Option<&I18nRuntimeLanguage>,
+        state_checkpoint: StateCheckpoint,
+        story_snapshot: StorySnapshot<'hir, 'source>,
+        mut lifecycle: impl FnMut(
+            PassageLifecyclePhase,
+            PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), LifecycleError>,
+    ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirBeginError<'hir, 'source, LifecycleError>>
+    {
         if limits.passages == 0 {
             let error = Self::rollback(
                 state,

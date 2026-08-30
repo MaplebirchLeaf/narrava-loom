@@ -147,16 +147,9 @@ pub(crate) fn read_member(
             NativeCallable::function(NativeFunction::ObjectAssign),
         )),
         // Object 点访问首轮只读取字面量建立的自身属性，尚不进入原型表。
-        (Value::Object(properties), property) => {
-            properties.with(|values: &Vec<(String, Value)>| {
-                values
-                    .iter()
-                    .find_map(|(name, value): &(String, Value)| {
-                        (name == property).then_some(value.clone())
-                    })
-                    .ok_or(EvalError::UnknownMember(property_span))
-            })
-        }
+        (Value::Object(properties), property) => properties
+            .get(property)
+            .ok_or(EvalError::UnknownMember(property_span)),
         (Value::Array(items), "length") => Ok(Value::Number(items.len() as f64)),
         (Value::Array(_), "at") => Ok(Value::Callable(NativeCallable::bind(
             target,
@@ -270,14 +263,7 @@ pub(crate) fn read_index(
         Value::Object(properties) => {
             let property: TextValue = index_property(&index_value, index.span)?;
             let property: String = property_name(&property, index.span)?;
-            Ok(properties.with(|values: &Vec<(String, Value)>| {
-                values
-                    .iter()
-                    .find_map(|(name, value): &(String, Value)| {
-                        (name == &property).then_some(value.clone())
-                    })
-                    .unwrap_or(Value::Undefined)
-            }))
+            Ok(properties.get(&property).unwrap_or(Value::Undefined))
         }
         Value::Namespace(namespace) => {
             let property: TextValue = index_property(&index_value, index.span)?;

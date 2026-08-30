@@ -5,7 +5,8 @@
 | 边界 | 面向谁 | 稳定性依据 |
 |---|---|---|
 | Twee、Expression、Macro | 游戏作者 | `docs/reference/` |
-| `narrava.d.ts` 全局对象 | TS/JS 游戏脚本 | `bindings/typescript/narrava.d.ts` |
+| `narrava.d.ts` 详细全局签名与说明 | TS/JS 游戏脚本 | `bindings/typescript/narrava.d.ts`（人工维护、由契约覆盖测试校验） |
+| Script/Runtime 名称与 tagged union | Binding、Host、跨语言调用方 | `bindings/script-contract.json` 生成 `narrava-contract.generated.d.ts` 与 Rust 常量 |
 | Rust `pub` 项 | Host 和工具作者 | Rustdoc 与语义化版本 |
 
 Rust 中的 `pub` 只表示当前 crate 外可访问，不代表游戏作者需要 Rust，也不自动

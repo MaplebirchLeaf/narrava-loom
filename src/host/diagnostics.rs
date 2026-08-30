@@ -33,6 +33,10 @@ pub(super) fn mir_resume_failure<'hir, 'source>(
         }
         EngineMirVmResumeError::Vm { error, transaction } => {
             let diagnostic = match error {
+                MirExecutionError::InstructionLimitExceeded { limit } => host_error(
+                    "engine.vm.instruction_limit_exceeded",
+                    &format!("单次执行超过 Bytecode 指令预算：{limit}"),
+                ),
                 MirExecutionError::Evaluation(error) => error.diagnostic(),
                 MirExecutionError::MissingPassage => {
                     host_error("engine.vm.missing_passage", "VM 找不到当前 Passage")

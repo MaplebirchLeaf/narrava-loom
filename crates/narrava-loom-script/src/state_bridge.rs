@@ -1,7 +1,7 @@
 //! Boa 对活动 Rust `State` 的调用期适配器。
 //!
-//! `State` 只在执行 JavaScript 的这段同步调用期间移入 Context slot。移动 BTreeMap
-//! 不会复制其内容；调用结束后无论成功失败都会移回 Worker 持有的同一个 Rust State。
+//! `State` 只在执行 JavaScript 的这段同步调用期间移入 Context slot。移动 State
+//! 只转移集合所有权而不复制内容；调用结束后无论成功失败都会移回 Worker。
 
 use std::cell::RefCell;
 
@@ -77,7 +77,7 @@ fn register(
 fn state_get(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let namespace = string_argument(arguments, 0, context)?;
     let name = string_argument(arguments, 1, context)?;
-    let value = with_active(context, |state| get(state, &namespace, &name).cloned())?;
+    let value = with_active(context, |state| get(state, &namespace, &name))?;
     match value {
         Some(value) => core_to_js(&value, context),
         None => Ok(JsValue::undefined()),
@@ -160,12 +160,16 @@ fn with_active<T>(context: &Context, operation: impl FnOnce(&mut State) -> T) ->
 }
 
 /// 按命名空间读值。
-fn get<'state>(state: &'state State, namespace: &str, name: &str) -> Option<&'state Value> {
+fn get(state: &State, namespace: &str, name: &str) -> Option<Value> {
     match namespace {
-        "global" => state.global_get(name),
-        "variables" => state.variables_get(name),
-        "temporary" => state.temporary_get(name),
-        "setup" => Some(state.setup_get()),
+        "global" => state.global_get(name).cloned(),
+        "variables" => state.variables_get(name).cloned(),
+        "temporary" => state.temporary_get(name).cloned(),
+        "setup" => Some(state.setup_get().clone()),
+        "setup-properties" => match state.setup_get() {
+            Value::Object(object) => object.get(name),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -177,6 +181,10 @@ fn has(state: &State, namespace: &str, name: &str) -> bool {
         "variables" => state.variables_has(name),
         "temporary" => state.temporary_has(name),
         "setup" => true,
+        "setup-properties" => match state.setup_get() {
+            Value::Object(object) => object.contains_key(name),
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -188,6 +196,10 @@ fn set(state: &mut State, namespace: &str, name: &str, value: Value) -> Option<V
         "variables" => state.variables_set(name, value),
         "temporary" => state.temporary_set(name, value),
         "setup" => Some(state.setup_set(value)),
+        "setup-properties" => match state.setup_get() {
+            Value::Object(object) => object.insert(name, value),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -198,6 +210,10 @@ fn del(state: &mut State, namespace: &str, name: &str) -> Option<Value> {
         "global" => state.global_del(name),
         "variables" => state.variables_del(name),
         "temporary" => state.temporary_del(name),
+        "setup-properties" => match state.setup_get() {
+            Value::Object(object) => object.remove(name),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -216,6 +232,10 @@ fn entries(state: &State, namespace: &str) -> Vec<(String, Value)> {
             .temporary_entries()
             .map(|(name, value)| (name.to_owned(), value.clone()))
             .collect(),
+        "setup-properties" => match state.setup_get() {
+            Value::Object(object) => object.snapshot(),
+            _ => Vec::new(),
+        },
         _ => Vec::new(),
     }
 }

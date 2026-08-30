@@ -1,6 +1,6 @@
 //! Tauri Host 的发行级集成测试（原内联于 lib.rs，按源码规范收拢）。
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc, thread, time::Duration};
 
 use narrava_loom_core::{
     ProjectConfig, SourceList, nar::NarPackage, package_zip, resource::ResourceCatalog,
@@ -17,7 +17,7 @@ fn release_worker_uses_the_validated_package_bytecode() {
     assert!(worker.contains("package.bytecode().clone()"));
 }
 
-/// 脚本宏 `Host.delay` 会挂起 Engine 事务，Host 睡满后恢复并继续渲染。
+/// 脚本宏 `Host.delay` 会挂起 Engine 事务，计时到期后恢复并继续渲染。
 #[test]
 fn host_delay_suspends_and_resumes_the_engine_transaction() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -50,6 +50,44 @@ fn host_delay_suspends_and_resumes_the_engine_transaction() {
             .iter()
             .any(|node| { matches!(node, HostNodeDto::Text { text, .. } if text == "resumed") })
     );
+
+    drop(host);
+    fs::remove_dir_all(root_path).unwrap();
+}
+
+#[test]
+fn host_delay_keeps_worker_queries_responsive() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = format!(
+        "target/test-projects/nonblocking-delay-{}",
+        std::process::id()
+    );
+    let root_path = Path::new(&root);
+    fs::create_dir_all(root_path.join("contents/scripts")).unwrap();
+    fs::create_dir_all(root_path.join("contents/story")).unwrap();
+    fs::copy(
+        repository.join("examples/config.toml"),
+        root_path.join("config.toml"),
+    )
+    .unwrap();
+    fs::write(
+        root_path.join("contents/story/main.twee"),
+        ":: Start\n<<delayed>><</delayed>>",
+    )
+    .unwrap();
+    fs::write(
+        root_path.join("contents/scripts/main.js"),
+        "Macro.add('delayed', { body: 'inline', arguments: 'raw', execution: 'async', handler: async () => { await Host.delay(500); return 'ready' } })",
+    ).unwrap();
+
+    let host = Arc::new(TauriHost::spawn(&root).unwrap());
+    let start_host = Arc::clone(&host);
+    let start = thread::spawn(move || start_host.start());
+    thread::sleep(Duration::from_millis(30));
+    let logs = host.logs().expect("Delay 期间日志查询仍应响应");
+    assert!(!logs.is_empty());
+    assert!(!start.is_finished(), "日志查询不应等待 Delay 完成");
+    assert_eq!(start.join().unwrap().unwrap().current, "Start");
 
     drop(host);
     fs::remove_dir_all(root_path).unwrap();
@@ -96,6 +134,8 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         })
         .unwrap();
     let hall = host.activate(hall_id).unwrap();
+    assert!(hall.can_back);
+    assert!(!hall.can_forward);
     let gallery_id = hall
         .nodes
         .iter()
@@ -282,6 +322,35 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         })
         .unwrap();
     let hall = host.activate(hall_id).unwrap();
+
+    // 脚本状态代理页必须能在真实 Runtime continuation 中读写 V/T/setup，并返回大厅。
+    let state_gallery_id = hall
+        .nodes
+        .iter()
+        .find_map(|node| match node {
+            HostNodeDto::Navigation { id, target, .. } if target == "StateGallery" => Some(id),
+            _ => None,
+        })
+        .expect("大厅应提供脚本状态代理入口");
+    let state_gallery = host.activate(state_gallery_id).unwrap();
+    assert!(state_gallery.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Text { text, .. } if text.contains("脚本检查 1 次")
+    )));
+    let history_hall = host.history(true).expect("历史后退应重放大厅");
+    assert_eq!(history_hall.current, "Hall");
+    assert!(history_hall.can_forward);
+    let state_gallery = host.history(false).expect("历史前进应重放状态代理页");
+    assert_eq!(state_gallery.current, "StateGallery");
+    let return_to_hall = state_gallery
+        .nodes
+        .iter()
+        .find_map(|node| match node {
+            HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+            _ => None,
+        })
+        .expect("状态代理页应可返回大厅");
+    let hall = host.activate(return_to_hall).unwrap();
 
     // 作者能力演示页：存档/读档/日志/语言，随后返回大厅
     let author_tools_id = hall

@@ -9,8 +9,18 @@ use narrava_loom_core::{
 };
 
 use super::{
-    EcmaBinding, EcmaRuntime, ScriptMacroOutcome, bootstrap_source, state_bridge, transpile,
+    EcmaBinding, EcmaRuntime, ScriptMacroOutcome, bootstrap_source, runtime_context, state_bridge,
+    transpile,
 };
+
+#[test]
+fn runtime_context_rejects_unbounded_javascript_loops() {
+    let mut context = runtime_context(8);
+    let error = context
+        .eval(Source::from_bytes("while (true) {}"))
+        .expect_err("无限循环必须被 Boa 执行预算终止");
+    assert!(error.to_string().contains("loop iteration limit 8"));
+}
 
 const SCRIPT_CONTRACT: &str = include_str!("../../../bindings/script-contract.json");
 const TYPESCRIPT_API: &str = include_str!("../../../bindings/typescript/narrava.d.ts");
@@ -111,6 +121,7 @@ fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
                 presentationType: typeof Presentation,
                 surfaceType: typeof Surface,
                 frozen: Object.isFrozen(Surface),
+                hardBreakHasKey: "key" in Surface.hardBreak({ key: "ignored" }),
                 value: Surface.region("bar", [
                   Surface.text("体力不足", { key: "stamina", styles: ["strong"], color: "warning" }),
                   Surface.image("images/hero.png", { alt: "主角" }),
@@ -129,6 +140,7 @@ fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
     assert_eq!(value["presentationType"], "undefined");
     assert_eq!(value["surfaceType"], "object");
     assert_eq!(value["frozen"], true);
+    assert_eq!(value["hardBreakHasKey"], false);
     assert_eq!(value["value"]["__narravaSurface"], "region");
     assert_eq!(value["value"]["children"][0]["color"], "warning");
 }
@@ -304,6 +316,60 @@ fn script_reads_the_current_rust_state_without_a_javascript_mirror() {
         runtime.call(&callable, Vec::new(), &mut state).unwrap(),
         Value::Number(73.0)
     );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// V/T 是 Rust State 的属性代理：赋值、读取、枚举、in 与 delete 均不建立 JS 镜像。
+#[test]
+fn script_variable_proxies_mutate_the_authoritative_rust_state() {
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-tauri-variable-proxies-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"State.global.set("mutateState", () => {
+            V.health += 2;
+            T.route = "quiet";
+            setup.difficulty = "normal";
+            const visible = "health" in V && Object.keys(V).includes("health");
+            delete V.removed;
+            return visible;
+        })"#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let mut state = State::new();
+    let mut runtime = EcmaRuntime::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    )
+    .expect("脚本应真实加载");
+    let Value::ScriptCallable(callable) = state
+        .global_get("mutateState")
+        .cloned()
+        .expect("函数应直接登记到 Rust State")
+    else {
+        panic!("mutateState 应为 ScriptCallable")
+    };
+    state.variables_set("health", Value::Number(40.0));
+    state.variables_set("removed", Value::Boolean(true));
+
+    assert_eq!(
+        runtime.call(&callable, Vec::new(), &mut state).unwrap(),
+        Value::Boolean(true)
+    );
+    assert_eq!(state.variables_get("health"), Some(&Value::Number(42.0)));
+    assert_eq!(state.temporary_get("route"), Some(&Value::string("quiet")));
+    assert!(!state.variables_has("removed"));
+    let Value::Object(setup) = state.setup_get() else {
+        panic!("setup 应保持为对象")
+    };
+    assert_eq!(setup.get("difficulty"), Some(Value::string("normal")));
     std::fs::remove_dir_all(root).unwrap();
 }
 
