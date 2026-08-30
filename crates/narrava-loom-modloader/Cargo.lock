@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "regex",
  "semver",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-modloader"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "narrava-loom-core",
  "semver",

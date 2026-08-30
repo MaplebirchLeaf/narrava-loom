@@ -51,7 +51,7 @@ function scopesFor(line, text) {
 
 assert.equal(manifest.engines.vscode.startsWith("^"), true)
 assert.equal(manifest.main, "./extension.js")
-assert.equal(manifest.version, "0.5.0")
+assert.equal(manifest.version, "0.5.1")
 assert.ok(manifest.files.includes("references/**"))
 assert.deepEqual(manifest.contributes.languages[0].extensions, [".twee"])
 assert.equal(manifest.contributes.grammars[0].scopeName, "source.narrava-twee")
