@@ -14,6 +14,7 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 | Story 完整导航时间线 | `State.setup` |
 | Story 当前游标 | `State.temporary`（`_name`） |
 | 每次 Passage 是否产生作者导航 | Macro `@locals`、`@args` |
+| Reaction 启用、次数与销毁状态 | Reaction Definition 与 `cond` 函数 |
 | 精确游戏 ID 与版本 | Function、Macro Handler、Promise |
 | Narrava Array/Object 引用图 | VM frame、Pending、Host/Renderer 对象 |
 
@@ -21,7 +22,7 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 
 ## 文档结构
 
-`SaveDocument` 使用 JSON 作为首个可检查的交换格式，根层只有 `game`、`state` 与 `story`。当前没有 `format_version`：引擎尚未发布，也没有旧格式迁移需求；出现首个不兼容发布格式时再建立明确版本边界。
+`SaveDocument` 使用 JSON 作为首个可检查的交换格式，根层为 `game`、`state`、`story`，以及可省略的 `reactions`。旧文档没有 `reactions` 时按空集合读取。当前没有 `format_version`：引擎尚未发布，也没有旧格式迁移需求；出现首个不兼容发布格式时再建立明确版本边界。
 
 `.nsave` 是该文档的游戏侧文件后缀，当前内容就是 UTF-8 JSON，而不是 ZIP。
 Core 只编码和解码文档；具体 Host 决定存放位置。综合示例在内存中展示捕获、JSON 编码与恢复，不把固定存档文件作为源码真值。
@@ -52,7 +53,8 @@ Array 与 Object 不递归嵌入 JSON，而是使用单调节点 ID 建立图：
 3. 完整解码 Value 图；
 4. 捕获活动 State/Story 检查点；
 5. 替换 `$variables`、清空 `_temporary` 并重建 Story；
-6. 运行时失败时同时回滚 State 与 Story。
+6. RuntimeSession 根据当前启动脚本已注册的 ID 恢复 Reaction 状态；
+7. 任一步失败时同时回滚 State、Story 与 Reaction。
 
 这条入口只恢复稳定领域状态，不自动执行 Passage 生命周期或渲染。Host 后续应明确决定加载完成后从当前 Passage 的哪个生命周期阶段重新进入 Engine。
 

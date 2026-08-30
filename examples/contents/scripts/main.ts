@@ -28,6 +28,63 @@ function returnToHall(): void {
   if (Story.has("Hall") && Story.current()?.name !== "Hall") Engine.goto("Hall")
 }
 
+/** 产生供 Reaction 示例消费的结构化 Event。 */
+function emitQuestCompleted(): void {
+  Event.emit("quest:completed", { quest: "old_mine", reward: 500 })
+}
+
+/** 产生一个会由 Reaction 导航的 Event。 */
+function emitReactionGoto(): void {
+  Event.emit("demo:reaction_goto")
+}
+
+/** 跨过 State Reaction 示例的阈值。 */
+function raiseReputation(): void {
+  V.reputation = 50
+}
+
+Reaction.add({
+  id: "demo.quest.completed",
+  event: "quest:completed",
+  cond: (payload) =>
+    typeof payload === "object" &&
+    payload !== null &&
+    "quest" in payload &&
+    payload.quest === "old_mine",
+  widget: '<<highlightCard "Event Reaction：旧矿井任务已结算。">>',
+  replace: "reaction-result",
+  limit: 3,
+  tags: ["example", "event"],
+})
+
+Reaction.add({
+  id: "demo.reputation.threshold",
+  state: "$reputation",
+  cond: ({ before, after }) =>
+    typeof before === "number" && typeof after === "number" && before < 50 && after >= 50,
+  include: "ReactionReputationNotice",
+  replace: "reaction-state-result",
+  once: true,
+  tags: ["example", "state"],
+})
+
+Reaction.add({
+  id: "demo.lifecycle.guard",
+  lifecycle: true,
+  passage: { match: ["ReactionExitDemo"], tags: { all: ["reaction"] } },
+  include: "ReactionLockdown",
+  replace: "main",
+  exit: true,
+  tags: ["example", "lifecycle"],
+})
+
+Reaction.add({
+  id: "demo.goto",
+  event: "demo:reaction_goto",
+  goto: "ReactionGotoTarget",
+  tags: ["example", "navigation"],
+})
+
 // 存档、读档、日志与语言都是 Worker ECMAScript 全局（Save/Logger/I18n），
 // .twee 表达式由 Core 求值，不能直接调用它们。游戏作者把这些能力封装成
 // 普通函数并经 State.global 暴露后，就能在 .twee 里用 <<run/print 函数(...)>> 调用。
@@ -233,6 +290,9 @@ State.global.extend({
   currentLocale,
   defaultLocale,
   exportI18nTemplate,
+  emitQuestCompleted,
+  emitReactionGoto,
+  raiseReputation,
   readyEvents,
   difficulty: 3,
 })

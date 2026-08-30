@@ -27,6 +27,7 @@
 <<link [[查看内容替换|ReplaceGallery]]>><</link>><br>
 <<link [[查看脚本状态代理|StateGallery]]>><</link>><br>
 <<link [[查看作者能力演示|AuthorToolsGallery]]>><</link>><br>
+<<link [[查看 Reaction 规则系统|ReactionGallery]]>><</link>><br>
 <<link [[查看 Twee 内 Surface|TextGallery]]>><</link>><br>
 <<link [[查看控制流范本|MacroGallery]]>><</link>>
 
@@ -88,6 +89,36 @@ V/T/setup 在 scripts 中对应 Twee 的 $/_/setup，并直接代理活动 Rust 
 持久计数：<<print $scriptChecks>>；临时标记：<<print _lastTool>>；启动配置：<<print setup.build>>。<br>
 <<link [[再次执行|StateGallery]]>><</link>><br>
 <<link [[返回大厅|Hall]]>><</link>>
+
+:: ReactionGallery [reference reaction]
+<<set $reputation to $reputation ?? 40>>
+Reaction 在 Runtime 安全点统一处理 Event、持久 State 变化与 Passage lifecycle。<br>
+规则次数和 once/limit 状态会随 Save 导出、导入；Reaction 自身不会让 Host 执行脚本逻辑。<br>
+<<slot "reaction-result">>Event Reaction 尚未触发。<</slot>><br>
+<<button [[触发任务完成 Event|ReactionGallery]]>><<run emitQuestCompleted()>><</button>><br>
+<<button [[把声望从 40 提升到 50|ReactionStateResult]]>><<run raiseReputation()>><</button>><br>
+<<link [[验证 lifecycle exit|ReactionExitDemo]]>><</link>><br>
+<<button [[由 Reaction 导航|ReactionGallery]]>><<run emitReactionGoto()>><</button>><br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: ReactionStateResult [reference reaction]
+State Reaction 的 include 会替换下面这个明确命名的 Slot；该 once 规则成功后会销毁。<br>
+<<slot "reaction-state-result">>等待 State Reaction 输出。<</slot>><br>
+<<link [[返回 Reaction 示例|ReactionGallery]]>><</link>>
+
+:: ReactionReputationNotice
+声望首次达到 50：State Reaction 已执行。<br>
+
+:: ReactionExitDemo [reference reaction]
+这段正文不应显示；lifecycle Reaction 的 exit 会在正文执行前截断它。<br>
+
+:: ReactionLockdown
+lifecycle Reaction 已在 Passage Start 与正文之间执行，并用 exit 截断原正文。<br>
+请使用 Host 的后退操作返回 Reaction 示例；被 include 的 fragment 不创建导航。<br>
+
+:: ReactionGotoTarget [reference reaction]
+Event Reaction 已通过统一 Engine 事务导航到这里，并写入 Story history。<br>
+<<link [[返回 Reaction 示例|ReactionGallery]]>><</link>>
 
 :: TextGallery [reference]
 这是由 print Macro 提供的 Twee 内 Surface：内容 + 可选 color + 零到多个 style，<br>

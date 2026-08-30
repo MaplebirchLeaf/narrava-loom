@@ -159,6 +159,14 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 - Engine 保留事件：`passage:init`、`passage:start`、`passage:render`、
   `passage:display`、`passage:end`
 
+### `Reaction`
+
+- `add(definition)`、`get(id)`、`enable(id)`、`disable(id)`、`reset(id)`
+- 触发源三选一：`event`、`state: "$path"`、`lifecycle: true`
+- 效果：`widget`、`include + replace`、`goto`、`emit`，以及 lifecycle 专用 `exit`；
+  `include` 没有隐式插入位置，必须声明稳定 Slot 或 Region
+- 状态：`enabled`、`once`、`limit`、`tags`；完整规则见 [Reaction](../author/reaction.md)
+
 ### `Host`
 
 - `await Host.delay(milliseconds)`：暂停当前异步 Macro，时间到后恢复同一 Engine 事务；

@@ -40,6 +40,7 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 - `ReplaceGallery`：稳定 slot、Region 和 key 替换；
 - `StateGallery`：scripts 的 `V/T/setup` 与 Twee `$/_/setup` 共享状态；
 - `AuthorToolsGallery`：Save 导出/导入、Logger 与 I18n 导出；
+- `ReactionGallery`：Event、State、lifecycle、replace、include、goto、once/limit 与 Save 状态；
 - `TextGallery`：`print` 的 64 色阶、8 种语义字形、heading 和 delay；
 - `MacroGallery`：switch、for、while、break/continue、unset 与 include。
 

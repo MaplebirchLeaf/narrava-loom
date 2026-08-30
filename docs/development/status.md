@@ -1,6 +1,6 @@
 # 项目状态
 
-> 基线版本：0.4.0
+> 基线版本：0.5.0
 >
 > 更新日期：2026-08-29
 
@@ -12,6 +12,7 @@
 - Source → Twee → HIR → MIR → LIR → 拥有型 Bytecode → VM 编译执行链；
 - 事务化 Engine、State、Story、Expression、Macro、Event、Logger 和 Diagnostic；
 - I18n、Save、Resource、Script Bundle 与 TypeScript 游戏作者契约；
+- Event、State 与 lifecycle Reaction，含结构化效果、事务回滚、goto continuation 与 Save 状态；
 - 零 Core 依赖的拥有型 Protocol，以及 Script Runtime 内部的 Surface/Core 转换适配层；
 - 带协议版本的 Protocol Session request/response、无生命周期跨语言 handle 与 Native driver；
 - Save/语言共用 pending/resume，Host 只处理平台 IO，Import 与 Script 同步按 State/Story 事务提交；
@@ -28,7 +29,7 @@
 - TUI 已使用共享 RuntimeSession 执行完整游戏目录；仍无存档／语言菜单和终端尺寸自适应布局；
 - Tauri 自动测试不代替真实 WebView 的像素与交互验收；
 - Android/iOS 平台工程、签名、打包与真机验收尚未接通；当前可发行目标是桌面端；
-- `Renderer.Model`、`Renderer.Audio`、ModLoader 和 ModUtils 不在 0.4.0 范围内。
+- `Renderer.Model`、`Renderer.Audio`、ModLoader 和 ModUtils 不在 0.5.0 范围内。
 
 ## 下一阶段
 
@@ -36,7 +37,7 @@
 
 1. 用真实 Tauri 窗口完成发行目录的视觉、输入、Resource、I18n 与 Save 回归；
 2. 用实际嵌入方反馈稳定 RuntimeSession、ScriptAdapter 与 Protocol 的公开边界；
-3. 根据实际游戏用例稳定 0.3.x 的公开 API 与诊断，不预先扩张平台能力；
+3. 根据实际游戏用例稳定 0.5.x 的公开 API 与诊断，不预先扩张平台能力；
 4. Core 稳定后，再单独设计 `narrava-loom-modloader` 的最小 `.nmod` 纵向链。
 
 ## 发布门禁

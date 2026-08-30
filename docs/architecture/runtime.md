@@ -86,16 +86,18 @@ Runtime 的 goto 先形成经过验证的请求。只有当前 Passage 返回 `S
 单次导航 Passage 的生命周期为：
 
 ```text
-PassageInit → PassageStart → PassageRender → PassageDisplay → PassageEnd
+PassageInit → PassageStart → Reaction Phase → Passage Body → PassageRender → PassageDisplay → PassageEnd
 ```
 
 - Init：建立本次访问上下文，允许 scripts 通过 State API 修改变量；
-- Start：开始执行 HIR、Expression 与 Macro；
+- Start：发布已进入 Passage 的生命周期事实；
+- Reaction Phase：解析 lifecycle Reaction；`exit` 可在正文前截断，`goto` 复用正常导航事务；
+- Passage Body：执行 HIR、Expression 与 Macro；
 - Render：Core 已形成本跳 Surface 输出；
 - Display：Host 已完成本跳显示；
 - End：真正离开当前导航 Passage。
 
-入口 `params` 只属于本次入口 Passage，不自动写入 State，也不由无参数 goto 继承。include 不创建独立生命周期。
+入口 `params` 只属于本次入口 Passage，不自动写入 State，也不由无参数 goto 继承。include 与特殊 Passage 不创建独立 Reaction lifecycle。
 
 精确 `[exit]` Passage 执行逻辑，但跳过 Render／Display，并排除在 SafeReturn 目标之外。它与结束当前 Widget 或 Passage 执行域的 `<<exit>>` Macro 不是同一概念。
 

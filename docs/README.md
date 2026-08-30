@@ -8,6 +8,7 @@
 
 - [游戏作者手册](author/guide.md)：从安装、写故事到打包的分册教程（唯一入口）。
 - [API 与语法速查](reference/api-and-syntax.md)：宏、内置函数、运算符和脚本全局对象——唯一契约清单。
+- [Reaction](author/reaction.md)：三种触发源、结构化效果、事务与 Save 行为。
 
 ## 我在开发 Host 或 Core
 
