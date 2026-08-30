@@ -5,6 +5,7 @@ declare global {
     | "V"
     | "T"
     | "setup"
+    | "Reaction"
     | "Macro"
     | "Logger"
     | "Event"

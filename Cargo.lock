@@ -2229,6 +2229,7 @@ dependencies = [
  "narrava-loom-core",
  "narrava-loom-protocol",
  "oxc",
+ "serde",
  "serde_json",
 ]
 

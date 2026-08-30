@@ -10,4 +10,5 @@ narrava-loom-protocol = { path = "../narrava-loom-protocol" } # RuntimeCommand/U
 boa_engine = "0.21.1"
 boa_gc = "0.21.1"
 oxc = { version = "0.137.0", features = ["transformer", "codegen", "semantic"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"

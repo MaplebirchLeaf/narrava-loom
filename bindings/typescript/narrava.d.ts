@@ -186,6 +186,52 @@ declare global {
   /** 启动配置对象的属性代理，与 Twee 中的 `setup.name` 指向同一份数据。 */
   const setup: { [name: string]: NarravaData }
 
+  type NarravaReactionPassageMatcher = string | RegExp
+  interface NarravaReactionPassageSelector {
+    readonly match?: readonly NarravaReactionPassageMatcher[]
+    readonly exclude?: readonly NarravaReactionPassageMatcher[]
+    readonly tags?: {
+      readonly any?: readonly string[]
+      readonly all?: readonly string[]
+      readonly none?: readonly string[]
+    }
+  }
+  interface NarravaReactionDefinition {
+    readonly id: string
+    readonly event?: string
+    readonly state?: `$${string}`
+    readonly lifecycle?: boolean
+    readonly passage?:
+      | NarravaReactionPassageMatcher
+      | readonly NarravaReactionPassageMatcher[]
+      | NarravaReactionPassageSelector
+    readonly cond?: (context: NarravaData) => boolean
+    readonly widget?: string
+    readonly include?: string
+    readonly replace?: string
+    readonly goto?: string
+    readonly emit?: { readonly name: string; readonly payload?: NarravaData }
+    readonly exit?: boolean
+    readonly enabled?: boolean
+    readonly once?: boolean
+    readonly limit?: number
+    readonly tags?: readonly string[]
+  }
+  interface NarravaReactionStatus {
+    readonly id: string
+    readonly enabled: boolean
+    readonly triggered: number
+    readonly tags: readonly string[]
+  }
+  /** 声明式叙事反应规则；规则本体与次数状态由 Native Runtime 持有。 */
+  const Reaction: {
+    add(definition: NarravaReactionDefinition): NarravaReactionStatus
+    get(id: string): NarravaReactionStatus | undefined
+    enable(id: string): boolean
+    disable(id: string): boolean
+    reset(id: string): boolean
+  }
+
   /** Macro.before/after 订阅返回的不透明句柄。 */
   type NarravaMacroSubscription = number & { readonly __macroSubscription: unique symbol }
   /** 宏调用上下文：宏名、参数（列表或原始字符串）与容器宏正文。 */

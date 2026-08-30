@@ -42,6 +42,7 @@ use oxc::{
 mod adapter;
 pub mod dispatch;
 pub mod protocol_adapter;
+mod reaction_bridge;
 mod resource_bridge;
 mod session;
 mod session_handle;
@@ -171,6 +172,36 @@ const BOOTSTRAP: &str = r#"
   globalThis.V = propertyApi("variables");
   globalThis.T = propertyApi("temporary");
   globalThis.setup = propertyApi("setup-properties");
+  const reactionMatcher = (value) => value instanceof RegExp
+    ? { regex: value.source }
+    : { exact: String(value) };
+  const reactionPassage = (value) => {
+    if (value === undefined) return undefined;
+    if (typeof value === "string" || value instanceof RegExp) return { match: [reactionMatcher(value)] };
+    if (Array.isArray(value)) return { match: value.map(reactionMatcher) };
+    return {
+      match: (value.match ?? []).map(reactionMatcher),
+      exclude: (value.exclude ?? []).map(reactionMatcher),
+      tags: value.tags,
+    };
+  };
+  globalThis.Reaction = Object.freeze({
+    add: (definition) => {
+      if (definition === null || typeof definition !== "object") throw new TypeError("Reaction.add 需要配置对象");
+      return JSON.parse(__narravaReactionAdd(JSON.stringify({
+        ...definition,
+        passage: reactionPassage(definition.passage),
+        cond: definition.cond === undefined ? undefined : toHostValue(`${definition.id ?? "<unknown>"}.cond`, definition.cond),
+      })));
+    },
+    get: (id) => {
+      const value = __narravaReactionGet(String(id));
+      return value === undefined ? undefined : Object.freeze(JSON.parse(value));
+    },
+    enable: (id) => __narravaReactionEnable(String(id)),
+    disable: (id) => __narravaReactionDisable(String(id)),
+    reset: (id) => __narravaReactionReset(String(id)),
+  });
   globalThis.Macro = Object.seal({
     add: (name, value) => { const old = macros.get(name); macros.set(name, value); return old },
     update: (name, value) => { if (!macros.has(name)) throw new Error(`Macro 不存在：${name}`); const old = macros.get(name); macros.set(name, value); return old },
@@ -620,6 +651,8 @@ impl EcmaRuntime {
             .map_err(|error| script_error("script.state_bridge", error))?;
         resource_bridge::install(&mut context, resources.clone())
             .map_err(|error| script_error("script.resource_bridge", error))?;
+        reaction_bridge::install(&mut context)
+            .map_err(|error| script_error("script.reaction_bridge", error))?;
         let configuration = serde_json::json!({
             "defaultLocale": default_locale,
             "locale": default_locale,

@@ -145,6 +145,54 @@ fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
     assert_eq!(value["value"]["children"][0]["color"], "warning");
 }
 
+#[test]
+fn reaction_api_registers_native_rules_without_a_javascript_registry_mirror() {
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-reaction-api-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"Reaction.add({
+          id: "alice.quest.complete",
+          event: "quest:completed",
+          cond: ({ quest }) => quest === "old_mine",
+          emit: { name: "alice:friendship", payload: { stage: "friend" } },
+          limit: 2,
+          tags: ["character:alice"],
+        });"#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let mut state = State::new();
+    let mut runtime = EcmaRuntime::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    )
+    .unwrap();
+    let value = runtime
+        .context
+        .eval(Source::from_bytes(
+            r#"JSON.stringify({ before: Reaction.get("alice.quest.complete"), changed: Reaction.disable("alice.quest.complete"), after: Reaction.get("alice.quest.complete") })"#,
+        ))
+        .unwrap();
+    let json = value
+        .to_string(&mut runtime.context)
+        .unwrap()
+        .to_std_string_escaped();
+    let result: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(result["before"]["enabled"], true);
+    assert_eq!(result["before"]["triggered"], 0);
+    assert_eq!(result["before"]["tags"][0], "character:alice");
+    assert_eq!(result["changed"], true);
+    assert_eq!(result["after"]["enabled"], false);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 /// Save 钩子按注册顺序执行，可改写目标，且 after 等待完成结果。
 #[test]
 fn bootstrap_save_hooks_preserve_order_rewrite_targets_and_wait_for_completion() {
