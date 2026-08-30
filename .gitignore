@@ -1,29 +1,33 @@
-# Codex 本地配置
+# 本地工具配置
 .agents/
 .codex/
+.idea/
+*.swp
+*.swo
 
-# Rust 构建产物（cargo 缓存，不含交付物）
+# 依赖与构建缓存；无路径前缀的目录规则会匹配仓库任意层级
 target/
-
-# 依赖安装目录
 node_modules/
-
-# 交付物输出目录：NarravaGame/ 游戏发行目录、*.vsix 扩展包、Web 构建产物
-# 所有构建输出统一进 dist/，不要写进 target/
 dist/
+coverage/
+.cache/
+*.profraw
+lcov.info
 
-# 示例运行时数据；示例源码本身只位于 contents/resources/languages/styles
+# 本地环境变量；示例模板可以入库
+.env
+.env.*
+!.env.example
+
+# 运行时数据与打包产物
 examples/save/
-
-# VS Code 扩展包（防止误提交到扩展目录）
 *.vsix
 
-# Tauri 自动生成的 schema
+# 平台工具生成目录
 hosts/narrava-loom-tauri/gen/
-
-# Godot 导入缓存；项目源码与 project.godot 不忽略
 .godot/
 
-# 编辑器与系统临时文件
+# 系统临时文件
 *.log
 .DS_Store
+Thumbs.db
