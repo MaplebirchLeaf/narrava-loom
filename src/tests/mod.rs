@@ -22,6 +22,7 @@ mod mir;
 mod nar;
 mod package_zip;
 mod protocol;
+mod reaction;
 mod release;
 mod resource;
 mod runtime;

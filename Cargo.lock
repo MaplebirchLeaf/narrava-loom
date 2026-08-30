@@ -2203,6 +2203,7 @@ dependencies = [
 name = "narrava-loom-core"
 version = "0.4.0"
 dependencies = [
+ "regex",
  "semver",
  "serde",
  "serde_json",
