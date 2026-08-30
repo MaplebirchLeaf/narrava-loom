@@ -30,16 +30,18 @@ export function installReaction(): void {
       if (definition === null || typeof definition !== "object") {
         throw new TypeError("Reaction.add 需要配置对象")
       }
-      return JSON.parse(
-        __narravaReactionAdd(
-          JSON.stringify({
-            ...definition,
-            passage: normalizePassage(definition.passage),
-            cond:
-              definition.cond === undefined
-                ? undefined
-                : toHostValue(`${String(definition.id ?? "<unknown>")}.cond`, definition.cond),
-          }),
+      return Object.freeze(
+        JSON.parse(
+          __narravaReactionAdd(
+            JSON.stringify({
+              ...definition,
+              passage: normalizePassage(definition.passage),
+              cond:
+                definition.cond === undefined
+                  ? undefined
+                  : toHostValue(`${String(definition.id ?? "<unknown>")}.cond`, definition.cond),
+            }),
+          ),
         ),
       )
     },

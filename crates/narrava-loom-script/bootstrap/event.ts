@@ -1,6 +1,7 @@
 import {
   allocateEventSequence,
   allocateSubscription,
+  authorEvents,
   eventSubscriptions,
   events,
   globals,
@@ -17,7 +18,9 @@ export function installEvent(names: string[]): void {
         throw new TypeError("Event 名称不能为空或包含空白")
       }
       if (builtinEvents.has(name)) throw new TypeError(`Event 内置名称只能由 Engine 发出：${name}`)
-      return emitEvent(name, payload)
+      const sequence = emitEvent(name, payload)
+      authorEvents.push(events.at(-1)!)
+      return sequence
     },
     subscribe: (filter: { name?: string } = {}) => {
       const id = allocateSubscription()
@@ -46,4 +49,12 @@ export function emitEvent(name: string, payload: unknown): number {
 export function emitBuiltin(name: string, payload: unknown): number {
   if (!builtinEvents.has(name)) throw new TypeError(`未知 Event 内置名称：${name}`)
   return emitEvent(name, payload)
+}
+
+export function emitReaction(name: string, payload: unknown): number {
+  return emitEvent(name, payload)
+}
+
+export function takeAuthorEvents(): EventRecord[] {
+  return authorEvents.splice(0)
 }

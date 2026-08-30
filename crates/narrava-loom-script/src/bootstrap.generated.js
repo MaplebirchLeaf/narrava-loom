@@ -66,6 +66,7 @@
   var globals = globalThis;
   var functions = new Map;
   var events = [];
+  var authorEvents = [];
   var logs = [];
   var macros = new Map;
   var subscriptions = new Map;
@@ -114,7 +115,9 @@
         }
         if (builtinEvents.has(name))
           throw new TypeError(`Event 内置名称只能由 Engine 发出：${name}`);
-        return emitEvent(name, payload);
+        const sequence = emitEvent(name, payload);
+        authorEvents.push(events.at(-1));
+        return sequence;
       },
       subscribe: (filter = {}) => {
         const id = allocateSubscription();
@@ -142,6 +145,12 @@
     if (!builtinEvents.has(name))
       throw new TypeError(`未知 Event 内置名称：${name}`);
     return emitEvent(name, payload);
+  }
+  function emitReaction(name, payload) {
+    return emitEvent(name, payload);
+  }
+  function takeAuthorEvents() {
+    return authorEvents.splice(0);
   }
 
   // crates/narrava-loom-script/bootstrap/host.ts
@@ -268,11 +277,11 @@
         if (definition === null || typeof definition !== "object") {
           throw new TypeError("Reaction.add 需要配置对象");
         }
-        return JSON.parse(__narravaReactionAdd(JSON.stringify({
+        return Object.freeze(JSON.parse(__narravaReactionAdd(JSON.stringify({
           ...definition,
           passage: normalizePassage(definition.passage),
           cond: definition.cond === undefined ? undefined : toHostValue(`${String(definition.id ?? "<unknown>")}.cond`, definition.cond)
-        })));
+        }))));
       },
       get: (id) => {
         const value = __narravaReactionGet(String(id));
@@ -386,6 +395,8 @@
         Object.assign(configuration, value);
       },
       emitBuiltin,
+      emitReaction,
+      takeAuthorEvents,
       completeSave: saveAfter,
       takeSave() {
         const request = this.save;

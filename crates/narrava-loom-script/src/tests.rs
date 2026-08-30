@@ -105,6 +105,36 @@ fn bootstrap_exposes_only_flat_script_globals_without_browser_window() {
     assert!(value.get("missing").is_none());
 }
 
+#[test]
+fn bootstrap_drains_only_author_events_for_reaction_resolution() {
+    let mut context = Context::default();
+    context
+        .eval(Source::from_bytes(bootstrap_source()))
+        .expect("绑定启动脚本应可执行");
+    let result = context
+        .eval(Source::from_bytes(
+            r#"
+              Event.emit("quest:completed", { id: 7 });
+              __narrava.emitBuiltin("passage:start", { passage: "Start" });
+              JSON.stringify({
+                first: __narrava.takeAuthorEvents(),
+                second: __narrava.takeAuthorEvents(),
+              })
+            "#,
+        ))
+        .expect("内部 Runtime 应能取走作者 Event");
+    let json = result
+        .to_string(&mut context)
+        .unwrap()
+        .to_std_string_escaped();
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(value["first"].as_array().unwrap().len(), 1);
+    assert_eq!(value["first"][0]["name"], "quest:completed");
+    assert_eq!(value["first"][0]["payload"]["id"], 7);
+    assert_eq!(value["second"].as_array().unwrap().len(), 0);
+}
+
 /// Surface builder 是冻结且 Host 中立的（不依赖 `narrava` 全局）。
 #[test]
 fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
@@ -191,6 +221,154 @@ fn reaction_api_registers_native_rules_without_a_javascript_registry_mirror() {
     assert_eq!(result["changed"], true);
     assert_eq!(result["after"]["enabled"], false);
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ecma_binding_exposes_author_events_as_owned_core_values() {
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-reaction-events-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"Event.emit("quest:completed", { quest: "old_mine", reward: 500 });"#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let mut state = State::new();
+    let binding = EcmaBinding::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    )
+    .unwrap();
+
+    let events = binding.take_author_events().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].name, "quest:completed");
+    assert_eq!(
+        events[0].payload,
+        Value::object(vec![
+            (String::from("quest"), Value::string("old_mine")),
+            (String::from("reward"), Value::Number(500.0)),
+        ])
+    );
+    assert!(binding.take_author_events().unwrap().is_empty());
+}
+
+#[test]
+fn ecma_binding_resolves_event_conditions_and_publishes_emitted_events() {
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-reaction-resolver-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"
+          globalThis.friendshipEvents = Event.subscribe({ name: "alice:friendship" });
+          Reaction.add({
+            id: "alice.quest.complete",
+            event: "quest:completed",
+            cond: ({ quest }) => quest === "old_mine",
+            emit: { name: "alice:friendship", payload: { stage: "friend" } },
+            limit: 1,
+          });
+          Reaction.add({
+            id: "alice.friendship.notice",
+            event: "alice:friendship",
+            widget: '<<friendshipNotice>>',
+          });
+          Event.emit("quest:completed", { quest: "old_mine" });
+        "#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let mut state = State::new();
+    let binding = EcmaBinding::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    )
+    .unwrap();
+
+    let resolved = binding.resolve_author_reactions(&mut state).unwrap();
+    assert_eq!(resolved.len(), 2);
+    assert!(
+        binding
+            .resolve_author_reactions(&mut state)
+            .unwrap()
+            .is_empty()
+    );
+    let mut runtime = binding.runtime.borrow_mut();
+    let result = runtime
+        .context
+        .eval(Source::from_bytes(
+            r#"JSON.stringify({
+              status: Reaction.get("alice.quest.complete"),
+              emitted: Event.take(globalThis.friendshipEvents),
+            })"#,
+        ))
+        .unwrap();
+    let json = result
+        .to_string(&mut runtime.context)
+        .unwrap()
+        .to_std_string_escaped();
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(value["status"]["triggered"], 1);
+    assert_eq!(value["status"]["enabled"], false);
+    assert_eq!(value["emitted"][0]["name"], "alice:friendship");
+    assert_eq!(value["emitted"][0]["payload"]["stage"], "friend");
+}
+
+#[test]
+fn ecma_binding_resolves_committed_state_path_changes() {
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-reaction-state-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"Reaction.add({
+          id: "alice.friendship",
+          state: "$alice.affection",
+          cond: ({ before, after }) => before < 50 && after >= 50,
+          emit: { name: "alice:friendship", payload: { stage: "friend" } },
+          limit: 1,
+        });"#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let mut state = State::new();
+    state.variables_set(
+        "alice",
+        Value::object(vec![(String::from("affection"), Value::Number(40.0))]),
+    );
+    let binding = EcmaBinding::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    )
+    .unwrap();
+    let before = state.snapshot();
+    state.variables_set(
+        "alice",
+        Value::object(vec![(String::from("affection"), Value::Number(50.0))]),
+    );
+
+    let resolved = binding
+        .resolve_state_reactions(&before, &mut state)
+        .unwrap();
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(binding.reaction_state()[0].triggered, 1);
 }
 
 /// Save 钩子按注册顺序执行，可改写目标，且 after 等待完成结果。
@@ -634,6 +812,81 @@ fn host_builtin_passage_event_reaches_a_script_subscription() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+#[test]
+fn runtime_session_executes_lifecycle_event_state_and_reaction_goto_as_one_chain() {
+    use narrava_loom_core::{bytecode::BytecodeProgram, lir::LirProgram, mir::MirStory, twee};
+    use narrava_loom_protocol::{RuntimeCommand, RuntimeUpdate};
+
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-reaction-session-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::create_dir_all(root.join("contents/story")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"
+          Reaction.add({ id: "start.guard", lifecycle: true, passage: "Start", widget: "guard<br>", exit: true });
+          Reaction.add({ id: "boot.goto", event: "boot:ready", goto: "Target" });
+          Reaction.add({ id: "score.50", state: "$score", cond: ({ before, after }) => before < 50 && after >= 50, include: "StateNotice", replace: "state-notice", once: true });
+          Event.emit("boot:ready");
+        "#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("contents/story/main.twee"),
+        r#":: Start
+forbidden-start-body
+
+:: Target
+<<set $score to 50>>target-body<br><<slot "state-notice">><</slot>>
+
+:: StateNotice
+state-notice<br>"#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let ast = twee::Story::build(&sources.items).unwrap();
+    let hir = narrava_loom_core::hir::HirStory::lower(&ast).unwrap();
+    let mir = MirStory::lower(&hir).unwrap();
+    let lir = LirProgram::lower(&mir).unwrap();
+    let bytecode = BytecodeProgram::compile(&lir);
+    let mut state = State::new();
+    let binding = EcmaBinding::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    )
+    .unwrap();
+    let mut session = crate::RuntimeSession::new(&hir, &bytecode, binding.clone(), state);
+
+    let RuntimeUpdate::Ready { update } = session.execute(RuntimeCommand::Start).unwrap() else {
+        panic!("Reaction 导航链应同步完成")
+    };
+    let json = serde_json::to_string(&update).unwrap();
+    assert_eq!(update.current, "Target");
+    assert!(json.contains("target-body"));
+    assert!(json.contains("state-notice"));
+    assert!(!json.contains("guard"));
+    assert!(!json.contains("forbidden-start-body"));
+    assert_eq!(binding.reaction_state().len(), 3);
+    assert!(
+        binding
+            .reaction_state()
+            .iter()
+            .any(|state| state.id == "start.guard" && state.triggered == 1)
+    );
+    assert!(
+        binding
+            .reaction_state()
+            .iter()
+            .any(|state| state.id == "score.50" && state.destroyed)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 mod runtime_session_state_machine {
     use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
@@ -689,6 +942,7 @@ mod runtime_session_state_machine {
             _target: &str,
             state: &State,
             _story: &Story<'hir, 'source>,
+            _reactions: &[narrava_loom_core::reaction::ReactionRuntimeState],
         ) -> Result<Option<String>, HostErrorDto> {
             if operation == SaveOperation::Export {
                 self.observed
@@ -705,11 +959,12 @@ mod runtime_session_state_machine {
             _document: Option<String>,
             state: &mut State,
             _story: &mut Story<'hir, 'source>,
-        ) -> Result<(), HostErrorDto> {
+        ) -> Result<Option<Vec<narrava_loom_core::reaction::ReactionRuntimeState>>, HostErrorDto>
+        {
             if operation == SaveOperation::Import {
                 state.variables_set("route", Value::String("imported".into()));
             }
-            Ok(())
+            Ok(None)
         }
 
         fn select_language(
@@ -792,6 +1047,7 @@ mod runtime_session_state_machine {
             target: &str,
             _state: &State,
             _story: &Story<'hir, 'source>,
+            _reactions: &[narrava_loom_core::reaction::ReactionRuntimeState],
         ) -> Result<Option<String>, HostErrorDto> {
             self.0
                 .0
@@ -807,8 +1063,9 @@ mod runtime_session_state_machine {
             _document: Option<String>,
             _state: &mut State,
             _story: &mut Story<'hir, 'source>,
-        ) -> Result<(), HostErrorDto> {
-            Ok(())
+        ) -> Result<Option<Vec<narrava_loom_core::reaction::ReactionRuntimeState>>, HostErrorDto>
+        {
+            Ok(None)
         }
 
         fn select_language(
@@ -904,12 +1161,30 @@ mod runtime_session_state_machine {
         }
     }
 
+    fn runtime_fixture() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(1);
+        let root = std::path::PathBuf::from(format!(
+            "target/test-projects/narrava-loom-runtime-session-{}-{}",
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("contents/story")).unwrap();
+        std::fs::write(
+            root.join("contents/story/runtime.twee"),
+            ":: Start\n<<wait>>Main ready.\n\n:: Bar\n<<wait>>Bar ready.\n",
+        )
+        .unwrap();
+        root
+    }
+
     fn with_runtime(
         adapter: Rc<FakeAdapter>,
         test: impl for<'hir, 'source> FnOnce(&mut RuntimeSession<'hir, 'source, FakeAdapter>),
     ) {
-        let sources =
-            SourceList::discover("test-project").expect("RuntimeSession fixture should load");
+        let root = runtime_fixture();
+        let sources = SourceList::discover(&root).expect("RuntimeSession fixture should load");
         let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
         let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
         let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
@@ -917,14 +1192,15 @@ mod runtime_session_state_machine {
         let bytecode = BytecodeProgram::compile(&lir);
         let mut runtime = RuntimeSession::new(&hir, &bytecode, adapter, State::new());
         test(&mut runtime);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     fn with_runtime_platform(
         calls: PlatformCalls,
         test: impl for<'hir, 'source> FnOnce(&mut RuntimeSession<'hir, 'source, FakeAdapter>),
     ) {
-        let sources =
-            SourceList::discover("test-project").expect("RuntimeSession fixture should load");
+        let root = runtime_fixture();
+        let sources = SourceList::discover(&root).expect("RuntimeSession fixture should load");
         let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
         let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
         let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
@@ -938,6 +1214,7 @@ mod runtime_session_state_machine {
             Box::new(FakePlatform(calls)),
         );
         test(&mut runtime);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     fn pending_id(update: RuntimeUpdate) -> u64 {
@@ -949,8 +1226,8 @@ mod runtime_session_state_machine {
 
     #[test]
     fn opaque_session_handle_rejects_a_request_routed_to_another_session() {
-        let sources =
-            SourceList::discover("test-project").expect("RuntimeSession fixture should load");
+        let root = runtime_fixture();
+        let sources = SourceList::discover(&root).expect("RuntimeSession fixture should load");
         let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
         let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
         let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
@@ -972,11 +1249,13 @@ mod runtime_session_state_machine {
             ))
             .unwrap_err();
         assert_eq!(error.code, "runtime_session.id_mismatch");
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn native_driver_rejects_an_unknown_runtime_protocol_version() {
-        let sources = SourceList::discover("test-project").unwrap();
+        let root = runtime_fixture();
+        let sources = SourceList::discover(&root).unwrap();
         let ast = twee::Story::build(&sources.items).unwrap();
         let hir = HirStory::lower(&ast).unwrap();
         let mir = MirStory::lower(&hir).unwrap();
@@ -997,6 +1276,7 @@ mod runtime_session_state_machine {
 
         let error = driver.dispatch(request).unwrap_err();
         assert_eq!(error.code, "runtime_session.protocol_version");
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1085,7 +1365,8 @@ mod runtime_session_state_machine {
 
     #[test]
     fn failed_script_sync_rolls_back_an_import_before_the_next_command() {
-        let sources = SourceList::discover("test-project").unwrap();
+        let root = runtime_fixture();
+        let sources = SourceList::discover(&root).unwrap();
         let ast = twee::Story::build(&sources.items).unwrap();
         let hir = HirStory::lower(&ast).unwrap();
         let mir = MirStory::lower(&hir).unwrap();
@@ -1138,6 +1419,7 @@ mod runtime_session_state_machine {
             observed.borrow().as_slice(),
             [Some(Value::String("original".into()))]
         );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

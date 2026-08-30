@@ -7,7 +7,7 @@ use crate::{expression::value::Value, hir::HirBodyNode, semantic::InteractionId}
 use super::CapturedMacroLocals;
 
 /// 玩家激活后由 Macro Runtime 执行的一次性动作。
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MacroInteraction<'hir, 'source> {
     target: String,
     body: &'hir [HirBodyNode<'source>],
@@ -60,6 +60,7 @@ pub enum MacroInteractionError {
 }
 
 /// 当前有效 SemanticOutput 对应的延迟 Macro 动作。
+#[derive(Clone)]
 pub struct MacroInteractions<'hir, 'source> {
     entries: HashMap<InteractionId, MacroInteraction<'hir, 'source>>,
 }

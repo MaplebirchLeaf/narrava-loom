@@ -6,6 +6,7 @@ use crate::{
     GameIdentity,
     expression::value::{ArrayValue, ScriptCallable, Value},
     hir::{HirPassage, HirStory},
+    reaction::ReactionRuntimeState,
     save::{
         SaveCompletion, SaveController, SaveDocument, SaveError, SaveLifecycleController,
         SaveLifecycleSubscriptions, SaveOperation, SaveOutcome,
@@ -29,9 +30,16 @@ fn save_document_json_matches_the_current_schema() {
 
     let encoded: String = SaveDocument::capture(&game, &state, &story)
         .expect("空运行状态应可捕获")
+        .with_reactions(vec![ReactionRuntimeState {
+            id: String::from("quest.once"),
+            enabled: false,
+            triggered: 1,
+            destroyed: true,
+        }])
         .to_json()
         .expect("存档应可编码");
     let decoded: SaveDocument = SaveDocument::from_json(&encoded).expect("存档应可解码");
+    assert_eq!(decoded.reactions()[0].id, "quest.once");
 
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&decoded.to_json().expect("应可再次编码"))

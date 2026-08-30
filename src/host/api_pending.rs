@@ -281,7 +281,7 @@ impl HostApi {
                                 }
                             },
                         };
-                    return Self::drive_stable(
+                    return Self::drive_stable_with_reaction(
                         HostStable {
                             execution,
                             boundary,
@@ -291,6 +291,7 @@ impl HostApi {
                         story,
                         mir,
                         lifecycle,
+                        no_passage_reaction,
                         dispatch,
                     );
                 }

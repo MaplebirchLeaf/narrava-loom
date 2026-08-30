@@ -29,6 +29,8 @@ pub struct SaveDocument {
     game: SaveGame,
     state: SaveValueGraph,
     story: SaveStory,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    reactions: Vec<crate::reaction::ReactionRuntimeState>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -92,7 +94,19 @@ impl SaveDocument {
                 history,
                 position: story.position(),
             },
+            reactions: Vec::new(),
         })
+    }
+
+    /// 附加由 Script Runtime 捕获的 Reaction 计数、启用与销毁状态。
+    pub fn with_reactions(mut self, reactions: Vec<crate::reaction::ReactionRuntimeState>) -> Self {
+        self.reactions = reactions;
+        self
+    }
+
+    /// 读取存档中的 Reaction 运行状态；旧存档默认返回空集合。
+    pub fn reactions(&self) -> &[crate::reaction::ReactionRuntimeState] {
+        &self.reactions
     }
 
     /// 序列化为带缩进的 JSON 字符串。

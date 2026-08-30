@@ -3,21 +3,26 @@
 use super::*;
 
 impl HostApi {
-    /// 建立不授予写权限的 State 借用视图。
-    pub fn state(state: &State) -> HostStateView<'_> {
-        HostStateView::new(state)
-    }
-
-    /// 沿 Story 历史游标重新执行上一项或下一项，不制造新的访问记录。
+    /// 由 Runtime 控制器发起显式 Passage 导航，并复用完整的 MIR、事务、
+    /// lifecycle、Reaction 与 Macro continuation 链。
     #[allow(clippy::too_many_arguments)]
-    pub fn history_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn navigate_mir_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
         mir: &BytecodeProgram,
-        backward: bool,
+        name: &str,
         request: HostMirRequest<'_>,
-        mut lifecycle: Lifecycle,
+        lifecycle: Lifecycle,
+        reaction: Reaction,
         dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -26,6 +31,297 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        let checkpoint = (state.checkpoint(), story.snapshot());
+        Self::begin_mir_entry(
+            pending,
+            state,
+            story,
+            mir,
+            HostMirEntryRequest {
+                name,
+                params: request.params,
+                identity: request.identity,
+                limits: request.limits,
+                language: request.language,
+            },
+            Some(checkpoint),
+            lifecycle,
+            reaction,
+            dispatch,
+        )
+    }
+
+    /// 建立不授予写权限的 State 借用视图。
+    pub fn state(state: &State) -> HostStateView<'_> {
+        HostStateView::new(state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn history_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        backward: bool,
+        request: HostMirRequest<'_>,
+        lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        Self::history_mir_with_reaction(
+            pending,
+            state,
+            story,
+            mir,
+            backward,
+            request,
+            lifecycle,
+            no_passage_reaction,
+            dispatch,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_mir<'hir, 'source, Pending, DispatchError, Initialize, Lifecycle, Dispatch>(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        request: HostMirRequest<'_>,
+        initialize: Initialize,
+        lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+        Initialize: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            EngineExecutionLimits,
+        ) -> Result<BodyExecution, Diagnostic>,
+    {
+        Self::start_mir_with_reaction(
+            pending,
+            state,
+            story,
+            mir,
+            request,
+            initialize,
+            lifecycle,
+            no_passage_reaction,
+            dispatch,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_special_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        name: &str,
+        request: HostMirRequest<'_>,
+        lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        Self::render_special_mir_with_reaction(
+            pending,
+            state,
+            story,
+            mir,
+            name,
+            request,
+            lifecycle,
+            no_passage_reaction,
+            dispatch,
+        )
+    }
+
+    pub fn advance_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        request: HostMirAdvanceRequest<'_, '_>,
+        lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        Self::advance_mir_with_reaction(
+            pending,
+            state,
+            story,
+            mir,
+            request,
+            lifecycle,
+            no_passage_reaction,
+            dispatch,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn advance_macro_interaction_mir<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Dispatch,
+        ExecuteAction,
+    >(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        interactions: &mut MacroInteractions<'hir, 'source>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        request: HostMirAdvanceRequest<'_, '_>,
+        execute_action: ExecuteAction,
+        lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+        ExecuteAction: FnMut(
+            &'hir [crate::hir::HirBodyNode<'source>],
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            &mut MacroLocalScopes<Value>,
+        ) -> Result<BodyExecution, Diagnostic>,
+    {
+        Self::advance_macro_interaction_mir_with_reaction(
+            pending,
+            interactions,
+            state,
+            story,
+            mir,
+            request,
+            execute_action,
+            lifecycle,
+            no_passage_reaction,
+            dispatch,
+        )
+    }
+
+    /// 沿 Story 历史游标重新执行上一项或下一项，不制造新的访问记录。
+    #[allow(clippy::too_many_arguments)]
+    pub fn history_mir_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        backward: bool,
+        request: HostMirRequest<'_>,
+        mut lifecycle: Lifecycle,
+        mut reaction: Reaction,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -62,6 +358,7 @@ impl HostApi {
             state_checkpoint,
             story_snapshot,
             &mut lifecycle,
+            &mut reaction,
         )
         .map_err(|error| {
             Box::new(HostDriveError {
@@ -69,7 +366,7 @@ impl HostApi {
                 pending: None,
             })
         })?;
-        Self::drive_stable(
+        Self::drive_stable_with_reaction(
             HostStable {
                 execution: HostExecutionToken::from_identity(request.identity),
                 boundary,
@@ -79,6 +376,7 @@ impl HostApi {
             story,
             mir,
             lifecycle,
+            reaction,
             dispatch,
         )
     }
@@ -124,7 +422,16 @@ impl HostApi {
     /// 从固定 `Start` Passage 启动 MIR/VM，并直接驱动到 Ready 或 Pending。
     // 三个回调保留为独立参数，才能让 Rust 对每次短借用应用正确的高阶生命周期。
     #[allow(clippy::too_many_arguments)]
-    pub fn start_mir<'hir, 'source, Pending, DispatchError, Initialize, Lifecycle, Dispatch>(
+    pub fn start_mir_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Initialize,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -132,6 +439,7 @@ impl HostApi {
         request: HostMirRequest<'_>,
         mut initialize: Initialize,
         mut lifecycle: Lifecycle,
+        reaction: Reaction,
         dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -140,6 +448,11 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -193,13 +506,22 @@ impl HostApi {
             },
             Some((state_checkpoint, story_snapshot)),
             &mut lifecycle,
+            reaction,
             dispatch,
         )
     }
 
     /// 在调用方提供的隔离 State/Story 视图中渲染一个特殊 Passage。
     #[allow(clippy::too_many_arguments)]
-    pub fn render_special_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn render_special_mir_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -207,6 +529,7 @@ impl HostApi {
         name: &str,
         request: HostMirRequest<'_>,
         lifecycle: Lifecycle,
+        reaction: Reaction,
         dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -215,6 +538,11 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -254,18 +582,29 @@ impl HostApi {
             },
             None,
             lifecycle,
+            reaction,
             dispatch,
         )
     }
 
     /// 验证上一份 SemanticOutput 的玩家动作，再进入目标 Passage 的 MIR 链。
-    pub fn advance_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn advance_mir_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
         mir: &BytecodeProgram,
         request: HostMirAdvanceRequest<'_, '_>,
         mut lifecycle: Lifecycle,
+        reaction: Reaction,
         dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -274,6 +613,11 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -330,6 +674,7 @@ impl HostApi {
             },
             None,
             &mut lifecycle,
+            reaction,
             dispatch,
         )
     }
@@ -339,12 +684,13 @@ impl HostApi {
     /// 当前正文入口是同步边界；异步 Macro 需要后续专用 continuation，不能在这里
     /// 假装已经完成。正文输出不会短暂呈现，正文应主要用于 State 与逻辑副作用。
     #[allow(clippy::too_many_arguments)]
-    pub fn advance_macro_interaction_mir<
+    pub fn advance_macro_interaction_mir_with_reaction<
         'hir,
         'source,
         Pending,
         DispatchError,
         Lifecycle,
+        Reaction,
         Dispatch,
         ExecuteAction,
     >(
@@ -356,6 +702,7 @@ impl HostApi {
         request: HostMirAdvanceRequest<'_, '_>,
         mut execute_action: ExecuteAction,
         mut lifecycle: Lifecycle,
+        reaction: Reaction,
         dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -364,6 +711,11 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -479,6 +831,7 @@ impl HostApi {
             },
             Some((state_checkpoint, story_snapshot)),
             &mut lifecycle,
+            reaction,
             dispatch,
         );
         if result.is_err() {
@@ -495,7 +848,15 @@ impl HostApi {
     // 内部入口沿用公开边界的独立生命周期回调，避免仅为计数增加一次性包装类型。
     /// 共享的 MIR 入口：建立 Engine 请求，并把初始边界驱动到 Ready 或 Pending。
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn begin_mir_entry<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub(super) fn begin_mir_entry<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -503,6 +864,7 @@ impl HostApi {
         request: HostMirEntryRequest<'_>,
         checkpoint: Option<(StateCheckpoint, StorySnapshot<'hir, 'source>)>,
         mut lifecycle: Lifecycle,
+        mut reaction: Reaction,
         dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -511,6 +873,11 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -536,18 +903,28 @@ impl HostApi {
             language,
         };
         let boundary: EngineMirVmResume<'hir, 'source> = match checkpoint {
-            Some((state_checkpoint, story_snapshot)) => Engine::begin_mir_chain_from_checkpoint(
+            Some((state_checkpoint, story_snapshot)) => {
+                Engine::begin_mir_chain_from_checkpoint_with_reaction(
+                    state,
+                    story,
+                    mir,
+                    EngineMirBeginCheckpointRequest {
+                        request,
+                        state_checkpoint,
+                        story_snapshot,
+                    },
+                    &mut lifecycle,
+                    &mut reaction,
+                )
+            }
+            None => Engine::begin_mir_chain_with_reaction(
                 state,
                 story,
                 mir,
-                EngineMirBeginCheckpointRequest {
-                    request,
-                    state_checkpoint,
-                    story_snapshot,
-                },
+                request,
                 &mut lifecycle,
+                &mut reaction,
             ),
-            None => Engine::begin_mir_chain(state, story, mir, request, &mut lifecycle),
         }
         .map_err(|error| {
             Box::new(HostDriveError {
@@ -559,6 +936,8 @@ impl HostApi {
             execution: HostExecutionToken::from_identity(identity),
             boundary,
         };
-        Self::drive_stable(stable, pending, state, story, mir, lifecycle, dispatch)
+        Self::drive_stable_with_reaction(
+            stable, pending, state, story, mir, lifecycle, reaction, dispatch,
+        )
     }
 }

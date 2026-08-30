@@ -41,7 +41,8 @@ export interface BootstrapGlobals {
 
 export const globals = globalThis as unknown as BootstrapGlobals
 export const functions = new Map<number, (...arguments_: unknown[]) => unknown>()
-export const events: unknown[] = []
+export const events: EventRecord[] = []
+export const authorEvents: EventRecord[] = []
 export const logs: unknown[] = []
 export const macros = new Map<string, { handler: (call: unknown) => unknown }>()
 export const subscriptions = new Map<number, unknown>()

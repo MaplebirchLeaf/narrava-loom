@@ -235,3 +235,23 @@ fn state_checkpoint_restores_every_namespace_as_one_detached_graph() {
     assert!(global.same_identity(temporary));
     assert!(!global.same_identity(&shared_array));
 }
+
+#[test]
+fn state_snapshot_reads_nested_persistent_paths_without_mutating_values() {
+    let mut state: State = State::new();
+    state.variables_set(
+        "alice",
+        Value::object(vec![(
+            String::from("stats"),
+            Value::object(vec![(String::from("affection"), Value::Number(50.0))]),
+        )]),
+    );
+    let snapshot: StateSnapshot = state.snapshot();
+
+    assert_eq!(
+        snapshot.variables_path("alice.stats.affection"),
+        Value::Number(50.0)
+    );
+    assert_eq!(snapshot.variables_path("alice.missing"), Value::Undefined);
+    assert_eq!(snapshot.variables_path("missing.value"), Value::Undefined);
+}

@@ -1,11 +1,42 @@
 //! Script Contract 与具体 ECMAScript 引擎之间的最小 Runtime adapter。
 
-use narrava_loom_core::state::State;
+use narrava_loom_core::hir::HirPassage;
+use narrava_loom_core::reaction::{ReactionEffect, ReactionRuntimeState};
+use narrava_loom_core::state::{State, StateSnapshot};
 
-use crate::{EcmaBinding, ScriptError, ScriptMacroOutcome, ScriptPending};
+use crate::{EcmaBinding, ScriptError, ScriptEvent, ScriptMacroOutcome, ScriptPending};
 
 /// RuntimeSession 所需的脚本能力；Boa/Oxc 只是一种实现。
 pub trait ScriptAdapter {
+    fn reaction_state(&self) -> Vec<ReactionRuntimeState> {
+        Vec::new()
+    }
+    fn restore_reaction_state(&self, _state: &[ReactionRuntimeState]) -> Result<(), ScriptError> {
+        Ok(())
+    }
+    fn take_author_events(&self) -> Result<Vec<ScriptEvent>, ScriptError> {
+        Ok(Vec::new())
+    }
+    fn resolve_author_reactions(
+        &self,
+        _state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        Ok(Vec::new())
+    }
+    fn resolve_state_reactions(
+        &self,
+        _command_before: &StateSnapshot,
+        _state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        Ok(Vec::new())
+    }
+    fn resolve_lifecycle_reactions(
+        &self,
+        _passage: &HirPassage<'_>,
+        _state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        Ok(Vec::new())
+    }
     fn has_macro(&self, name: &str) -> Result<bool, ScriptError>;
     fn call_macro(
         &self,
@@ -35,6 +66,35 @@ pub trait ScriptAdapter {
 }
 
 impl ScriptAdapter for EcmaBinding {
+    fn reaction_state(&self) -> Vec<ReactionRuntimeState> {
+        self.reaction_state()
+    }
+    fn restore_reaction_state(&self, state: &[ReactionRuntimeState]) -> Result<(), ScriptError> {
+        self.restore_reaction_state(state)
+    }
+    fn take_author_events(&self) -> Result<Vec<ScriptEvent>, ScriptError> {
+        self.take_author_events()
+    }
+    fn resolve_author_reactions(
+        &self,
+        state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        self.resolve_author_reactions(state)
+    }
+    fn resolve_state_reactions(
+        &self,
+        command_before: &StateSnapshot,
+        state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        self.resolve_state_reactions(command_before, state)
+    }
+    fn resolve_lifecycle_reactions(
+        &self,
+        passage: &HirPassage<'_>,
+        state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        self.resolve_lifecycle_reactions(passage, state)
+    }
     fn has_macro(&self, name: &str) -> Result<bool, ScriptError> {
         self.has_macro(name)
     }

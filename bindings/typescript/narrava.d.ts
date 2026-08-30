@@ -196,27 +196,69 @@ declare global {
       readonly none?: readonly string[]
     }
   }
-  interface NarravaReactionDefinition {
+  interface NarravaReactionEffect {
     readonly id: string
-    readonly event?: string
-    readonly state?: `$${string}`
-    readonly lifecycle?: boolean
-    readonly passage?:
-      | NarravaReactionPassageMatcher
-      | readonly NarravaReactionPassageMatcher[]
-      | NarravaReactionPassageSelector
-    readonly cond?: (context: NarravaData) => boolean
-    readonly widget?: string
-    readonly include?: string
-    readonly replace?: string
+    /** 通过 Engine 事务导航；目标 Passage 会正常经历 lifecycle 与 history。 */
     readonly goto?: string
+    /** 继续派发结构化 Event；Runtime 会检测后代环并限制执行次数。 */
     readonly emit?: { readonly name: string; readonly payload?: NarravaData }
-    readonly exit?: boolean
+    /** 仅 lifecycle Reaction 可用；在 Reaction Phase 截断目标 Passage 原正文。 */
+    readonly exit?: true
     readonly enabled?: boolean
     readonly once?: boolean
     readonly limit?: number
     readonly tags?: readonly string[]
   }
+  type NarravaReactionContent =
+    | {
+        /** Twee Widget 调用源码；可直接追加，也可替换稳定目标。 */
+        readonly widget: string
+        readonly include?: never
+        readonly replace?: string
+      }
+    | {
+        /** Passage fragment 必须明确替换目标，不能隐式追加到整页末尾。 */
+        readonly include: string
+        readonly replace: string
+        readonly widget?: never
+      }
+    | { readonly widget?: never; readonly include?: never; readonly replace?: never }
+  type NarravaEventReactionDefinition = NarravaReactionEffect &
+    NarravaReactionContent & {
+      readonly event: string
+      readonly state?: never
+      readonly lifecycle?: never
+      readonly passage?: never
+      readonly exit?: never
+      readonly cond?: (payload: NarravaData) => boolean
+    }
+  type NarravaStateReactionDefinition = NarravaReactionEffect &
+    NarravaReactionContent & {
+      readonly event?: never
+      readonly state: `$${string}`
+      readonly lifecycle?: never
+      readonly passage?: never
+      readonly exit?: never
+      readonly cond?: (change: {
+        readonly before: NarravaData
+        readonly after: NarravaData
+      }) => boolean
+    }
+  type NarravaLifecycleReactionDefinition = NarravaReactionEffect &
+    NarravaReactionContent & {
+      readonly event?: never
+      readonly state?: never
+      readonly lifecycle: true
+      readonly passage?:
+        | NarravaReactionPassageMatcher
+        | readonly NarravaReactionPassageMatcher[]
+        | NarravaReactionPassageSelector
+      readonly cond?: () => boolean
+    }
+  type NarravaReactionDefinition =
+    | NarravaEventReactionDefinition
+    | NarravaStateReactionDefinition
+    | NarravaLifecycleReactionDefinition
   interface NarravaReactionStatus {
     readonly id: string
     readonly enabled: boolean

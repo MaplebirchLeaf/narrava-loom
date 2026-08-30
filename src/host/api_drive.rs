@@ -3,6 +3,43 @@
 use super::*;
 
 impl HostApi {
+    pub fn drive_stable<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+        stable: HostStable<'hir, 'source>,
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        lifecycle: Lifecycle,
+        dispatch: Dispatch,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        Self::drive_stable_with_reaction(
+            stable,
+            pending,
+            state,
+            story,
+            mir,
+            lifecycle,
+            no_passage_reaction,
+            dispatch,
+        )
+    }
+
     /// 提交 Halted 边界并生成 Renderer 可消费的最终更新。
     pub fn commit_halted<'hir, 'source>(
         stable: HostStable<'hir, 'source>,
@@ -75,12 +112,17 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        reaction: impl FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
     ) -> Result<HostStable<'hir, 'source>, Box<HostNavigationError<'hir, 'source>>> {
         let HostStable {
             execution,
             boundary,
         } = stable;
-        match boundary.continue_navigation(mir, state, story, lifecycle) {
+        match boundary.continue_navigation(mir, state, story, lifecycle, reaction) {
             Ok(boundary) => Ok(HostStable {
                 execution,
                 boundary,
@@ -242,13 +284,23 @@ impl HostApi {
     /// 从一个稳定边界持续驱动事务，直到产生最终更新或新的异步等待。
     ///
     /// Binding 无需逐个理解 VM 边界；平台异步句柄仍只保存在 `pending` 中。
-    pub fn drive_stable<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn drive_stable_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError,
+        Lifecycle,
+        Reaction,
+        Dispatch,
+    >(
         mut stable: HostStable<'hir, 'source>,
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
         mir: &BytecodeProgram,
         mut lifecycle: Lifecycle,
+        mut reaction: Reaction,
         mut dispatch: Dispatch,
     ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
     where
@@ -257,6 +309,11 @@ impl HostApi {
             crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
         Dispatch: FnMut(
             EngineMirMacroInvocation<'_>,
             &mut State,
@@ -283,17 +340,23 @@ impl HostApi {
                         });
                 }
                 HostStableBoundary::NavigationPending | HostStableBoundary::PassageStopped => {
-                    Self::continue_navigation(stable, state, story, mir, &mut lifecycle).map_err(
-                        |error| match *error {
-                            HostNavigationError::Failed(diagnostic) => Box::new(HostDriveError {
-                                diagnostic,
-                                pending: None,
-                            }),
-                            HostNavigationError::NotNavigation(_) => {
-                                unreachable!("导航分类必须能由 continue_navigation 消费")
-                            }
-                        },
-                    )?
+                    Self::continue_navigation(
+                        stable,
+                        state,
+                        story,
+                        mir,
+                        &mut lifecycle,
+                        &mut reaction,
+                    )
+                    .map_err(|error| match *error {
+                        HostNavigationError::Failed(diagnostic) => Box::new(HostDriveError {
+                            diagnostic,
+                            pending: None,
+                        }),
+                        HostNavigationError::NotNavigation(_) => {
+                            unreachable!("导航分类必须能由 continue_navigation 消费")
+                        }
+                    })?
                 }
                 HostStableBoundary::MacroPending => {
                     match Self::dispatch_macro(stable, pending, state, story, mir, &mut dispatch)
@@ -319,7 +382,7 @@ impl HostApi {
         }
     }
 
-    /// 恢复当前异步 Handler，并自动驱动到可呈现结果或下一次等待。
+    /// 不安装 Reaction Phase 的兼容恢复入口。
     pub fn resume_and_drive<
         'hir,
         'source,
@@ -365,6 +428,69 @@ impl HostApi {
             resume,
             dispatch,
         } = callbacks;
+        Self::resume_and_drive_with_reaction(
+            pending,
+            state,
+            story,
+            mir,
+            execution,
+            HostResumeReactionCallbacks::new(lifecycle, no_passage_reaction, resume, dispatch),
+        )
+    }
+
+    /// 恢复当前异步 Handler，并自动驱动到可呈现结果或下一次等待。
+    pub fn resume_and_drive_with_reaction<
+        'hir,
+        'source,
+        Pending,
+        ResumeError,
+        DispatchError,
+        Lifecycle,
+        Resume,
+        Reaction,
+        Dispatch,
+    >(
+        pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        execution: HostExecutionToken,
+        callbacks: HostResumeReactionCallbacks<Lifecycle, Reaction, Resume, Dispatch>,
+    ) -> Result<HostDriveResult, Box<HostDriveError<Pending>>>
+    where
+        Lifecycle: FnMut(
+            crate::engine::PassageLifecyclePhase,
+            crate::engine::PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), Diagnostic>,
+        Reaction: FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, Diagnostic>,
+        Resume: FnOnce(
+            Pending,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            &mut MacroLocalScopes<Value>,
+        )
+            -> Result<MacroHandlerOutcome<RuntimeMacroExecution, Pending>, ResumeError>,
+        Dispatch: FnMut(
+            EngineMirMacroInvocation<'_>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+            MacroLocalScopes<Value>,
+        ) -> Result<
+            MacroResumeOutcome<RuntimeMacroExecution, Pending>,
+            EngineMirMacroCallbackFailure<DispatchError>,
+        >,
+    {
+        let HostResumeReactionCallbacks {
+            lifecycle,
+            reaction,
+            resume,
+            dispatch,
+        } = callbacks;
         let resumed: HostResumeOutcome<'hir, 'source> = Self::resume_pending(
             pending, state, story, mir, execution, resume,
         )
@@ -384,6 +510,8 @@ impl HostApi {
                     pending: None,
                 })
             })?;
-        Self::drive_stable(stable, pending, state, story, mir, lifecycle, dispatch)
+        Self::drive_stable_with_reaction(
+            stable, pending, state, story, mir, lifecycle, reaction, dispatch,
+        )
     }
 }

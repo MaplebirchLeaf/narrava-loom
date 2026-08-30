@@ -4,6 +4,7 @@
 //! VM frame 必须属于同一执行身份，任何失败都通过统一回滚路径恢复外层事务。
 
 use super::*;
+use crate::{hir::HirPassage, runtime::BodyExecution};
 
 /// 暂停发生时已完成的 Passage 导航进度。
 #[derive(Debug, PartialEq)]
@@ -260,6 +261,10 @@ impl<'hir, 'source> EngineMirResumedTransaction<'hir, 'source> {
         story: &Story<'hir, 'source>,
     ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirVmResumeError<'hir, 'source>> {
         let control: BodyControl = self.runtime.control;
+        if control == BodyControl::ExitScope {
+            self.runtime.control = BodyControl::Continue;
+            return Ok(EngineMirVmResume::Halted(self));
+        }
         if !matches!(control, BodyControl::Continue | BodyControl::StopPassage) {
             return Err(EngineMirVmResumeError::UnexpectedMacroControl {
                 control,
@@ -440,6 +445,8 @@ pub struct EngineMirBeginTransaction<'hir, 'source> {
     pub identity: RuntimeExecutionIdentity,
     /// 起始 Bytecode Passage 的 VM 执行帧。
     pub frame: crate::vm::MirExecutionFrame,
+    /// Reaction Phase 在 VM 第一步前选择继续、导航或截断正文。
+    pub control: BodyControl,
     /// 本次导航开始前的 State 检查点。
     pub state_checkpoint: StateCheckpoint,
     /// 本次导航开始前的 Story 快照。
@@ -460,6 +467,7 @@ pub fn begin_mir_transaction<'hir, 'source>(
     let EngineMirBeginTransaction {
         identity,
         frame,
+        control,
         state_checkpoint,
         story_snapshot,
         requests,
@@ -469,7 +477,7 @@ pub fn begin_mir_transaction<'hir, 'source>(
         runtime: RuntimeMacroResumed {
             identity,
             frame,
-            control: BodyControl::Continue,
+            control,
             includes_entered: 0,
             scopes: MacroLocalScopes::new(),
         },
@@ -522,6 +530,11 @@ impl<'hir, 'source> EngineMirVmResume<'hir, 'source> {
             PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), LifecycleError>,
+        mut reaction: impl FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, LifecycleError>,
     ) -> Result<
         EngineMirVmResume<'hir, 'source>,
         EngineMirNavigationResumeError<'hir, 'source, LifecycleError>,
@@ -534,7 +547,14 @@ impl<'hir, 'source> EngineMirVmResume<'hir, 'source> {
                 )));
             }
         };
-        navigation::continue_navigation_transaction(transaction, mir, state, story, &mut lifecycle)
+        navigation::continue_navigation_transaction(
+            transaction,
+            mir,
+            state,
+            story,
+            &mut lifecycle,
+            &mut reaction,
+        )
     }
 
     /// 把恢复链遇到的下一动态 Macro 交回统一控制器。

@@ -73,6 +73,26 @@ impl StateSnapshot {
     pub fn variables_len(&self) -> usize {
         self.variables.len()
     }
+
+    /// 读取不带 `$` 的持久变量属性路径；不存在的段统一返回 `Undefined`。
+    pub fn variables_path(&self, path: &str) -> Value {
+        let mut segments = path.split('.');
+        let Some(root) = segments.next() else {
+            return Value::Undefined;
+        };
+        let mut value: Value = self
+            .variables
+            .get(root)
+            .cloned()
+            .unwrap_or(Value::Undefined);
+        for segment in segments {
+            value = match value {
+                Value::Object(object) => object.get(segment).unwrap_or(Value::Undefined),
+                _ => Value::Undefined,
+            };
+        }
+        value
+    }
 }
 
 impl State {

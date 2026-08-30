@@ -11,14 +11,10 @@ where
     Story: RuntimeStoryAccess<'hir, 'source> + ?Sized,
 {
     /// 执行已解析的动态片段并产生有序输出（公开 `Macro.execute()` 入口）。
-    pub fn execute_parsed_fragment(
+    pub fn execute_parsed_fragment<'fragment>(
         &mut self,
-        fragment: &'runtime crate::macro_runtime::ParsedFragment<'source>,
-    ) -> Result<BodyExecution, RuntimeExecutionError<Story::Error>>
-    where
-        'runtime: 'source,
-        'runtime: 'hir,
-    {
+        fragment: &crate::macro_runtime::ParsedFragment<'fragment>,
+    ) -> Result<BodyExecution, RuntimeExecutionError<Story::Error>> {
         self.execute_fragment(fragment.nodes())
     }
 
@@ -83,9 +79,9 @@ where
     }
 
     /// 条件按 Narrava truthiness 短路，选中正文回到统一 Runtime 分派。
-    pub(super) fn execute_if(
+    pub(super) fn execute_if<'node>(
         &mut self,
-        conditional: &HirIf<'source>,
+        conditional: &HirIf<'node>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         for branch in &conditional.branches {
             let condition: Value = self.evaluate(&branch.condition)?;
@@ -101,9 +97,9 @@ where
     }
 
     /// 每轮重新求值条件，并只在当前 while 边界消费 break 与 continue。
-    pub(super) fn execute_while(
+    pub(super) fn execute_while<'node>(
         &mut self,
-        loop_node: &HirWhile<'source>,
+        loop_node: &HirWhile<'node>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         loop {
             self.consume_execution_step()?;
@@ -122,11 +118,11 @@ where
     }
 
     /// 根据 HIR 中已经确定的形式执行集合或范围循环。
-    pub(super) fn execute_for(
+    pub(super) fn execute_for<'node>(
         &mut self,
-        loop_node: &HirFor<'source>,
+        loop_node: &HirFor<'node>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
-        let (collection, keys): (&crate::expression::Expression<'source>, bool) =
+        let (collection, keys): (&crate::expression::Expression<'node>, bool) =
             match &loop_node.kind {
                 HirForKind::In { collection, .. } => (collection, true),
                 HirForKind::Of { collection, .. } => (collection, false),
@@ -154,12 +150,12 @@ where
     }
 
     /// 范围包含终点；边界与步长在进入正文前各求值一次。
-    fn execute_for_range(
+    fn execute_for_range<'node>(
         &mut self,
-        loop_node: &HirFor<'source>,
-        start: &crate::expression::Expression<'source>,
-        end: &crate::expression::Expression<'source>,
-        step: Option<&crate::expression::Expression<'source>>,
+        loop_node: &HirFor<'node>,
+        start: &crate::expression::Expression<'node>,
+        end: &crate::expression::Expression<'node>,
+        step: Option<&crate::expression::Expression<'node>>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         let start_number: f64 = finite_range_number(self.evaluate(start)?, start.span)
             .map_err(LogicNodeError::Evaluation)
@@ -214,9 +210,9 @@ where
     }
 
     /// 主值只求值一次，首个严格匹配的 case 回到统一 Runtime 分派。
-    pub(super) fn execute_switch(
+    pub(super) fn execute_switch<'node>(
         &mut self,
-        switch: &HirSwitch<'source>,
+        switch: &HirSwitch<'node>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         let selected: Value = self.evaluate(&switch.value)?;
         for case in &switch.cases {
@@ -233,9 +229,9 @@ where
     }
 
     /// Expression 求值只临时组合逻辑 Context，不扩大其所有权。
-    pub(super) fn evaluate(
+    pub(super) fn evaluate<'node>(
         &mut self,
-        expression: &crate::expression::Expression<'source>,
+        expression: &crate::expression::Expression<'node>,
     ) -> Result<Value, RuntimeExecutionError<Story::Error>> {
         let mut context: MacroLogicContext<'_, Story> =
             MacroLogicContext::new(self.state, self.story, self.locals);
@@ -245,9 +241,9 @@ where
     }
 
     /// 将已经求得的循环值写入 HIR 目标，目标中的动态索引仍只求值一次。
-    fn assign(
+    fn assign<'node>(
         &mut self,
-        target: &crate::expression::Expression<'source>,
+        target: &crate::expression::Expression<'node>,
         value: Value,
     ) -> Result<(), RuntimeExecutionError<Story::Error>> {
         let mut context: MacroLogicContext<'_, Story> =
@@ -385,7 +381,8 @@ where
         };
 
         let outer_output: SemanticOutput = std::mem::take(&mut self.output);
-        let captures: CapturedMacroLocals<Value> = self.locals.capture(&self.capture_names);
+        let capture_names: Vec<&str> = self.capture_names.iter().map(String::as_str).collect();
+        let captures: CapturedMacroLocals<Value> = self.locals.capture(&capture_names);
         self.locals.enter_call(arguments);
         if let Some(callbacks) = self.macro_lifecycle.as_deref_mut() {
             let active: &mut [Value] = self

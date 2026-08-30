@@ -4,6 +4,7 @@
 //! 都恢复最初的 State 检查点和 Story 快照。
 
 use super::*;
+use crate::{hir::HirPassage, runtime::BodyExecution};
 
 /// 继续导航链时的失败阶段；`Failed` 已完成回滚，`Continue` 保留可回滚事务。
 pub enum EngineMirNavigationResumeError<'hir, 'source, LifecycleError> {
@@ -57,6 +58,11 @@ pub(super) fn continue_navigation_transaction<'hir, 'source, LifecycleError>(
         PassageLifecycleContext<'_, 'hir, 'source, '_>,
         &mut State,
     ) -> Result<(), LifecycleError>,
+    reaction: &mut impl FnMut(
+        &HirPassage<'source>,
+        &mut State,
+        &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+    ) -> Result<BodyExecution, LifecycleError>,
 ) -> Result<
     EngineMirVmResume<'hir, 'source>,
     EngineMirNavigationResumeError<'hir, 'source, LifecycleError>,
@@ -162,6 +168,9 @@ pub(super) fn continue_navigation_transaction<'hir, 'source, LifecycleError>(
             )));
         }
     };
+    let mut requests: StoryRuntimeRequests<'_, 'hir, 'source> =
+        StoryRuntimeRequests::from_pending(story, requests)
+            .unwrap_or_else(|_| panic!("同一事务确认导航后必须能重新附着 Story 请求"));
     let confirmed_name: &str = confirmed.passage().name;
     let Some(mir_passage): Option<&BytecodePassage> = mir.passage(confirmed_name) else {
         return Err(EngineMirNavigationResumeError::Failed(Box::new(
@@ -194,18 +203,39 @@ pub(super) fn continue_navigation_transaction<'hir, 'source, LifecycleError>(
             )));
         }
     }
+    let reaction_execution: BodyExecution =
+        match reaction(confirmed.passage(), state, &mut requests) {
+            Ok(execution) => execution,
+            Err(error) => {
+                return Err(EngineMirNavigationResumeError::Failed(Box::new(
+                    rollback_navigation_failure(
+                        state,
+                        story,
+                        state_checkpoint,
+                        story_snapshot,
+                        runtime.scopes,
+                        EngineMirNavigationFailureKind::Lifecycle {
+                            phase: PassageLifecyclePhase::Start,
+                            error,
+                        },
+                    ),
+                )));
+            }
+        };
+    let requests: StoryRuntimePending<'hir, 'source> = requests.into_pending();
 
     let previous_frame = std::mem::replace(
         &mut runtime.frame,
         crate::vm::MirExecutionFrame::new(mir_passage),
     );
     progress.output.append(previous_frame.into_output());
+    progress.output.append(reaction_execution.output);
     progress.current = confirmed;
     progress.entries.push(confirmed);
     progress.params = target_params;
     progress.executed_passages = next_executed;
     progress.macro_includes_entered = 0;
-    runtime.control = BodyControl::Continue;
+    runtime.control = reaction_execution.control;
     runtime.includes_entered = 0;
     EngineMirResumedTransaction {
         runtime,

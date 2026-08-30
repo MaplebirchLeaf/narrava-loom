@@ -1,6 +1,9 @@
 //! Boa `Reaction` API 到 Core Reaction Registry 的边界转换。
 
-use std::cell::{Ref, RefCell};
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
+};
 
 use boa_engine::{
     Context, Finalize, JsArgs, JsData, JsNativeError, JsResult, JsString, JsValue, NativeFunction,
@@ -20,7 +23,7 @@ use super::json_to_value;
 #[derive(Trace, Finalize, JsData)]
 pub(super) struct ActiveReactions {
     #[unsafe_ignore_trace]
-    pub(super) registry: RefCell<ReactionRegistry<ScriptCallable>>,
+    pub(super) registry: Rc<RefCell<ReactionRegistry<ScriptCallable>>>,
 }
 
 #[derive(Deserialize)]
@@ -90,15 +93,20 @@ enum MatcherDto {
     Regex { regex: String },
 }
 
-pub(super) fn install(context: &mut Context) -> JsResult<()> {
+pub(super) fn install(
+    context: &mut Context,
+) -> JsResult<Rc<RefCell<ReactionRegistry<ScriptCallable>>>> {
+    let registry: Rc<RefCell<ReactionRegistry<ScriptCallable>>> =
+        Rc::new(RefCell::new(ReactionRegistry::new()));
     context.insert_data(ActiveReactions {
-        registry: RefCell::new(ReactionRegistry::new()),
+        registry: registry.clone(),
     });
     register(context, "__narravaReactionAdd", reaction_add)?;
     register(context, "__narravaReactionGet", reaction_get)?;
     register(context, "__narravaReactionEnable", reaction_enable)?;
     register(context, "__narravaReactionDisable", reaction_disable)?;
-    register(context, "__narravaReactionReset", reaction_reset)
+    register(context, "__narravaReactionReset", reaction_reset)?;
+    Ok(registry)
 }
 
 pub(super) fn get(context: &Context) -> JsResult<Ref<'_, ReactionRegistry<ScriptCallable>>> {
@@ -256,7 +264,7 @@ fn status(context: &Context, id: &str) -> JsResult<Option<String>> {
     .map_err(fail)
 }
 
-fn slot(context: &Context) -> JsResult<&RefCell<ReactionRegistry<ScriptCallable>>> {
+fn slot(context: &Context) -> JsResult<&Rc<RefCell<ReactionRegistry<ScriptCallable>>>> {
     context
         .get_data::<ActiveReactions>()
         .map(|active: &ActiveReactions| &active.registry)

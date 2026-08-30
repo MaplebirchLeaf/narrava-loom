@@ -92,7 +92,7 @@ pub struct RuntimeExecutionContext<'runtime, 'hir, 'source, Story: ?Sized, Nativ
     included_passages: usize,
     execution_limit: usize,
     executed_steps: usize,
-    capture_names: Vec<&'source str>,
+    capture_names: Vec<String>,
     /// 当前执行链按源码顺序累积的有序输出；公共入口结束时取走。
     output: SemanticOutput,
 }
@@ -146,9 +146,9 @@ where
     }
 
     /// 分派一个 HIR 节点；通用 Macro 查询共享 Definitions，其余节点沿用逻辑分派。
-    pub fn execute_node(
+    pub fn execute_node<'node>(
         &mut self,
-        node: &HirBodyNode<'source>,
+        node: &HirBodyNode<'node>,
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         self.consume_execution_step()?;
         match &node.kind {
@@ -157,6 +157,10 @@ where
                 if !text.trim().is_empty() {
                     self.output.push(SemanticNode::Text(TextValue::from(*text)));
                 }
+                Ok(BodyControl::Continue)
+            }
+            HirBodyKind::HardBreak => {
+                self.output.push(SemanticNode::HardBreak);
                 Ok(BodyControl::Continue)
             }
             HirBodyKind::Print(print) => {
@@ -175,7 +179,8 @@ where
             HirBodyKind::Silently(body) => self.execute_silently(body),
             HirBodyKind::Capture(capture) => {
                 let previous_len: usize = self.capture_names.len();
-                self.capture_names.extend(capture.locals.iter().copied());
+                self.capture_names
+                    .extend(capture.locals.iter().map(|name| (*name).to_owned()));
                 let result: Result<BodyControl, RuntimeExecutionError<Story::Error>> =
                     self.execute_body(&capture.body);
                 self.capture_names.truncate(previous_len);
@@ -205,9 +210,9 @@ where
     }
 
     /// 按顺序执行正文，并在首个非 Continue 控制信号处停止。
-    pub fn execute_body(
+    pub fn execute_body<'node>(
         &mut self,
-        body: &[HirBodyNode<'source>],
+        body: &[HirBodyNode<'node>],
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         for node in body {
             let control: BodyControl = self.execute_node(node)?;
@@ -223,9 +228,9 @@ where
     }
 
     /// 执行正文中的逻辑与控制信号，但不把该块输出合并到外层。
-    fn execute_silently(
+    fn execute_silently<'node>(
         &mut self,
-        body: &[HirBodyNode<'source>],
+        body: &[HirBodyNode<'node>],
     ) -> Result<BodyControl, RuntimeExecutionError<Story::Error>> {
         let outer_output: SemanticOutput = std::mem::take(&mut self.output);
         let result: Result<BodyControl, RuntimeExecutionError<Story::Error>> =
@@ -254,9 +259,9 @@ where
     ///
     /// 与 [`Self::execute_passage`] 共用同一执行与输出链；片段没有
     /// Passage 边界，因此不消费 `exit` 信号。
-    pub fn execute_fragment(
+    pub fn execute_fragment<'fragment>(
         &mut self,
-        body: &[HirBodyNode<'source>],
+        body: &[HirBodyNode<'fragment>],
     ) -> Result<BodyExecution, RuntimeExecutionError<Story::Error>> {
         let control: BodyControl = self.execute_body(body)?;
         Ok(BodyExecution {
@@ -371,7 +376,8 @@ where
             }
         };
 
-        let captures: CapturedMacroLocals<Value> = self.locals.capture(&self.capture_names);
+        let capture_names: Vec<&str> = self.capture_names.iter().map(String::as_str).collect();
+        let captures: CapturedMacroLocals<Value> = self.locals.capture(&capture_names);
         self.locals.enter_call(arguments);
         if let Some(lifecycle) = self.macro_lifecycle.as_deref_mut() {
             let active: &mut [Value] = self

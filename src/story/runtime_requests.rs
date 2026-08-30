@@ -220,10 +220,12 @@ impl<'story, 'hir, 'source> MacroStoryAccess for StoryRuntimeRequests<'story, 'h
     }
 }
 
-impl<'story, 'hir, 'source> RuntimeStoryAccess<'hir, 'source>
+impl<'story, 'hir, 'source, 'fragment> RuntimeStoryAccess<'hir, 'fragment>
     for StoryRuntimeRequests<'story, 'hir, 'source>
+where
+    'source: 'fragment,
 {
-    fn take_include_request(&mut self) -> Option<StoryIncludeRequest<'hir, 'source>> {
+    fn take_include_request(&mut self) -> Option<StoryIncludeRequest<'hir, 'fragment>> {
         self.take_include()
     }
 }

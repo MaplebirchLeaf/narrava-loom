@@ -13,11 +13,11 @@
     },
     "bindings/typescript": {
       "name": "@narrava-loom/types",
-      "version": "0.4.0",
+      "version": "0.5.0",
     },
     "editors/vscode-narrava-loom": {
       "name": "narrava-loom-twee",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "devDependencies": {
         "vscode-oniguruma": "^2.0.1",
         "vscode-textmate": "^9.3.2",

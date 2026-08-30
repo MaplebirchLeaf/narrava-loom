@@ -7,7 +7,6 @@ use crate::{
     i18n::I18nRuntimeLanguage,
     macro_runtime::MacroStoryAccess,
     runtime::{BodyControl, BodyExecution, RuntimeExecutionIdentity, RuntimeMacroExecution},
-    semantic::SemanticOutput,
     state::State,
     story::{Story, StoryRuntimeRequestError, StoryRuntimeRequests},
     vm::{MirExecutionError, MirExecutionFrame, MirStep},
@@ -94,6 +93,40 @@ pub enum EngineMirMacroExecutionError<MacroError> {
 
 impl Engine {
     /// 进入首个 Passage、执行 Init／Start，并驱动 LIR 到第一个稳定边界。
+    pub fn begin_mir_chain_with_reaction<'hir, 'source, LifecycleError>(
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        request: EngineMirBeginRequest<'_>,
+        lifecycle: impl FnMut(
+            PassageLifecyclePhase,
+            PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), LifecycleError>,
+        reaction: impl FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, LifecycleError>,
+    ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirBeginError<'hir, 'source, LifecycleError>>
+    {
+        let state_checkpoint: StateCheckpoint = state.checkpoint();
+        let story_snapshot: StorySnapshot<'hir, 'source> = story.snapshot();
+        Self::begin_mir_chain_from_checkpoint_with_reaction(
+            state,
+            story,
+            mir,
+            EngineMirBeginCheckpointRequest {
+                request,
+                state_checkpoint,
+                story_snapshot,
+            },
+            lifecycle,
+            reaction,
+        )
+    }
+
+    /// 不安装 Reaction Phase 的兼容入口。
     pub fn begin_mir_chain<'hir, 'source, LifecycleError>(
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -106,23 +139,18 @@ impl Engine {
         ) -> Result<(), LifecycleError>,
     ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirBeginError<'hir, 'source, LifecycleError>>
     {
-        let state_checkpoint: StateCheckpoint = state.checkpoint();
-        let story_snapshot: StorySnapshot<'hir, 'source> = story.snapshot();
-        Self::begin_mir_chain_from_checkpoint(
+        Self::begin_mir_chain_with_reaction(
             state,
             story,
             mir,
-            EngineMirBeginCheckpointRequest {
-                request,
-                state_checkpoint,
-                story_snapshot,
-            },
+            request,
             lifecycle,
+            |_passage, _state, _requests| Ok(BodyExecution::default()),
         )
     }
 
     /// 使用调用方在启动准备前取得的检查点进入首个 Passage。
-    pub(crate) fn begin_mir_chain_from_checkpoint<'hir, 'source, LifecycleError>(
+    pub(crate) fn begin_mir_chain_from_checkpoint_with_reaction<'hir, 'source, LifecycleError>(
         state: &mut State,
         story: &mut Story<'hir, 'source>,
         mir: &BytecodeProgram,
@@ -132,6 +160,11 @@ impl Engine {
             PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), LifecycleError>,
+        reaction: impl FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, LifecycleError>,
     ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirBeginError<'hir, 'source, LifecycleError>>
     {
         let EngineMirBeginCheckpointRequest {
@@ -161,6 +194,29 @@ impl Engine {
             state_checkpoint,
             story_snapshot,
             lifecycle,
+            reaction,
+        )
+    }
+
+    pub(crate) fn begin_mir_chain_from_checkpoint<'hir, 'source, LifecycleError>(
+        state: &mut State,
+        story: &mut Story<'hir, 'source>,
+        mir: &BytecodeProgram,
+        checkpoint: EngineMirBeginCheckpointRequest<'hir, 'source, '_>,
+        lifecycle: impl FnMut(
+            PassageLifecyclePhase,
+            PassageLifecycleContext<'_, 'hir, 'source, '_>,
+            &mut State,
+        ) -> Result<(), LifecycleError>,
+    ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirBeginError<'hir, 'source, LifecycleError>>
+    {
+        Self::begin_mir_chain_from_checkpoint_with_reaction(
+            state,
+            story,
+            mir,
+            checkpoint,
+            lifecycle,
+            |_passage, _state, _requests| Ok(BodyExecution::default()),
         )
     }
 
@@ -182,6 +238,11 @@ impl Engine {
             PassageLifecycleContext<'_, 'hir, 'source, '_>,
             &mut State,
         ) -> Result<(), LifecycleError>,
+        mut reaction: impl FnMut(
+            &HirPassage<'source>,
+            &mut State,
+            &mut StoryRuntimeRequests<'_, 'hir, 'source>,
+        ) -> Result<BodyExecution, LifecycleError>,
     ) -> Result<EngineMirVmResume<'hir, 'source>, EngineMirBeginError<'hir, 'source, LifecycleError>>
     {
         if limits.passages == 0 {
@@ -227,11 +288,29 @@ impl Engine {
                 return Err(EngineMirBeginError::Preparation(error));
             }
         }
-        let requests = StoryRuntimeRequests::new(story).into_pending();
+        let mut requests = StoryRuntimeRequests::new(story);
+        let reaction_execution: BodyExecution =
+            match reaction(current.passage(), state, &mut requests) {
+                Ok(execution) => execution,
+                Err(error) => {
+                    let error = Self::rollback(
+                        state,
+                        story,
+                        state_checkpoint,
+                        story_snapshot,
+                        EngineRequestedExecutionError::Lifecycle {
+                            phase: PassageLifecyclePhase::Start,
+                            error: EngineMirBeginExecutionError::Lifecycle(error),
+                        },
+                    );
+                    return Err(EngineMirBeginError::Preparation(error));
+                }
+            };
+        let requests = requests.into_pending();
         let progress = EngineMirProgress::new(
             current,
             vec![current],
-            SemanticOutput::default(),
+            reaction_execution.output,
             params,
             0,
             0,
@@ -242,6 +321,7 @@ impl Engine {
             EngineMirBeginTransaction {
                 identity,
                 frame: MirExecutionFrame::new(passage),
+                control: reaction_execution.control,
                 state_checkpoint,
                 story_snapshot,
                 requests,

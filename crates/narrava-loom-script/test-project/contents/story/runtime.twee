@@ -1,5 +1,0 @@
-:: Start
-<<wait>>Main ready.
-
-:: Bar
-<<wait>>Bar ready.

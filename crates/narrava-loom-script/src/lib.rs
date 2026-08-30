@@ -26,9 +26,13 @@ use narrava_loom_core::{
         value::{ScriptCallable, Value},
     },
     i18n::I18nCatalog,
+    reaction::{
+        ReactionEffect, ReactionRegistry, resolve_event_queue, resolve_lifecycle_reactions,
+        resolve_state_changes,
+    },
     resource::ResourceCatalog,
     script::{ScriptBundle, ScriptCallDispatcher, ScriptFunctionHost},
-    state::State,
+    state::{State, StateSnapshot},
 };
 use oxc::{
     allocator::Allocator,
@@ -43,6 +47,7 @@ mod adapter;
 pub mod dispatch;
 pub mod protocol_adapter;
 mod reaction_bridge;
+mod reaction_runtime;
 mod resource_bridge;
 mod session;
 mod session_handle;
@@ -101,11 +106,19 @@ fn bootstrap_source() -> &'static str {
 /// 持有 Boa 引擎上下文的脚本运行时（一次启动一个）。
 pub struct EcmaRuntime {
     context: Context,
+    reactions: Rc<RefCell<ReactionRegistry<ScriptCallable>>>,
 }
 
 /// 对运行时上下文的借用访问边界：宏、保存、内置事件与脚本函数调用都经由它。
 pub struct EcmaBinding {
     runtime: RefCell<EcmaRuntime>,
+}
+
+/// 作者 `Event.emit` 进入 Runtime 安全队列的拥有型记录。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScriptEvent {
+    pub name: String,
+    pub payload: Value,
 }
 
 /// 脚本宏挂起等待 Host 操作的凭据（当前只有 `Host.delay`）。
@@ -149,7 +162,175 @@ pub enum ScriptMacroOutcome {
     Pending(ScriptPending),
 }
 
+fn collect_reaction_effect(
+    effect: &ReactionEffect,
+    resolved: &mut Vec<ReactionEffect>,
+    published_events: &mut Vec<(String, Value)>,
+) {
+    if let Some(event) = &effect.emit {
+        published_events.push(event.clone());
+    }
+    resolved.push(effect.clone());
+}
+
 impl EcmaBinding {
+    /// 捕获不含脚本函数的 Reaction 运行状态，用于命令事务与 Save。
+    pub fn reaction_state(&self) -> Vec<narrava_loom_core::reaction::ReactionRuntimeState> {
+        self.runtime.borrow().reactions.borrow().runtime_state()
+    }
+
+    /// 将运行状态恢复到启动脚本已经注册的定义集合。
+    pub fn restore_reaction_state(
+        &self,
+        state: &[narrava_loom_core::reaction::ReactionRuntimeState],
+    ) -> Result<(), ScriptError> {
+        self.runtime
+            .borrow()
+            .reactions
+            .borrow_mut()
+            .restore_runtime_state(state)
+            .map_err(|error| ScriptError::new("script.reaction_restore", error.to_string()))
+    }
+
+    /// 取走尚未交给 Reaction Resolver 的作者 Event；内置生命周期 Event 不在此队列。
+    pub fn take_author_events(&self) -> Result<Vec<ScriptEvent>, ScriptError> {
+        let mut runtime = self.runtime.borrow_mut();
+        let result = runtime
+            .context
+            .eval(Source::from_bytes(
+                "JSON.stringify(__narrava.takeAuthorEvents())",
+            ))
+            .map_err(|error| script_error("script.event_queue", error))?;
+        let json: String = js_string(&result, &mut runtime.context)?;
+        let events: Vec<serde_json::Value> = serde_json::from_str(&json)
+            .map_err(|error| ScriptError::new("script.event_queue", error.to_string()))?;
+        events
+            .into_iter()
+            .map(|event: serde_json::Value| {
+                let name: String = event["name"]
+                    .as_str()
+                    .ok_or_else(|| ScriptError::new("script.event_queue", "Event 名称无效"))?
+                    .to_owned();
+                let payload: Value = json_to_value(&event["payload"])?;
+                Ok(ScriptEvent { name, payload })
+            })
+            .collect()
+    }
+
+    /// 在 Runtime 安全点解析当前作者 Event 队列，不直接执行叙事或导航效果。
+    pub fn resolve_author_reactions(
+        &self,
+        state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        let events: Vec<(String, Value)> = self
+            .take_author_events()?
+            .into_iter()
+            .map(|event: ScriptEvent| (event.name, event.payload))
+            .collect();
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut runtime = self.runtime.borrow_mut();
+        let registry = runtime.reactions.clone();
+        let mut resolved: Vec<ReactionEffect> = Vec::new();
+        let mut published_events: Vec<(String, Value)> = Vec::new();
+        resolve_event_queue(
+            &mut registry.borrow_mut(),
+            events,
+            256,
+            |condition, payload| match condition {
+                None => Ok(true),
+                Some(callable) => runtime
+                    .call(callable, vec![payload.clone()], state)
+                    .map(|value: Value| value.is_truthy())
+                    .map_err(|_| {
+                        ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
+                    }),
+            },
+            |_id, effect| {
+                collect_reaction_effect(effect, &mut resolved, &mut published_events);
+                Ok(())
+            },
+        )
+        .map_err(|error| ScriptError::new("script.reaction_resolve", format!("{error:?}")))?;
+        for (name, payload) in published_events {
+            runtime.emit_reaction_event(&name, &payload)?;
+        }
+        Ok(resolved)
+    }
+
+    /// 比较一次已提交命令前后的 `$` 状态，并解析由其继续产生的 Event Reaction。
+    pub fn resolve_state_reactions(
+        &self,
+        before: &StateSnapshot,
+        state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        let after: StateSnapshot = state.snapshot();
+        let mut runtime = self.runtime.borrow_mut();
+        let registry = runtime.reactions.clone();
+        let mut resolved: Vec<ReactionEffect> = Vec::new();
+        let mut published_events: Vec<(String, Value)> = Vec::new();
+        resolve_state_changes(
+            &mut registry.borrow_mut(),
+            before,
+            &after,
+            256,
+            |condition, payload| match condition {
+                None => Ok(true),
+                Some(callable) => runtime
+                    .call(callable, vec![payload.clone()], state)
+                    .map(|value: Value| value.is_truthy())
+                    .map_err(|_| {
+                        ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
+                    }),
+            },
+            |_id, effect| {
+                collect_reaction_effect(effect, &mut resolved, &mut published_events);
+                Ok(())
+            },
+        )
+        .map_err(|error| ScriptError::new("script.reaction_resolve", format!("{error:?}")))?;
+        for (name, payload) in published_events {
+            runtime.emit_reaction_event(&name, &payload)?;
+        }
+        Ok(resolved)
+    }
+
+    /// 在普通 Passage 的 Reaction Phase 解析 lifecycle 规则。
+    pub fn resolve_lifecycle_reactions(
+        &self,
+        passage: &narrava_loom_core::hir::HirPassage<'_>,
+        state: &mut State,
+    ) -> Result<Vec<ReactionEffect>, ScriptError> {
+        let mut runtime = self.runtime.borrow_mut();
+        let registry = runtime.reactions.clone();
+        let mut resolved: Vec<ReactionEffect> = Vec::new();
+        let mut published_events: Vec<(String, Value)> = Vec::new();
+        resolve_lifecycle_reactions(
+            &mut registry.borrow_mut(),
+            passage,
+            256,
+            |condition, _payload| match condition {
+                None => Ok(true),
+                Some(callable) => runtime
+                    .call(callable, Vec::new(), state)
+                    .map(|value: Value| value.is_truthy())
+                    .map_err(|_| {
+                        ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
+                    }),
+            },
+            |_id, effect| {
+                collect_reaction_effect(effect, &mut resolved, &mut published_events);
+                Ok(())
+            },
+        )
+        .map_err(|error| ScriptError::new("script.reaction_resolve", format!("{error:?}")))?;
+        for (name, payload) in published_events {
+            runtime.emit_reaction_event(&name, &payload)?;
+        }
+        Ok(resolved)
+    }
+
     /// 取出脚本登记的 Save 请求（operation, target）；无请求时返回 `None`。
     pub fn take_save(&self) -> Result<Option<(String, String)>, ScriptError> {
         let mut runtime = self.runtime.borrow_mut();
@@ -332,6 +513,20 @@ impl ScriptCallDispatcher for EcmaBinding {
 }
 
 impl EcmaRuntime {
+    fn emit_reaction_event(&mut self, name: &str, payload: &Value) -> Result<(), ScriptError> {
+        let payload = value_to_json(payload)
+            .map_err(|()| ScriptError::new("script.reaction_event", "Reaction Event 无法序列化"))?;
+        let expression = format!(
+            "__narrava.emitReaction({}, {})",
+            serde_json::to_string(name).expect("事件名必须可序列化"),
+            payload
+        );
+        self.context
+            .eval(Source::from_bytes(expression.as_bytes()))
+            .map(|_| ())
+            .map_err(|error| script_error("script.reaction_event", error))
+    }
+
     /// 安装 State/Resource 桥接、注入启动脚本并执行全部转译后的模块。
     pub fn load(
         sources: &SourceList,
@@ -345,8 +540,9 @@ impl EcmaRuntime {
             .map_err(|error| script_error("script.state_bridge", error))?;
         resource_bridge::install(&mut context, resources.clone())
             .map_err(|error| script_error("script.resource_bridge", error))?;
-        reaction_bridge::install(&mut context)
-            .map_err(|error| script_error("script.reaction_bridge", error))?;
+        let reactions: Rc<RefCell<ReactionRegistry<ScriptCallable>>> =
+            reaction_bridge::install(&mut context)
+                .map_err(|error| script_error("script.reaction_bridge", error))?;
         let configuration = serde_json::json!({
             "defaultLocale": default_locale,
             "locale": default_locale,
@@ -377,7 +573,7 @@ impl EcmaRuntime {
             }
             Ok::<(), ScriptError>(())
         })?;
-        Ok(Self { context })
+        Ok(Self { context, reactions })
     }
 }
 

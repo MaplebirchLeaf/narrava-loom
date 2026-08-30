@@ -23,7 +23,7 @@ use narrava_loom_core::{
     runtime::{BodyExecution, RuntimeExecutionIdentity, execute_logic_body},
     script::ScriptCallDispatcher,
     semantic::{InteractionId, RegionId, SemanticOutput, SemanticValue},
-    state::{State, StateCheckpoint},
+    state::{State, StateCheckpoint, StateSnapshot},
     story::{
         Story,
         special::{BAR_PASSAGE, BAR_STOWED_PASSAGE},
@@ -107,6 +107,13 @@ pub struct RuntimeSession<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDisp
     sequence: u64,
     platform: Box<dyn RuntimePlatform<'hir, 'source> + 'hir>,
     notices: Vec<HostErrorDto>,
+    reaction_before: Option<StateSnapshot>,
+    reaction_state_checkpoint: Option<StateCheckpoint>,
+    reaction_story_snapshot: Option<narrava_loom_core::story::StorySnapshot<'hir, 'source>>,
+    reaction_presented_checkpoint: Option<Rc<HostUpdate>>,
+    reaction_interactions_checkpoint: Option<MacroInteractions<'hir, 'source>>,
+    reaction_checkpoint: Option<Vec<narrava_loom_core::reaction::ReactionRuntimeState>>,
+    reaction_prefix: SemanticOutput,
 }
 
 impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
@@ -152,6 +159,13 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             sequence: 1,
             platform,
             notices: Vec::new(),
+            reaction_before: None,
+            reaction_state_checkpoint: None,
+            reaction_story_snapshot: None,
+            reaction_presented_checkpoint: None,
+            reaction_interactions_checkpoint: None,
+            reaction_checkpoint: None,
+            reaction_prefix: SemanticOutput::default(),
         }
     }
 
@@ -168,6 +182,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
 
     /// 执行一条平台无关命令；Pending 必须以返回的 operation ID 恢复或取消。
     pub fn execute(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        let cancels_execution = matches!(&command, RuntimeCommand::Cancel { .. });
         let processes_script_save: bool = matches!(
             &command,
             RuntimeCommand::Start
@@ -179,7 +194,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         );
         let mut input_checkpoint: Option<StateCheckpoint> =
             matches!(&command, RuntimeCommand::Input { .. }).then(|| self.state.checkpoint());
-        let update: RuntimeUpdate = match command {
+        if processes_script_save && self.reaction_before.is_none() {
+            self.reaction_before = Some(self.state.snapshot());
+            self.reaction_state_checkpoint = Some(self.state.checkpoint());
+            self.reaction_story_snapshot = Some(self.story.snapshot());
+            self.reaction_presented_checkpoint = self.presented.clone();
+            self.reaction_interactions_checkpoint = Some(self.interactions.clone());
+            self.reaction_checkpoint = Some(self.script.reaction_state());
+        }
+        let result: Result<RuntimeUpdate, HostErrorDto> = match command {
             RuntimeCommand::Start => self.start(),
             RuntimeCommand::Back => self.history(true),
             RuntimeCommand::Forward => self.history(false),
@@ -193,7 +216,27 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             }
             RuntimeCommand::Resume { operation, result } => self.resume(operation, result),
             RuntimeCommand::Cancel { operation } => self.cancel(operation),
-        }?;
+        };
+        let mut update: RuntimeUpdate = match result {
+            Ok(update) => update,
+            Err(error) => {
+                self.rollback_reaction_state();
+                return Err(error);
+            }
+        };
+        if cancels_execution {
+            self.rollback_reaction_state();
+            return Ok(update);
+        }
+        if processes_script_save && !matches!(update, RuntimeUpdate::Pending { .. }) {
+            update = match self.settle_reactions(update) {
+                Ok(update) => update,
+                Err(error) => {
+                    self.rollback_reaction_state();
+                    return Err(error);
+                }
+            };
+        }
         if processes_script_save && !matches!(update, RuntimeUpdate::Pending { .. }) {
             match self.process_script_save(update.clone(), &mut input_checkpoint) {
                 Ok(Some(pending)) => return Ok(pending),
@@ -208,6 +251,25 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             }
         }
         Ok(update)
+    }
+
+    fn rollback_reaction_state(&mut self) {
+        if let Some(checkpoint) = self.reaction_checkpoint.take() {
+            let _ignored = self.script.restore_reaction_state(&checkpoint);
+        }
+        self.reaction_before = None;
+        if let Some(checkpoint) = self.reaction_state_checkpoint.take() {
+            self.state.restore_checkpoint(checkpoint);
+        }
+        if let Some(snapshot) = self.reaction_story_snapshot.take() {
+            let _restored = self.story.restore(snapshot);
+        }
+        self.presented = self.reaction_presented_checkpoint.take();
+        if let Some(interactions) = self.reaction_interactions_checkpoint.take() {
+            self.interactions = interactions;
+        }
+        let _ignored = self.script.sync_variables(&self.state);
+        self.reaction_prefix = SemanticOutput::default();
     }
 
     /// 取走命令成功后产生的非阻塞平台提示，例如导航完成后的自动存档失败。
@@ -243,7 +305,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let params: Value = Value::Null;
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
         let language: Option<I18nRuntimeLanguage> = self.language.clone();
-        let result = HostApi::start_mir(
+        let result = HostApi::start_mir_with_reaction(
             &mut self.pending,
             &mut self.state,
             &mut self.story,
@@ -258,6 +320,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 Ok::<BodyExecution, Diagnostic>(BodyExecution::default())
             },
             |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+            |passage, state, requests| {
+                crate::reaction_runtime::execute_lifecycle(
+                    self.script.as_ref(),
+                    self.hir,
+                    passage,
+                    state,
+                    requests,
+                )
+            },
             |invocation, state, requests, scopes| {
                 dispatch_macro(
                     self.script.as_ref(),
@@ -295,7 +366,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         };
         let result = if self.interactions.has(&id) {
             let mut next_interactions: MacroInteractions<'hir, 'source> = MacroInteractions::new();
-            let result = HostApi::advance_macro_interaction_mir(
+            let result = HostApi::advance_macro_interaction_mir_with_reaction(
                 &mut self.pending,
                 &mut self.interactions,
                 &mut self.state,
@@ -317,6 +388,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     })
                 },
                 |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+                |passage, state, requests| {
+                    crate::reaction_runtime::execute_lifecycle(
+                        self.script.as_ref(),
+                        self.hir,
+                        passage,
+                        state,
+                        requests,
+                    )
+                },
                 |invocation, state, requests, scopes| {
                     dispatch_macro(
                         self.script.as_ref(),
@@ -335,13 +415,22 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             }
             result
         } else {
-            HostApi::advance_mir(
+            HostApi::advance_mir_with_reaction(
                 &mut self.pending,
                 &mut self.state,
                 &mut self.story,
                 self.bytecode,
                 request,
                 |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+                |passage, state, requests| {
+                    crate::reaction_runtime::execute_lifecycle(
+                        self.script.as_ref(),
+                        self.hir,
+                        passage,
+                        state,
+                        requests,
+                    )
+                },
                 |invocation, state, requests, scopes| {
                     dispatch_macro(
                         self.script.as_ref(),
@@ -377,7 +466,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let params = Value::Null;
         let identity = self.identity(STORY_ID);
         let language = self.language.clone();
-        let result = HostApi::history_mir(
+        let result = HostApi::history_mir_with_reaction(
             &mut self.pending,
             &mut self.state,
             &mut self.story,
@@ -390,6 +479,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 language: language.as_ref(),
             },
             |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+            |passage, state, requests| {
+                crate::reaction_runtime::execute_lifecycle(
+                    self.script.as_ref(),
+                    self.hir,
+                    passage,
+                    state,
+                    requests,
+                )
+            },
             |invocation, state, requests, scopes| {
                 dispatch_macro(
                     self.script.as_ref(),
@@ -446,6 +544,148 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             ));
         }
         Ok(RuntimeUpdate::Applied)
+    }
+
+    /// 在命令边界统一处理作者 Event 与持久 State 变化。Setter、Event.emit 与
+    /// Reaction cond 都只收集事实，不允许重入 Engine；所有叙事效果在这里顺序提交。
+    fn settle_reactions(&mut self, update: RuntimeUpdate) -> Result<RuntimeUpdate, HostErrorDto> {
+        let mut before = self
+            .reaction_before
+            .take()
+            .unwrap_or_else(|| self.state.snapshot());
+        let mut output = std::mem::take(&mut self.reaction_prefix);
+        let mut goto: Option<String> = None;
+        let mut settled = false;
+
+        for _round in 0..256 {
+            let mut reactions = self
+                .script
+                .resolve_author_reactions(&mut self.state)
+                .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            reactions.extend(
+                self.script
+                    .resolve_state_reactions(&before, &mut self.state)
+                    .map_err(|error| HostErrorDto::new(&error.code, error.message))?,
+            );
+            if reactions.is_empty() {
+                settled = true;
+                break;
+            }
+            // 下一轮必须从“本轮效果执行前”继续比较，才能观察效果自身写入的 State。
+            let effect_before = self.state.snapshot();
+            let (reaction_output, reaction_goto) = self.execute_reaction_effects(reactions)?;
+            output.append(reaction_output);
+            if let Some(target) = reaction_goto
+                && goto.replace(target).is_some()
+            {
+                return Err(HostErrorDto::new(
+                    "reaction.multiple_goto",
+                    "同一 Reaction 安全点只能发起一次导航",
+                ));
+            }
+            before = effect_before;
+        }
+        if !settled {
+            return Err(HostErrorDto::new(
+                "reaction.execution_limit",
+                "Reaction 安全点超过 256 轮执行上限",
+            ));
+        }
+
+        if let Some(target) = goto {
+            self.reaction_before = Some(before);
+            // 与普通 goto 一致，被替代 Passage 的输出（含特殊区域与交互）不进入目标页。
+            // 仅保留同一 Reaction 安全点在 goto 前明确产生的效果输出。
+            self.reaction_prefix = output;
+            let params = Value::Null;
+            let identity = self.identity(STORY_ID);
+            let language = self.language.clone();
+            let result = HostApi::navigate_mir_with_reaction(
+                &mut self.pending,
+                &mut self.state,
+                &mut self.story,
+                self.bytecode,
+                &target,
+                HostMirRequest {
+                    params: &params,
+                    identity,
+                    limits: limits(),
+                    language: language.as_ref(),
+                },
+                |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+                |passage, state, requests| {
+                    crate::reaction_runtime::execute_lifecycle(
+                        self.script.as_ref(),
+                        self.hir,
+                        passage,
+                        state,
+                        requests,
+                    )
+                },
+                |invocation, state, requests, scopes| {
+                    dispatch_macro(
+                        self.script.as_ref(),
+                        self.hir,
+                        &mut self.interactions,
+                        &mut self.scheduled,
+                        invocation,
+                        state,
+                        requests,
+                        scopes,
+                    )
+                },
+            )
+            .map_err(|error| diagnostic(error.diagnostic.clone()));
+            let driven = self.drive_main(result)?;
+            return if matches!(driven, RuntimeUpdate::Pending { .. }) {
+                Ok(driven)
+            } else {
+                self.settle_reactions(driven)
+            };
+        }
+
+        if !output.is_empty()
+            && let Some(presented) = self.presented.as_ref()
+        {
+            let mut amended = presented.as_ref().clone();
+            amended.append_surface(output);
+            let dto = convert(&amended, self.story.can_back(), self.story.can_forward());
+            self.presented = Some(Rc::new(amended));
+            self.reaction_checkpoint = None;
+            self.reaction_state_checkpoint = None;
+            self.reaction_story_snapshot = None;
+            self.reaction_presented_checkpoint = None;
+            self.reaction_interactions_checkpoint = None;
+            return Ok(RuntimeUpdate::Ready { update: dto });
+        }
+        self.reaction_checkpoint = None;
+        self.reaction_state_checkpoint = None;
+        self.reaction_story_snapshot = None;
+        self.reaction_presented_checkpoint = None;
+        self.reaction_interactions_checkpoint = None;
+        Ok(update)
+    }
+
+    fn execute_reaction_effects(
+        &mut self,
+        reactions: Vec<narrava_loom_core::reaction::ReactionEffect>,
+    ) -> Result<(SemanticOutput, Option<String>), HostErrorDto> {
+        let mut requests = narrava_loom_core::story::StoryRuntimeRequests::new(&self.story);
+        let mut output = SemanticOutput::default();
+        for effect in reactions {
+            let execution = crate::reaction_runtime::execute_effect(
+                self.hir,
+                &effect,
+                &mut self.state,
+                &mut requests,
+            )
+            .map_err(diagnostic)?;
+            output.append(execution.output);
+        }
+        let target = requests
+            .take_goto()
+            .map(|request| request.passage().name.to_owned());
+        Ok((output, target))
     }
 
     fn drive_main(
@@ -548,7 +788,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     self.bytecode,
                 )
                 .map_err(diagnostic)?;
-                HostApi::drive_stable(
+                HostApi::drive_stable_with_reaction(
                     stable,
                     &mut self.pending,
                     &mut self.state,
@@ -556,6 +796,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     self.bytecode,
                     |phase, context, _state| {
                         emit_passage_event(self.script.as_ref(), phase, context)
+                    },
+                    |passage, state, requests| {
+                        crate::reaction_runtime::execute_lifecycle(
+                            self.script.as_ref(),
+                            self.hir,
+                            passage,
+                            state,
+                            requests,
+                        )
                     },
                     |invocation, state, requests, scopes| {
                         dispatch_macro(

@@ -1,4 +1,4 @@
-import { emitBuiltin } from "./event"
+import { emitBuiltin, emitReaction, takeAuthorEvents } from "./event"
 import { resolveHostOperation, takeHostOperation } from "./host"
 import {
   configuration,
@@ -16,6 +16,8 @@ interface RuntimeInternal extends Record<string, unknown> {
   save: unknown
   configure: (value: Partial<typeof configuration>) => void
   emitBuiltin: (name: string, payload: unknown) => number
+  emitReaction: (name: string, payload: unknown) => number
+  takeAuthorEvents: typeof takeAuthorEvents
   completeSave: (completion: Parameters<typeof saveAfter>[0]) => void
   takeSave: () => unknown
   hasMacro: (name: string) => boolean
@@ -36,6 +38,8 @@ export function installRuntime(contract: BootstrapContract): void {
       Object.assign(configuration, value)
     },
     emitBuiltin,
+    emitReaction,
+    takeAuthorEvents,
     completeSave: saveAfter,
     takeSave() {
       const request = this.save

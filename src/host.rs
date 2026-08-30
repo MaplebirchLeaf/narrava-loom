@@ -6,6 +6,14 @@ mod diagnostics;
 
 use diagnostics::*;
 
+fn no_passage_reaction(
+    _passage: &HirPassage<'_>,
+    _state: &mut State,
+    _requests: &mut StoryRuntimeRequests<'_, '_, '_>,
+) -> Result<BodyExecution, Diagnostic> {
+    Ok(BodyExecution::default())
+}
+
 use crate::{
     bytecode::BytecodeProgram,
     diagnostic::{Diagnostic, DiagnosticSeverity},
@@ -336,6 +344,17 @@ impl HostUpdate {
         &self.surface
     }
 
+    /// 在现有更新末尾合并同一事务产生的语义输出。
+    pub fn append_surface(&mut self, content: SemanticOutput) {
+        self.surface.append(content);
+    }
+
+    /// 在现有更新前插入同一事务较早产生的语义输出。
+    pub fn prepend_surface(&mut self, mut content: SemanticOutput) {
+        content.append(std::mem::take(&mut self.surface));
+        self.surface = content;
+    }
+
     /// 把独立渲染的 Host 区域附加到本次正文更新。
     pub fn append_region(&mut self, region: crate::semantic::RegionId, content: SemanticOutput) {
         self.surface
@@ -463,6 +482,32 @@ impl<Lifecycle, Resume, Dispatch> HostResumeCallbacks<Lifecycle, Resume, Dispatc
     pub fn new(lifecycle: Lifecycle, resume: Resume, dispatch: Dispatch) -> Self {
         Self {
             lifecycle,
+            resume,
+            dispatch,
+        }
+    }
+}
+
+/// 带 Reaction Phase 的异步恢复回调集合。
+pub struct HostResumeReactionCallbacks<Lifecycle, Reaction, Resume, Dispatch> {
+    lifecycle: Lifecycle,
+    reaction: Reaction,
+    resume: Resume,
+    dispatch: Dispatch,
+}
+
+impl<Lifecycle, Reaction, Resume, Dispatch>
+    HostResumeReactionCallbacks<Lifecycle, Reaction, Resume, Dispatch>
+{
+    pub fn new(
+        lifecycle: Lifecycle,
+        reaction: Reaction,
+        resume: Resume,
+        dispatch: Dispatch,
+    ) -> Self {
+        Self {
+            lifecycle,
+            reaction,
             resume,
             dispatch,
         }
