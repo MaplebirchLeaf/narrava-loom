@@ -1,66 +1,66 @@
-import { emitBuiltin, emitReaction, takeAuthorEvents } from "./event"
-import { resolveHostOperation, takeHostOperation } from "./host"
+import { drainAuthorEvents, publishBuiltin, publishReaction } from "./event"
+import { claimHostOperation, completeHostOperation } from "./host"
 import {
-  configuration,
-  events,
-  functions,
-  globals,
-  logs,
-  macros,
+  eventRecords,
+  logRecords,
+  macroDefinitions,
+  runtimeConfiguration,
+  scriptFunctions,
+  scriptGlobals,
   type BootstrapContract,
 } from "./internal"
-import { saveAfter } from "./save"
+import { finishSave } from "./save"
 
-interface RuntimeInternal extends Record<string, unknown> {
+interface NativeBridge extends Record<string, unknown> {
   engine: unknown
   save: unknown
-  configure: (value: Partial<typeof configuration>) => void
+  configure: (value: Partial<typeof runtimeConfiguration>) => void
   emitBuiltin: (name: string, payload: unknown) => number
   emitReaction: (name: string, payload: unknown) => number
-  takeAuthorEvents: typeof takeAuthorEvents
-  completeSave: (completion: Parameters<typeof saveAfter>[0]) => void
+  takeAuthorEvents: typeof drainAuthorEvents
+  completeSave: (completion: Parameters<typeof finishSave>[0]) => void
   takeSave: () => unknown
   hasMacro: (name: string) => boolean
   invokeMacro: (name: string, call: unknown) => unknown
-  takeHostOperation: typeof takeHostOperation
-  resolveHostOperation: typeof resolveHostOperation
+  takeHostOperation: typeof claimHostOperation
+  resolveHostOperation: typeof completeHostOperation
   call: (id: number, arguments_: unknown[]) => unknown
 }
 
-export function installRuntime(contract: BootstrapContract): void {
-  const runtime: RuntimeInternal = {
+export default function runtime(contract: BootstrapContract): void {
+  const bridge: NativeBridge = {
     engine: null,
     save: null,
-    events,
-    logs,
-    macros,
+    events: eventRecords,
+    logs: logRecords,
+    macros: macroDefinitions,
     configure(value) {
-      Object.assign(configuration, value)
+      Object.assign(runtimeConfiguration, value)
     },
-    emitBuiltin,
-    emitReaction,
-    takeAuthorEvents,
-    completeSave: saveAfter,
+    emitBuiltin: publishBuiltin,
+    emitReaction: publishReaction,
+    takeAuthorEvents: drainAuthorEvents,
+    completeSave: finishSave,
     takeSave() {
       const request = this.save
       this.save = null
       return request
     },
-    hasMacro: (name) => macros.has(name),
-    invokeMacro: (name, call) => macros.get(name)!.handler(call),
-    takeHostOperation,
-    resolveHostOperation,
-    call: (id, arguments_) => functions.get(id)!(...arguments_),
+    hasMacro: (name) => macroDefinitions.has(name),
+    invokeMacro: (name, call) => macroDefinitions.get(name)!.handler(call),
+    takeHostOperation: claimHostOperation,
+    resolveHostOperation: completeHostOperation,
+    call: (id, arguments_) => scriptFunctions.get(id)!(...arguments_),
   }
-  globals.__narrava = runtime
+  scriptGlobals.__narrava = bridge
 
   for (const name of contract.globals) {
-    if (globals[name as keyof typeof globals] === undefined) {
+    if (scriptGlobals[name as keyof typeof scriptGlobals] === undefined) {
       throw new Error(`Script Contract 缺少全局：${name}`)
     }
   }
   for (const name of contract.surfaceBuilders) {
-    if (typeof globals.Surface?.[name] !== "function") {
+    if (typeof scriptGlobals.Surface?.[name] !== "function") {
       throw new Error(`Script Contract 缺少 Surface builder：${name}`)
     }
   }

@@ -1,7 +1,7 @@
-import { configuration, globals } from "./internal"
+import { runtimeConfiguration, scriptGlobals } from "./internal"
 
-export function installResource(): void {
-  globals.Resource = Object.seal({
+export default function resources(): void {
+  scriptGlobals.Resource = Object.seal({
     paths: () => __narravaResourcePaths(),
     has: (path: string) => __narravaResourceHas(path),
     pick: (paths: string[]) => paths.find((path) => __narravaResourceHas(path)),
@@ -12,13 +12,13 @@ export function installResource(): void {
     },
     text: (path: string) => __narravaResourceText(path),
   })
-  globals.I18n = Object.freeze({
+  scriptGlobals.I18n = Object.freeze({
     get defaultLocale() {
-      return configuration.defaultLocale
+      return runtimeConfiguration.defaultLocale
     },
     get locale() {
-      return configuration.locale
+      return runtimeConfiguration.locale
     },
-    export: () => configuration.i18nExport,
+    export: () => runtimeConfiguration.i18nExport,
   })
 }

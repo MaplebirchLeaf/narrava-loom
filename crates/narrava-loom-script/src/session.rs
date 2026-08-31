@@ -37,7 +37,7 @@ use crate::{
     ScriptAdapter, ScriptMacroOutcome, ScriptPending,
     dispatch::{dispatch_macro, emit_passage_event, macro_value_execution},
     json_to_value,
-    protocol_adapter::{convert, diagnostic},
+    protocol_adapter::{diagnostic, encode_host_update},
 };
 
 const STORY_ID: u64 = 1;
@@ -321,7 +321,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             },
             |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
             |passage, state, requests| {
-                crate::reaction_runtime::execute_lifecycle(
+                crate::reaction_runtime::apply_lifecycle_reactions(
                     self.script.as_ref(),
                     self.hir,
                     passage,
@@ -389,7 +389,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 },
                 |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
                 |passage, state, requests| {
-                    crate::reaction_runtime::execute_lifecycle(
+                    crate::reaction_runtime::apply_lifecycle_reactions(
                         self.script.as_ref(),
                         self.hir,
                         passage,
@@ -423,7 +423,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 request,
                 |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
                 |passage, state, requests| {
-                    crate::reaction_runtime::execute_lifecycle(
+                    crate::reaction_runtime::apply_lifecycle_reactions(
                         self.script.as_ref(),
                         self.hir,
                         passage,
@@ -480,7 +480,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             },
             |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
             |passage, state, requests| {
-                crate::reaction_runtime::execute_lifecycle(
+                crate::reaction_runtime::apply_lifecycle_reactions(
                     self.script.as_ref(),
                     self.hir,
                     passage,
@@ -560,11 +560,11 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         for _round in 0..256 {
             let mut reactions = self
                 .script
-                .resolve_author_reactions(&mut self.state)
+                .resolve_queued_event_reactions(self.story.current(), &mut self.state)
                 .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
             reactions.extend(
                 self.script
-                    .resolve_state_reactions(&before, &mut self.state)
+                    .resolve_state_reactions(self.story.current(), &before, &mut self.state)
                     .map_err(|error| HostErrorDto::new(&error.code, error.message))?,
             );
             if reactions.is_empty() {
@@ -573,7 +573,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             }
             // 下一轮必须从“本轮效果执行前”继续比较，才能观察效果自身写入的 State。
             let effect_before = self.state.snapshot();
-            let (reaction_output, reaction_goto) = self.execute_reaction_effects(reactions)?;
+            let (reaction_output, reaction_goto) = self.apply_reaction_effects(reactions)?;
             output.append(reaction_output);
             if let Some(target) = reaction_goto
                 && goto.replace(target).is_some()
@@ -614,7 +614,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 },
                 |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
                 |passage, state, requests| {
-                    crate::reaction_runtime::execute_lifecycle(
+                    crate::reaction_runtime::apply_lifecycle_reactions(
                         self.script.as_ref(),
                         self.hir,
                         passage,
@@ -649,31 +649,31 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         {
             let mut amended = presented.as_ref().clone();
             amended.append_surface(output);
-            let dto = convert(&amended, self.story.can_back(), self.story.can_forward());
+            let dto = encode_host_update(&amended, self.story.can_back(), self.story.can_forward());
             self.presented = Some(Rc::new(amended));
-            self.reaction_checkpoint = None;
-            self.reaction_state_checkpoint = None;
-            self.reaction_story_snapshot = None;
-            self.reaction_presented_checkpoint = None;
-            self.reaction_interactions_checkpoint = None;
+            self.clear_reaction_checkpoint();
             return Ok(RuntimeUpdate::Ready { update: dto });
         }
+        self.clear_reaction_checkpoint();
+        Ok(update)
+    }
+
+    fn clear_reaction_checkpoint(&mut self) {
         self.reaction_checkpoint = None;
         self.reaction_state_checkpoint = None;
         self.reaction_story_snapshot = None;
         self.reaction_presented_checkpoint = None;
         self.reaction_interactions_checkpoint = None;
-        Ok(update)
     }
 
-    fn execute_reaction_effects(
+    fn apply_reaction_effects(
         &mut self,
         reactions: Vec<narrava_loom_core::reaction::ReactionEffect>,
     ) -> Result<(SemanticOutput, Option<String>), HostErrorDto> {
         let mut requests = narrava_loom_core::story::StoryRuntimeRequests::new(&self.story);
         let mut output = SemanticOutput::default();
         for effect in reactions {
-            let execution = crate::reaction_runtime::execute_effect(
+            let execution = crate::reaction_runtime::apply_effect(
                 self.hir,
                 &effect,
                 &mut self.state,
@@ -798,7 +798,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                         emit_passage_event(self.script.as_ref(), phase, context)
                     },
                     |passage, state, requests| {
-                        crate::reaction_runtime::execute_lifecycle(
+                        crate::reaction_runtime::apply_lifecycle_reactions(
                             self.script.as_ref(),
                             self.hir,
                             passage,
@@ -892,7 +892,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 }
             }
         }
-        let dto = convert(&update, self.story.can_back(), self.story.can_forward());
+        let dto = encode_host_update(&update, self.story.can_back(), self.story.can_forward());
         self.presented = Some(Rc::new(update));
         Ok(RuntimeUpdate::Ready { update: dto })
     }

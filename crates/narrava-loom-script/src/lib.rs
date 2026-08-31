@@ -116,7 +116,7 @@ pub struct EcmaBinding {
 
 /// 作者 `Event.emit` 进入 Runtime 安全队列的拥有型记录。
 #[derive(Clone, Debug, PartialEq)]
-pub struct ScriptEvent {
+pub struct QueuedAuthorEvent {
     pub name: String,
     pub payload: Value,
 }
@@ -162,13 +162,13 @@ pub enum ScriptMacroOutcome {
     Pending(ScriptPending),
 }
 
-fn collect_reaction_effect(
+fn collect_resolved_effect(
     effect: &ReactionEffect,
     resolved: &mut Vec<ReactionEffect>,
     published_events: &mut Vec<(String, Value)>,
 ) {
     if let Some(event) = &effect.emit {
-        published_events.push(event.clone());
+        published_events.push((event.name.clone(), event.payload.clone()));
     }
     resolved.push(effect.clone());
 }
@@ -193,7 +193,7 @@ impl EcmaBinding {
     }
 
     /// 取走尚未交给 Reaction Resolver 的作者 Event；内置生命周期 Event 不在此队列。
-    pub fn take_author_events(&self) -> Result<Vec<ScriptEvent>, ScriptError> {
+    pub fn drain_author_events(&self) -> Result<Vec<QueuedAuthorEvent>, ScriptError> {
         let mut runtime = self.runtime.borrow_mut();
         let result = runtime
             .context
@@ -212,20 +212,21 @@ impl EcmaBinding {
                     .ok_or_else(|| ScriptError::new("script.event_queue", "Event 名称无效"))?
                     .to_owned();
                 let payload: Value = json_to_value(&event["payload"])?;
-                Ok(ScriptEvent { name, payload })
+                Ok(QueuedAuthorEvent { name, payload })
             })
             .collect()
     }
 
     /// 在 Runtime 安全点解析当前作者 Event 队列，不直接执行叙事或导航效果。
-    pub fn resolve_author_reactions(
+    pub fn resolve_queued_event_reactions(
         &self,
+        passage: Option<&narrava_loom_core::hir::HirPassage<'_>>,
         state: &mut State,
     ) -> Result<Vec<ReactionEffect>, ScriptError> {
         let events: Vec<(String, Value)> = self
-            .take_author_events()?
+            .drain_author_events()?
             .into_iter()
-            .map(|event: ScriptEvent| (event.name, event.payload))
+            .map(|event: QueuedAuthorEvent| (event.name, event.payload))
             .collect();
         if events.is_empty() {
             return Ok(Vec::new());
@@ -236,19 +237,20 @@ impl EcmaBinding {
         let mut published_events: Vec<(String, Value)> = Vec::new();
         resolve_event_queue(
             &mut registry.borrow_mut(),
+            passage,
             events,
             256,
-            |condition, payload| match condition {
-                None => Ok(true),
-                Some(callable) => runtime
-                    .call(callable, vec![payload.clone()], state)
-                    .map(|value: Value| value.is_truthy())
-                    .map_err(|_| {
-                        ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
-                    }),
+            |condition, emit_payload, payload, effect| {
+                runtime.evaluate_reaction(
+                    condition,
+                    emit_payload,
+                    vec![payload.clone()],
+                    state,
+                    effect,
+                )
             },
             |_id, effect| {
-                collect_reaction_effect(effect, &mut resolved, &mut published_events);
+                collect_resolved_effect(effect, &mut resolved, &mut published_events);
                 Ok(())
             },
         )
@@ -262,6 +264,7 @@ impl EcmaBinding {
     /// 比较一次已提交命令前后的 `$` 状态，并解析由其继续产生的 Event Reaction。
     pub fn resolve_state_reactions(
         &self,
+        passage: Option<&narrava_loom_core::hir::HirPassage<'_>>,
         before: &StateSnapshot,
         state: &mut State,
     ) -> Result<Vec<ReactionEffect>, ScriptError> {
@@ -272,20 +275,21 @@ impl EcmaBinding {
         let mut published_events: Vec<(String, Value)> = Vec::new();
         resolve_state_changes(
             &mut registry.borrow_mut(),
+            passage,
             before,
             &after,
             256,
-            |condition, payload| match condition {
-                None => Ok(true),
-                Some(callable) => runtime
-                    .call(callable, vec![payload.clone()], state)
-                    .map(|value: Value| value.is_truthy())
-                    .map_err(|_| {
-                        ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
-                    }),
+            |condition, emit_payload, payload, effect| {
+                runtime.evaluate_reaction(
+                    condition,
+                    emit_payload,
+                    vec![payload.clone()],
+                    state,
+                    effect,
+                )
             },
             |_id, effect| {
-                collect_reaction_effect(effect, &mut resolved, &mut published_events);
+                collect_resolved_effect(effect, &mut resolved, &mut published_events);
                 Ok(())
             },
         )
@@ -310,17 +314,11 @@ impl EcmaBinding {
             &mut registry.borrow_mut(),
             passage,
             256,
-            |condition, _payload| match condition {
-                None => Ok(true),
-                Some(callable) => runtime
-                    .call(callable, Vec::new(), state)
-                    .map(|value: Value| value.is_truthy())
-                    .map_err(|_| {
-                        ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
-                    }),
+            |condition, emit_payload, _payload, effect| {
+                runtime.evaluate_reaction(condition, emit_payload, Vec::new(), state, effect)
             },
             |_id, effect| {
-                collect_reaction_effect(effect, &mut resolved, &mut published_events);
+                collect_resolved_effect(effect, &mut resolved, &mut published_events);
                 Ok(())
             },
         )
@@ -513,6 +511,45 @@ impl ScriptCallDispatcher for EcmaBinding {
 }
 
 impl EcmaRuntime {
+    fn evaluate_reaction(
+        &mut self,
+        condition: Option<&ScriptCallable>,
+        emit_payload: Option<&ScriptCallable>,
+        arguments: Vec<Value>,
+        state: &mut State,
+        effect: &ReactionEffect,
+    ) -> Result<Option<ReactionEffect>, ScriptError> {
+        if let Some(condition) = condition {
+            let accepted = self
+                .call(condition, arguments.clone(), state)
+                .map(|value: Value| value.is_truthy())
+                .map_err(|_| {
+                    ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
+                })?;
+            if !accepted {
+                return Ok(None);
+            }
+        }
+
+        let mut resolved: ReactionEffect = effect.clone();
+        if let Some(emit_payload) = emit_payload {
+            let payload = self.call(emit_payload, arguments, state).map_err(|_| {
+                ScriptError::new(
+                    "script.reaction_emit_payload",
+                    "Reaction emit payload 执行失败",
+                )
+            })?;
+            let Some(event) = resolved.emit.as_mut() else {
+                return Err(ScriptError::new(
+                    "script.reaction_emit_payload",
+                    "Reaction 动态 emit payload 缺少事件定义",
+                ));
+            };
+            event.payload = payload;
+        }
+        Ok(Some(resolved))
+    }
+
     fn emit_reaction_event(&mut self, name: &str, payload: &Value) -> Result<(), ScriptError> {
         let payload = value_to_json(payload)
             .map_err(|()| ScriptError::new("script.reaction_event", "Reaction Event 无法序列化"))?;

@@ -7,7 +7,7 @@ use std::{
     fmt,
 };
 
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 
 use crate::{expression::value::Value, hir::HirPassage, state::StateSnapshot};
@@ -77,7 +77,11 @@ pub enum ReactionTrigger {
 #[derive(Clone, Debug)]
 pub enum PassageMatcher {
     Exact(String),
-    Regex { source: String, compiled: Regex },
+    Regex {
+        source: String,
+        flags: String,
+        compiled: Regex,
+    },
 }
 
 impl PassageMatcher {
@@ -89,11 +93,30 @@ impl PassageMatcher {
         Ok(Self::Exact(name))
     }
 
-    pub fn regex(source: impl Into<String>) -> Result<Self, ReactionError> {
+    pub fn regex(
+        source: impl Into<String>,
+        flags: impl Into<String>,
+    ) -> Result<Self, ReactionError> {
         let source: String = source.into();
-        let compiled: Regex = Regex::new(&source)
+        let flags: String = flags.into();
+        let mut seen: HashSet<char> = HashSet::new();
+        if flags
+            .chars()
+            .any(|flag: char| !matches!(flag, 'i' | 'm' | 's' | 'u') || !seen.insert(flag))
+        {
+            return Err(ReactionError::InvalidPassageFlags(flags));
+        }
+        let compiled: Regex = RegexBuilder::new(&source)
+            .case_insensitive(flags.contains('i'))
+            .multi_line(flags.contains('m'))
+            .dot_matches_new_line(flags.contains('s'))
+            .build()
             .map_err(|_| ReactionError::InvalidPassageMatcher(source.clone()))?;
-        Ok(Self::Regex { source, compiled })
+        Ok(Self::Regex {
+            source,
+            flags,
+            compiled,
+        })
     }
 
     fn matches(&self, name: &str) -> bool {
@@ -108,7 +131,18 @@ impl PartialEq for PassageMatcher {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Exact(left), Self::Exact(right)) => left == right,
-            (Self::Regex { source: left, .. }, Self::Regex { source: right, .. }) => left == right,
+            (
+                Self::Regex {
+                    source: left_source,
+                    flags: left_flags,
+                    ..
+                },
+                Self::Regex {
+                    source: right_source,
+                    flags: right_flags,
+                    ..
+                },
+            ) => left_source == right_source && left_flags == right_flags,
             _ => false,
         }
     }
@@ -124,7 +158,7 @@ pub struct PassageTagSelector {
     pub none: Vec<String>,
 }
 
-/// Lifecycle Reaction 的静态 Passage 选择器。
+/// 依据当前 Passage 名称与 Tag 筛选 Reaction 候选。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PassageSelector {
     pub matches: Vec<PassageMatcher>,
@@ -163,6 +197,13 @@ impl PassageSelector {
     }
 }
 
+/// Reaction 派生的拥有型事件。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReactionEvent {
+    pub name: String,
+    pub payload: Value,
+}
+
 /// Reaction 成立后交给 Engine/Runtime 执行的结构化效果。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ReactionEffect {
@@ -170,7 +211,7 @@ pub struct ReactionEffect {
     pub include: Option<String>,
     pub replace: Option<String>,
     pub goto: Option<String>,
-    pub emit: Option<(String, Value)>,
+    pub emit: Option<ReactionEvent>,
     pub exit: bool,
 }
 
@@ -187,11 +228,27 @@ pub struct ReactionDefinition {
     pub tags: Vec<String>,
 }
 
+/// 规则在脚本 Runtime 中持有的两类动态回调。
+#[derive(Clone, Debug, Default)]
+pub struct ReactionCallbacks<Callback> {
+    pub condition: Option<Callback>,
+    pub emit_payload: Option<Callback>,
+}
+
+impl<Callback> From<Option<Callback>> for ReactionCallbacks<Callback> {
+    fn from(condition: Option<Callback>) -> Self {
+        Self {
+            condition,
+            emit_payload: None,
+        }
+    }
+}
+
 /// Definition、脚本条件句柄与可存档运行状态。
 #[derive(Clone, Debug)]
-pub struct RegisteredReaction<Condition> {
+pub struct RegisteredReaction<Callback> {
     definition: ReactionDefinition,
-    condition: Option<Condition>,
+    callbacks: ReactionCallbacks<Callback>,
     enabled: bool,
     triggered: u64,
     destroyed: bool,
@@ -207,13 +264,17 @@ pub struct ReactionRuntimeState {
     pub destroyed: bool,
 }
 
-impl<Condition> RegisteredReaction<Condition> {
+impl<Callback> RegisteredReaction<Callback> {
     pub fn definition(&self) -> &ReactionDefinition {
         &self.definition
     }
 
-    pub fn condition(&self) -> Option<&Condition> {
-        self.condition.as_ref()
+    pub fn condition(&self) -> Option<&Callback> {
+        self.callbacks.condition.as_ref()
+    }
+
+    pub fn emit_payload(&self) -> Option<&Callback> {
+        self.callbacks.emit_payload.as_ref()
     }
 
     pub fn enabled(&self) -> bool {
@@ -250,15 +311,15 @@ pub enum ReactionResolveError<E> {
 
 /// 按触发来源建立索引的 Reaction Registry。
 #[derive(Clone, Debug)]
-pub struct ReactionRegistry<Condition> {
-    entries: HashMap<ReactionId, RegisteredReaction<Condition>>,
+pub struct ReactionRegistry<Callback> {
+    entries: HashMap<ReactionId, RegisteredReaction<Callback>>,
     event_index: HashMap<String, Vec<ReactionId>>,
     state_index: HashMap<StatePath, Vec<ReactionId>>,
     state_paths: Vec<StatePath>,
     lifecycle_index: Vec<ReactionId>,
 }
 
-impl<Condition> ReactionRegistry<Condition> {
+impl<Callback> ReactionRegistry<Callback> {
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
@@ -272,7 +333,7 @@ impl<Condition> ReactionRegistry<Condition> {
     pub fn add(
         &mut self,
         definition: ReactionDefinition,
-        condition: Option<Condition>,
+        callbacks: impl Into<ReactionCallbacks<Callback>>,
     ) -> Result<(), ReactionError> {
         validate_definition(&definition)?;
         if self.entries.contains_key(&definition.id) {
@@ -301,7 +362,7 @@ impl<Condition> ReactionRegistry<Condition> {
             RegisteredReaction {
                 enabled: definition.enabled,
                 definition,
-                condition,
+                callbacks: callbacks.into(),
                 triggered: 0,
                 destroyed: false,
             },
@@ -309,25 +370,35 @@ impl<Condition> ReactionRegistry<Condition> {
         Ok(())
     }
 
-    pub fn get(&self, id: &str) -> Option<&RegisteredReaction<Condition>> {
+    pub fn get(&self, id: &str) -> Option<&RegisteredReaction<Callback>> {
         self.entries.get(id).filter(|entry| !entry.destroyed)
     }
 
-    pub fn event_candidates(&self, name: &str) -> Vec<ReactionId> {
+    pub fn event_candidates(
+        &self,
+        name: &str,
+        passage: Option<&HirPassage<'_>>,
+    ) -> Vec<ReactionId> {
         self.enabled_candidates(
             self.event_index
                 .get(name)
                 .map(Vec::as_slice)
                 .unwrap_or_default(),
+            passage,
         )
     }
 
-    pub fn state_candidates(&self, path: &StatePath) -> Vec<ReactionId> {
+    pub fn state_candidates(
+        &self,
+        path: &StatePath,
+        passage: Option<&HirPassage<'_>>,
+    ) -> Vec<ReactionId> {
         self.enabled_candidates(
             self.state_index
                 .get(path)
                 .map(Vec::as_slice)
                 .unwrap_or_default(),
+            passage,
         )
     }
 
@@ -336,41 +407,32 @@ impl<Condition> ReactionRegistry<Condition> {
     }
 
     pub fn lifecycle_candidates(&self, passage: &HirPassage<'_>) -> Vec<ReactionId> {
-        self.lifecycle_index
-            .iter()
-            .filter(|id: &&ReactionId| {
-                self.entries
-                    .get(*id)
-                    .is_some_and(|entry: &RegisteredReaction<Condition>| {
-                        !entry.destroyed
-                            && entry.enabled
-                            && entry
-                                .definition
-                                .passage
-                                .as_ref()
-                                .is_none_or(|selector: &PassageSelector| selector.matches(passage))
-                    })
-            })
-            .cloned()
-            .collect()
+        self.enabled_candidates(&self.lifecycle_index, Some(passage))
     }
 
     pub fn enable(&mut self, id: &str) -> Result<bool, ReactionError> {
-        let entry: &mut RegisteredReaction<Condition> = self.entry_mut(id)?;
+        let entry: &mut RegisteredReaction<Callback> = self.entry_mut(id)?;
+        if entry
+            .definition
+            .limit
+            .is_some_and(|limit: u64| entry.triggered >= limit)
+        {
+            return Ok(false);
+        }
         let changed: bool = !entry.enabled;
         entry.enabled = true;
         Ok(changed)
     }
 
     pub fn disable(&mut self, id: &str) -> Result<bool, ReactionError> {
-        let entry: &mut RegisteredReaction<Condition> = self.entry_mut(id)?;
+        let entry: &mut RegisteredReaction<Callback> = self.entry_mut(id)?;
         let changed: bool = entry.enabled;
         entry.enabled = false;
         Ok(changed)
     }
 
     pub fn reset(&mut self, id: &str) -> Result<bool, ReactionError> {
-        let entry: &mut RegisteredReaction<Condition> = self.entry_mut(id)?;
+        let entry: &mut RegisteredReaction<Callback> = self.entry_mut(id)?;
         let changed: bool = entry.triggered != 0 || entry.enabled != entry.definition.enabled;
         entry.triggered = 0;
         entry.enabled = entry.definition.enabled;
@@ -381,9 +443,9 @@ impl<Condition> ReactionRegistry<Condition> {
         let key: ReactionId = self
             .entries
             .get_key_value(id)
-            .map(|(key, _entry): (&ReactionId, &RegisteredReaction<Condition>)| key.clone())
+            .map(|(key, _entry): (&ReactionId, &RegisteredReaction<Callback>)| key.clone())
             .ok_or_else(|| ReactionError::Missing(id.to_owned()))?;
-        let entry: &mut RegisteredReaction<Condition> = self.entries.get_mut(&key).unwrap();
+        let entry: &mut RegisteredReaction<Callback> = self.entries.get_mut(&key).unwrap();
         entry.triggered = entry
             .triggered
             .checked_add(1)
@@ -404,18 +466,26 @@ impl<Condition> ReactionRegistry<Condition> {
         Ok(ReactionSuccess::Active)
     }
 
-    fn enabled_candidates(&self, ids: &[ReactionId]) -> Vec<ReactionId> {
+    fn enabled_candidates(
+        &self,
+        ids: &[ReactionId],
+        passage: Option<&HirPassage<'_>>,
+    ) -> Vec<ReactionId> {
         ids.iter()
             .filter(|id: &&ReactionId| {
-                self.entries
-                    .get(*id)
-                    .is_some_and(|entry| !entry.destroyed && entry.enabled())
+                self.entries.get(*id).is_some_and(|entry| {
+                    !entry.destroyed
+                        && entry.enabled()
+                        && entry.definition.passage.as_ref().is_none_or(|selector| {
+                            passage.is_some_and(|passage| selector.matches(passage))
+                        })
+                })
             })
             .cloned()
             .collect()
     }
 
-    fn entry_mut(&mut self, id: &str) -> Result<&mut RegisteredReaction<Condition>, ReactionError> {
+    fn entry_mut(&mut self, id: &str) -> Result<&mut RegisteredReaction<Callback>, ReactionError> {
         self.entries
             .get_mut(id)
             .filter(|entry| !entry.destroyed)
@@ -453,10 +523,9 @@ impl<Condition> ReactionRegistry<Condition> {
             };
             if (item.destroyed && (!entry.definition.once || item.enabled))
                 || (entry.definition.once && item.triggered > 1)
-                || entry
-                    .definition
-                    .limit
-                    .is_some_and(|limit| item.triggered > limit)
+                || entry.definition.limit.is_some_and(|limit| {
+                    item.triggered > limit || (item.triggered == limit && item.enabled)
+                })
             {
                 return Err(ReactionError::InvalidRuntimeState(item.id.clone()));
             }
@@ -472,15 +541,21 @@ impl<Condition> ReactionRegistry<Condition> {
 }
 
 /// 在 Engine 安全点解析作者 Event；setter 与 `Event.emit` 都不得直接重入此流程。
-pub fn resolve_event_queue<Condition, E>(
-    registry: &mut ReactionRegistry<Condition>,
+pub fn resolve_event_queue<Callback, E>(
+    registry: &mut ReactionRegistry<Callback>,
+    passage: Option<&HirPassage<'_>>,
     events: impl IntoIterator<Item = (String, Value)>,
     execution_limit: usize,
-    mut test_condition: impl FnMut(Option<&Condition>, &Value) -> Result<bool, E>,
+    mut evaluate_reaction: impl FnMut(
+        Option<&Callback>,
+        Option<&Callback>,
+        &Value,
+        &ReactionEffect,
+    ) -> Result<Option<ReactionEffect>, E>,
     mut execute_effect: impl FnMut(&ReactionId, &ReactionEffect) -> Result<(), E>,
 ) -> Result<ReactionResolution, ReactionResolveError<E>>
 where
-    Condition: Clone,
+    Callback: Clone,
 {
     struct QueuedEvent {
         name: String,
@@ -499,7 +574,7 @@ where
     let mut resolution: ReactionResolution = ReactionResolution::default();
 
     while let Some(event) = queue.pop_front() {
-        for id in registry.event_candidates(&event.name) {
+        for id in registry.event_candidates(&event.name, passage) {
             let pair: (String, ReactionId) = (event.name.clone(), id.clone());
             let Some(entry) = registry
                 .get(id.as_str())
@@ -519,19 +594,23 @@ where
                     limit: execution_limit,
                 });
             }
-            if !test_condition(entry.condition(), &event.payload)
-                .map_err(ReactionResolveError::Operation)?
-            {
+            let Some(effect) = evaluate_reaction(
+                entry.condition(),
+                entry.emit_payload(),
+                &event.payload,
+                &entry.definition().effect,
+            )
+            .map_err(ReactionResolveError::Operation)?
+            else {
                 continue;
-            }
-            let effect: ReactionEffect = entry.definition().effect.clone();
+            };
             execute_effect(&id, &effect).map_err(ReactionResolveError::Operation)?;
             registry
                 .record_success(id.as_str())
                 .map_err(ReactionResolveError::Reaction)?;
             resolution.triggered.push(id.clone());
 
-            if let Some((name, payload)) = effect.emit {
+            if let Some(ReactionEvent { name, payload }) = effect.emit {
                 let mut lineage: HashSet<(String, ReactionId)> = event.lineage.clone();
                 lineage.insert(pair);
                 queue.push_back(QueuedEvent {
@@ -546,16 +625,22 @@ where
 }
 
 /// 比较一次已提交命令前后的持久状态，并在同一安全点继续解析其 Event 链。
-pub fn resolve_state_changes<Condition, E>(
-    registry: &mut ReactionRegistry<Condition>,
+pub fn resolve_state_changes<Callback, E>(
+    registry: &mut ReactionRegistry<Callback>,
+    passage: Option<&HirPassage<'_>>,
     before: &StateSnapshot,
     after: &StateSnapshot,
     execution_limit: usize,
-    mut test_condition: impl FnMut(Option<&Condition>, &Value) -> Result<bool, E>,
+    mut evaluate_reaction: impl FnMut(
+        Option<&Callback>,
+        Option<&Callback>,
+        &Value,
+        &ReactionEffect,
+    ) -> Result<Option<ReactionEffect>, E>,
     mut execute_effect: impl FnMut(&ReactionId, &ReactionEffect) -> Result<(), E>,
 ) -> Result<ReactionResolution, ReactionResolveError<E>>
 where
-    Condition: Clone,
+    Callback: Clone,
 {
     let paths: Vec<StatePath> = registry.state_paths().to_vec();
     let mut resolution: ReactionResolution = ReactionResolution::default();
@@ -571,7 +656,7 @@ where
             (String::from("before"), before_value),
             (String::from("after"), after_value),
         ]);
-        for id in registry.state_candidates(&path) {
+        for id in registry.state_candidates(&path, passage) {
             if resolution.triggered.len() >= execution_limit {
                 return Err(ReactionResolveError::ExecutionLimitExceeded {
                     limit: execution_limit,
@@ -584,19 +669,23 @@ where
             else {
                 continue;
             };
-            if !test_condition(entry.condition(), &argument)
-                .map_err(ReactionResolveError::Operation)?
-            {
+            let Some(effect) = evaluate_reaction(
+                entry.condition(),
+                entry.emit_payload(),
+                &argument,
+                &entry.definition().effect,
+            )
+            .map_err(ReactionResolveError::Operation)?
+            else {
                 continue;
-            }
-            let effect: ReactionEffect = entry.definition().effect.clone();
+            };
             execute_effect(&id, &effect).map_err(ReactionResolveError::Operation)?;
             registry
                 .record_success(id.as_str())
                 .map_err(ReactionResolveError::Reaction)?;
             resolution.triggered.push(id);
             if let Some(event) = effect.emit {
-                emitted.push(event);
+                emitted.push((event.name, event.payload));
             }
         }
     }
@@ -604,9 +693,10 @@ where
     let remaining: usize = execution_limit.saturating_sub(resolution.triggered.len());
     let event_resolution = resolve_event_queue(
         registry,
+        passage,
         emitted,
         remaining,
-        &mut test_condition,
+        &mut evaluate_reaction,
         &mut execute_effect,
     )?;
     resolution.triggered.extend(event_resolution.triggered);
@@ -614,15 +704,20 @@ where
 }
 
 /// 在普通 Passage 的 Start 与正文之间解析 lifecycle Reaction 及其 Event 链。
-pub fn resolve_lifecycle_reactions<Condition, E>(
-    registry: &mut ReactionRegistry<Condition>,
+pub fn resolve_lifecycle_reactions<Callback, E>(
+    registry: &mut ReactionRegistry<Callback>,
     passage: &HirPassage<'_>,
     execution_limit: usize,
-    mut test_condition: impl FnMut(Option<&Condition>, &Value) -> Result<bool, E>,
+    mut evaluate_reaction: impl FnMut(
+        Option<&Callback>,
+        Option<&Callback>,
+        &Value,
+        &ReactionEffect,
+    ) -> Result<Option<ReactionEffect>, E>,
     mut execute_effect: impl FnMut(&ReactionId, &ReactionEffect) -> Result<(), E>,
 ) -> Result<ReactionResolution, ReactionResolveError<E>>
 where
-    Condition: Clone,
+    Callback: Clone,
 {
     let mut resolution: ReactionResolution = ReactionResolution::default();
     let mut emitted: Vec<(String, Value)> = Vec::new();
@@ -639,35 +734,40 @@ where
         else {
             continue;
         };
-        if !test_condition(entry.condition(), &Value::Null)
-            .map_err(ReactionResolveError::Operation)?
-        {
+        let Some(effect) = evaluate_reaction(
+            entry.condition(),
+            entry.emit_payload(),
+            &Value::Null,
+            &entry.definition().effect,
+        )
+        .map_err(ReactionResolveError::Operation)?
+        else {
             continue;
-        }
-        let effect: ReactionEffect = entry.definition().effect.clone();
+        };
         execute_effect(&id, &effect).map_err(ReactionResolveError::Operation)?;
         registry
             .record_success(id.as_str())
             .map_err(ReactionResolveError::Reaction)?;
         resolution.triggered.push(id);
         if let Some(event) = effect.emit {
-            emitted.push(event);
+            emitted.push((event.name, event.payload));
         }
     }
 
     let remaining: usize = execution_limit.saturating_sub(resolution.triggered.len());
     let event_resolution = resolve_event_queue(
         registry,
+        Some(passage),
         emitted,
         remaining,
-        &mut test_condition,
+        &mut evaluate_reaction,
         &mut execute_effect,
     )?;
     resolution.triggered.extend(event_resolution.triggered);
     Ok(resolution)
 }
 
-impl<Condition> Default for ReactionRegistry<Condition> {
+impl<Callback> Default for ReactionRegistry<Callback> {
     fn default() -> Self {
         Self::new()
     }
@@ -678,9 +778,6 @@ fn validate_definition(definition: &ReactionDefinition) -> Result<(), ReactionEr
         && (name.is_empty() || name.chars().any(char::is_whitespace))
     {
         return Err(ReactionError::InvalidEvent(name.clone()));
-    }
-    if definition.passage.is_some() && definition.trigger != ReactionTrigger::Lifecycle {
-        return Err(ReactionError::PassageWithoutLifecycle);
     }
     if definition.effect.exit && definition.trigger != ReactionTrigger::Lifecycle {
         return Err(ReactionError::ExitWithoutLifecycle);
@@ -693,9 +790,6 @@ fn validate_definition(definition: &ReactionDefinition) -> Result<(), ReactionEr
     }
     if definition.effect.widget.is_some() && definition.effect.include.is_some() {
         return Err(ReactionError::MultipleContentSources);
-    }
-    if definition.effect.include.is_some() && definition.effect.replace.is_none() {
-        return Err(ReactionError::IncludeWithoutReplace);
     }
     if definition.limit == Some(0) {
         return Err(ReactionError::InvalidLimit);
@@ -720,13 +814,12 @@ pub enum ReactionError {
     InvalidEvent(String),
     InvalidStatePath(String),
     InvalidPassageMatcher(String),
+    InvalidPassageFlags(String),
     Duplicate(String),
     Missing(String),
     MissingEffect,
-    PassageWithoutLifecycle,
     ExitWithoutLifecycle,
     ReplaceWithoutContent,
-    IncludeWithoutReplace,
     MultipleContentSources,
     InvalidLimit,
     OnceWithLimit,

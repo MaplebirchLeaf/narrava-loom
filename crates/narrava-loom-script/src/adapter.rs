@@ -4,7 +4,7 @@ use narrava_loom_core::hir::HirPassage;
 use narrava_loom_core::reaction::{ReactionEffect, ReactionRuntimeState};
 use narrava_loom_core::state::{State, StateSnapshot};
 
-use crate::{EcmaBinding, ScriptError, ScriptEvent, ScriptMacroOutcome, ScriptPending};
+use crate::{EcmaBinding, QueuedAuthorEvent, ScriptError, ScriptMacroOutcome, ScriptPending};
 
 /// RuntimeSession 所需的脚本能力；Boa/Oxc 只是一种实现。
 pub trait ScriptAdapter {
@@ -14,17 +14,19 @@ pub trait ScriptAdapter {
     fn restore_reaction_state(&self, _state: &[ReactionRuntimeState]) -> Result<(), ScriptError> {
         Ok(())
     }
-    fn take_author_events(&self) -> Result<Vec<ScriptEvent>, ScriptError> {
+    fn drain_author_events(&self) -> Result<Vec<QueuedAuthorEvent>, ScriptError> {
         Ok(Vec::new())
     }
-    fn resolve_author_reactions(
+    fn resolve_queued_event_reactions(
         &self,
+        _passage: Option<&HirPassage<'_>>,
         _state: &mut State,
     ) -> Result<Vec<ReactionEffect>, ScriptError> {
         Ok(Vec::new())
     }
     fn resolve_state_reactions(
         &self,
+        _passage: Option<&HirPassage<'_>>,
         _command_before: &StateSnapshot,
         _state: &mut State,
     ) -> Result<Vec<ReactionEffect>, ScriptError> {
@@ -72,21 +74,23 @@ impl ScriptAdapter for EcmaBinding {
     fn restore_reaction_state(&self, state: &[ReactionRuntimeState]) -> Result<(), ScriptError> {
         self.restore_reaction_state(state)
     }
-    fn take_author_events(&self) -> Result<Vec<ScriptEvent>, ScriptError> {
-        self.take_author_events()
+    fn drain_author_events(&self) -> Result<Vec<QueuedAuthorEvent>, ScriptError> {
+        self.drain_author_events()
     }
-    fn resolve_author_reactions(
+    fn resolve_queued_event_reactions(
         &self,
+        passage: Option<&HirPassage<'_>>,
         state: &mut State,
     ) -> Result<Vec<ReactionEffect>, ScriptError> {
-        self.resolve_author_reactions(state)
+        self.resolve_queued_event_reactions(passage, state)
     }
     fn resolve_state_reactions(
         &self,
+        passage: Option<&HirPassage<'_>>,
         command_before: &StateSnapshot,
         state: &mut State,
     ) -> Result<Vec<ReactionEffect>, ScriptError> {
-        self.resolve_state_reactions(command_before, state)
+        self.resolve_state_reactions(passage, command_before, state)
     }
     fn resolve_lifecycle_reactions(
         &self,

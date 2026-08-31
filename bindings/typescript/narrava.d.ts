@@ -186,6 +186,7 @@ declare global {
   /** 启动配置对象的属性代理，与 Twee 中的 `setup.name` 指向同一份数据。 */
   const setup: { [name: string]: NarravaData }
 
+  /** 字符串精确匹配；RegExp 保留 i/m/s/u flags，其他或重复 flags 会被拒绝。 */
   type NarravaReactionPassageMatcher = string | RegExp
   interface NarravaReactionPassageSelector {
     readonly match?: readonly NarravaReactionPassageMatcher[]
@@ -196,16 +197,28 @@ declare global {
       readonly none?: readonly string[]
     }
   }
-  interface NarravaReactionEffect {
+  type NarravaReactionPayloadFactory<Context> = Context extends undefined
+    ? () => NarravaData
+    : (context: Context) => NarravaData
+  interface NarravaReactionEffect<Context> {
     readonly id: string
+    /** 以触发时的当前 Passage 过滤规则；适用于 Event、State 与 lifecycle。 */
+    readonly passage?:
+      | NarravaReactionPassageMatcher
+      | readonly NarravaReactionPassageMatcher[]
+      | NarravaReactionPassageSelector
     /** 通过 Engine 事务导航；目标 Passage 会正常经历 lifecycle 与 history。 */
     readonly goto?: string
     /** 继续派发结构化 Event；Runtime 会检测后代环并限制执行次数。 */
-    readonly emit?: { readonly name: string; readonly payload?: NarravaData }
+    readonly emit?: {
+      readonly name: string
+      readonly payload?: NarravaData | NarravaReactionPayloadFactory<Context>
+    }
     /** 仅 lifecycle Reaction 可用；在 Reaction Phase 截断目标 Passage 原正文。 */
     readonly exit?: true
     readonly enabled?: boolean
     readonly once?: boolean
+    /** 成功次数上限；达到后保持禁用，必须 reset 后才能再次 enable。 */
     readonly limit?: number
     readonly tags?: readonly string[]
   }
@@ -217,44 +230,39 @@ declare global {
         readonly replace?: string
       }
     | {
-        /** Passage fragment 必须明确替换目标，不能隐式追加到整页末尾。 */
+        /** 原地执行 Passage fragment；无 replace 时追加到当前输出。 */
         readonly include: string
-        readonly replace: string
+        readonly replace?: string
         readonly widget?: never
       }
     | { readonly widget?: never; readonly include?: never; readonly replace?: never }
-  type NarravaEventReactionDefinition = NarravaReactionEffect &
+  type NarravaEventReactionDefinition = NarravaReactionEffect<NarravaData> &
     NarravaReactionContent & {
       readonly event: string
       readonly state?: never
       readonly lifecycle?: never
-      readonly passage?: never
       readonly exit?: never
       /** 可同时检查 Event payload 与当前活动 State（例如 `V.quest_open === true`）。 */
       readonly cond?: (payload: NarravaData) => boolean
     }
-  type NarravaStateReactionDefinition = NarravaReactionEffect &
+  interface NarravaReactionStateChange {
+    readonly before: NarravaData
+    readonly after: NarravaData
+  }
+  type NarravaStateReactionDefinition = NarravaReactionEffect<NarravaReactionStateChange> &
     NarravaReactionContent & {
       readonly event?: never
       readonly state: `$${string}`
       readonly lifecycle?: never
-      readonly passage?: never
       readonly exit?: never
       /** 可同时检查本路径变化与当前活动 State 中的其他变量。 */
-      readonly cond?: (change: {
-        readonly before: NarravaData
-        readonly after: NarravaData
-      }) => boolean
+      readonly cond?: (change: NarravaReactionStateChange) => boolean
     }
-  type NarravaLifecycleReactionDefinition = NarravaReactionEffect &
+  type NarravaLifecycleReactionDefinition = NarravaReactionEffect<undefined> &
     NarravaReactionContent & {
       readonly event?: never
       readonly state?: never
       readonly lifecycle: true
-      readonly passage?:
-        | NarravaReactionPassageMatcher
-        | readonly NarravaReactionPassageMatcher[]
-        | NarravaReactionPassageSelector
       /** 可通过 `V` 检查进入 Passage 时的当前活动 State。 */
       readonly cond?: () => boolean
     }

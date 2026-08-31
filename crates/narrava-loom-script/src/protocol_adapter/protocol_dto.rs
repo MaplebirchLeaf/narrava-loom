@@ -14,7 +14,7 @@ use narrava_loom_core::{
 pub use narrava_loom_protocol::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
 /// 把 Core 的 HostUpdate 转换为 IPC DTO。
-pub fn convert(update: &HostUpdate, can_back: bool, can_forward: bool) -> HostUpdateDto {
+pub fn encode_host_update(update: &HostUpdate, can_back: bool, can_forward: bool) -> HostUpdateDto {
     HostUpdateDto {
         current: update.current().to_owned(),
         nodes: convert_output(update.surface(), &format!("passage:{}", update.current())),

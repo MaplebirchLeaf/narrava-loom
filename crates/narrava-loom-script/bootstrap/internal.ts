@@ -1,4 +1,4 @@
-export interface CallableMarker {
+export interface CallableReference {
   readonly __narravaCallable: number
   readonly name: string
 }
@@ -20,7 +20,7 @@ export interface BootstrapContract {
   surfaceBuilders: string[]
 }
 
-export interface BootstrapGlobals {
+export interface ScriptGlobalRegistry {
   State?: unknown
   V?: unknown
   T?: unknown
@@ -39,17 +39,17 @@ export interface BootstrapGlobals {
   __narrava?: Record<string, unknown>
 }
 
-export const globals = globalThis as unknown as BootstrapGlobals
-export const functions = new Map<number, (...arguments_: unknown[]) => unknown>()
-export const events: EventRecord[] = []
-export const authorEvents: EventRecord[] = []
-export const logs: unknown[] = []
-export const macros = new Map<string, { handler: (call: unknown) => unknown }>()
-export const subscriptions = new Map<number, unknown>()
+export const scriptGlobals = globalThis as unknown as ScriptGlobalRegistry
+export const scriptFunctions = new Map<number, (...arguments_: unknown[]) => unknown>()
+export const eventRecords: EventRecord[] = []
+export const authorEventQueue: EventRecord[] = []
+export const logRecords: unknown[] = []
+export const macroDefinitions = new Map<string, { handler: (call: unknown) => unknown }>()
+export const macroHooks = new Map<number, unknown>()
 export const saveHooks = new Map<number, SaveHook>()
-export const hostOperations = new Map<number, HostOperation>()
+export const hostOperationQueue = new Map<number, HostOperation>()
 export const eventSubscriptions = new Map<number, EventSubscription>()
-export const configuration: RuntimeConfiguration = {
+export const runtimeConfiguration: RuntimeConfiguration = {
   story: { passages: [], current: null, visits: {} },
   defaultLocale: "und",
   locale: "und",
@@ -81,31 +81,33 @@ export interface HostOperation {
   taken: boolean
 }
 
-let nextFunction = 1
-let nextSubscription = 1
-let nextHostOperation = 1
+let nextFunctionId = 1
+let nextSubscriptionId = 1
+let nextHostOperationId = 1
 let nextEventSequence = 1
 
-export function allocateSubscription(): number {
-  return nextSubscription++
+export function subscriptionId(): number {
+  return nextSubscriptionId++
 }
 
-export function allocateHostOperation(): number {
-  return nextHostOperation++
+export function hostOperationId(): number {
+  return nextHostOperationId++
 }
 
-export function allocateEventSequence(): number {
+export function eventSequence(): number {
   return nextEventSequence++
 }
 
-export function toHostValue(name: string, value: unknown): unknown {
+export function encodeScriptValue(name: string, value: unknown): unknown {
   if (typeof value !== "function") return value
-  const id = nextFunction++
-  functions.set(id, value as (...arguments_: unknown[]) => unknown)
-  return { __narravaCallable: id, name } satisfies CallableMarker
+  const id = nextFunctionId++
+  scriptFunctions.set(id, value as (...arguments_: unknown[]) => unknown)
+  return { __narravaCallable: id, name } satisfies CallableReference
 }
 
-export function fromHostValue(value: unknown): unknown {
-  const marker = value as Partial<CallableMarker> | null | undefined
-  return marker?.__narravaCallable === undefined ? value : functions.get(marker.__narravaCallable)
+export function decodeScriptValue(value: unknown): unknown {
+  const reference = value as Partial<CallableReference> | null | undefined
+  return reference?.__narravaCallable === undefined
+    ? value
+    : scriptFunctions.get(reference.__narravaCallable)
 }

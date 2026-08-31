@@ -8,7 +8,7 @@ pub mod protocol_bridge;
 mod protocol_dto;
 mod surface;
 
-pub use protocol_dto::convert;
+pub use protocol_dto::encode_host_update;
 pub use surface::*;
 
 /// 把 Core 诊断降级为可跨 Runtime/Host 传输的错误。

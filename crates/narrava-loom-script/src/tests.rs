@@ -224,6 +224,36 @@ fn reaction_api_registers_native_rules_without_a_javascript_registry_mirror() {
 }
 
 #[test]
+fn reaction_api_rejects_unsupported_regexp_flags_at_the_script_boundary() {
+    let root = std::path::PathBuf::from(format!(
+        "target/test-projects/narrava-loom-reaction-regexp-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("contents/scripts")).unwrap();
+    std::fs::write(
+        root.join("contents/scripts/main.js"),
+        r#"Reaction.add({ id: "invalid.flags", event: "talk", passage: /Hall/g, goto: "Hall" });"#,
+    )
+    .unwrap();
+    let sources = SourceList::discover(&root).unwrap();
+    let mut state = State::new();
+    let error = match EcmaRuntime::load(
+        &sources,
+        &ResourceCatalog::default(),
+        &I18nCatalog::default(),
+        "zh-CN",
+        &mut state,
+    ) {
+        Ok(_) => panic!("不支持的 RegExp flag 不得静默丢弃"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code, "script.execute");
+    assert!(error.message.contains("InvalidPassageFlags"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn ecma_binding_exposes_author_events_as_owned_core_values() {
     let root = std::path::PathBuf::from(format!(
         "target/test-projects/narrava-loom-reaction-events-{}",
@@ -246,7 +276,7 @@ fn ecma_binding_exposes_author_events_as_owned_core_values() {
     )
     .unwrap();
 
-    let events = binding.take_author_events().unwrap();
+    let events = binding.drain_author_events().unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].name, "quest:completed");
     assert_eq!(
@@ -256,7 +286,7 @@ fn ecma_binding_exposes_author_events_as_owned_core_values() {
             (String::from("reward"), Value::Number(500.0)),
         ])
     );
-    assert!(binding.take_author_events().unwrap().is_empty());
+    assert!(binding.drain_author_events().unwrap().is_empty());
 }
 
 #[test]
@@ -274,7 +304,10 @@ fn ecma_binding_resolves_event_conditions_and_publishes_emitted_events() {
             id: "alice.quest.complete",
             event: "quest:completed",
             cond: ({ quest }) => quest === "old_mine" && V.reactions_enabled === true,
-            emit: { name: "alice:friendship", payload: { stage: "friend" } },
+            emit: {
+              name: "alice:friendship",
+              payload: ({ quest }) => ({ stage: "friend", quest, enabled: V.reactions_enabled }),
+            },
             limit: 1,
           });
           Reaction.add({
@@ -300,11 +333,13 @@ fn ecma_binding_resolves_event_conditions_and_publishes_emitted_events() {
     )
     .unwrap();
 
-    let resolved = binding.resolve_author_reactions(&mut state).unwrap();
+    let resolved = binding
+        .resolve_queued_event_reactions(None, &mut state)
+        .unwrap();
     assert_eq!(resolved.len(), 2);
     assert!(
         binding
-            .resolve_author_reactions(&mut state)
+            .resolve_queued_event_reactions(None, &mut state)
             .unwrap()
             .is_empty()
     );
@@ -327,6 +362,8 @@ fn ecma_binding_resolves_event_conditions_and_publishes_emitted_events() {
     assert_eq!(value["status"]["enabled"], false);
     assert_eq!(value["emitted"][0]["name"], "alice:friendship");
     assert_eq!(value["emitted"][0]["payload"]["stage"], "friend");
+    assert_eq!(value["emitted"][0]["payload"]["quest"], "old_mine");
+    assert_eq!(value["emitted"][0]["payload"]["enabled"], true);
 }
 
 #[test]
@@ -368,7 +405,7 @@ fn ecma_binding_resolves_committed_state_path_changes() {
     );
 
     let resolved = binding
-        .resolve_state_reactions(&before, &mut state)
+        .resolve_state_reactions(None, &before, &mut state)
         .unwrap();
     assert_eq!(resolved.len(), 1);
     assert_eq!(binding.reaction_state()[0].triggered, 1);
@@ -830,8 +867,8 @@ fn runtime_session_executes_lifecycle_event_state_and_reaction_goto_as_one_chain
         root.join("contents/scripts/main.js"),
         r#"
           Reaction.add({ id: "start.guard", lifecycle: true, passage: "Start", widget: "guard<br>", exit: true });
-          Reaction.add({ id: "boot.goto", event: "boot:ready", goto: "Target" });
-          Reaction.add({ id: "score.50", state: "$score", cond: ({ before, after }) => before < 50 && after >= 50, include: "StateNotice", replace: "state-notice", once: true });
+          Reaction.add({ id: "boot.goto", event: "boot:ready", passage: /^start$/i, goto: "Target" });
+          Reaction.add({ id: "score.50", state: "$score", passage: "Target", cond: ({ before, after }) => before < 50 && after >= 50, include: "StateNotice", once: true });
           Event.emit("boot:ready");
         "#,
     )
@@ -842,7 +879,7 @@ fn runtime_session_executes_lifecycle_event_state_and_reaction_goto_as_one_chain
 forbidden-start-body
 
 :: Target
-<<set $score to 50>>target-body<br><<slot "state-notice">><</slot>>
+<<set $score to 50>>target-body<br>
 
 :: StateNotice
 state-notice<br>"#,
@@ -872,6 +909,7 @@ state-notice<br>"#,
     assert_eq!(update.current, "Target");
     assert!(json.contains("target-body"));
     assert!(json.contains("state-notice"));
+    assert!(json.find("target-body").unwrap() < json.find("state-notice").unwrap());
     assert!(!json.contains("guard"));
     assert!(!json.contains("forbidden-start-body"));
     assert_eq!(binding.reaction_state().len(), 3);

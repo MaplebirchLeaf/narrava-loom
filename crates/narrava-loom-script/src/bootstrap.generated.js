@@ -63,64 +63,64 @@
   };
 
   // crates/narrava-loom-script/bootstrap/internal.ts
-  var globals = globalThis;
-  var functions = new Map;
-  var events = [];
-  var authorEvents = [];
-  var logs = [];
-  var macros = new Map;
-  var subscriptions = new Map;
+  var scriptGlobals = globalThis;
+  var scriptFunctions = new Map;
+  var eventRecords = [];
+  var authorEventQueue = [];
+  var logRecords = [];
+  var macroDefinitions = new Map;
+  var macroHooks = new Map;
   var saveHooks = new Map;
-  var hostOperations = new Map;
+  var hostOperationQueue = new Map;
   var eventSubscriptions = new Map;
-  var configuration = {
+  var runtimeConfiguration = {
     story: { passages: [], current: null, visits: {} },
     defaultLocale: "und",
     locale: "und",
     i18nExport: "{}"
   };
-  var nextFunction = 1;
-  var nextSubscription = 1;
-  var nextHostOperation = 1;
+  var nextFunctionId = 1;
+  var nextSubscriptionId = 1;
+  var nextHostOperationId = 1;
   var nextEventSequence = 1;
-  function allocateSubscription() {
-    return nextSubscription++;
+  function subscriptionId() {
+    return nextSubscriptionId++;
   }
-  function allocateHostOperation() {
-    return nextHostOperation++;
+  function hostOperationId() {
+    return nextHostOperationId++;
   }
-  function allocateEventSequence() {
+  function eventSequence() {
     return nextEventSequence++;
   }
-  function toHostValue(name, value) {
+  function encodeScriptValue(name, value) {
     if (typeof value !== "function")
       return value;
-    const id = nextFunction++;
-    functions.set(id, value);
+    const id = nextFunctionId++;
+    scriptFunctions.set(id, value);
     return { __narravaCallable: id, name };
   }
-  function fromHostValue(value) {
-    const marker = value;
-    return marker?.__narravaCallable === undefined ? value : functions.get(marker.__narravaCallable);
+  function decodeScriptValue(value) {
+    const reference = value;
+    return reference?.__narravaCallable === undefined ? value : scriptFunctions.get(reference.__narravaCallable);
   }
 
   // crates/narrava-loom-script/bootstrap/event.ts
   var builtinEvents = new Set;
-  function installEvent(names) {
+  function events(names) {
     builtinEvents = new Set(names);
-    globals.Event = Object.seal({
+    scriptGlobals.Event = Object.seal({
       emit: (name, payload = undefined) => {
         if (typeof name !== "string" || name.length === 0 || /\s/u.test(name)) {
           throw new TypeError("Event 名称不能为空或包含空白");
         }
         if (builtinEvents.has(name))
           throw new TypeError(`Event 内置名称只能由 Engine 发出：${name}`);
-        const sequence = emitEvent(name, payload);
-        authorEvents.push(events.at(-1));
+        const sequence = publishEvent(name, payload);
+        authorEventQueue.push(eventRecords.at(-1));
         return sequence;
       },
       subscribe: (filter = {}) => {
-        const id = allocateSubscription();
+        const id = subscriptionId();
         eventSubscriptions.set(id, { name: filter.name, pending: [] });
         return id;
       },
@@ -131,9 +131,9 @@
       unsubscribe: (id) => eventSubscriptions.delete(id)
     });
   }
-  function emitEvent(name, payload) {
-    const record = { sequence: allocateEventSequence(), name, payload };
-    events.push(record);
+  function publishEvent(name, payload) {
+    const record = { sequence: eventSequence(), name, payload };
+    eventRecords.push(record);
     for (const subscription of eventSubscriptions.values()) {
       if (subscription.name === undefined || subscription.name === name) {
         subscription.pending.push(record);
@@ -141,27 +141,27 @@
     }
     return record.sequence;
   }
-  function emitBuiltin(name, payload) {
+  function publishBuiltin(name, payload) {
     if (!builtinEvents.has(name))
       throw new TypeError(`未知 Event 内置名称：${name}`);
-    return emitEvent(name, payload);
+    return publishEvent(name, payload);
   }
-  function emitReaction(name, payload) {
-    return emitEvent(name, payload);
+  function publishReaction(name, payload) {
+    return publishEvent(name, payload);
   }
-  function takeAuthorEvents() {
-    return authorEvents.splice(0);
+  function drainAuthorEvents() {
+    return authorEventQueue.splice(0);
   }
 
   // crates/narrava-loom-script/bootstrap/host.ts
-  function installHost() {
-    globals.Host = Object.freeze({
+  function host() {
+    scriptGlobals.Host = Object.freeze({
       delay: (milliseconds) => {
         if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 86400000) {
           throw new RangeError("Host.delay 毫秒数必须在 0 到 86400000 之间");
         }
-        const id = allocateHostOperation();
-        return new Promise((resolve) => hostOperations.set(id, {
+        const id = hostOperationId();
+        return new Promise((resolve) => hostOperationQueue.set(id, {
           id,
           kind: "delay",
           milliseconds: Math.trunc(milliseconds),
@@ -170,26 +170,26 @@
         }));
       }
     });
-    globals.Engine = Object.seal({
+    scriptGlobals.Engine = Object.seal({
       started: false,
-      goto: (target) => setEngine({ kind: "goto", target }),
-      back: () => setEngine({ kind: "back" }),
-      forward: () => setEngine({ kind: "forward" }),
-      restart: () => setEngine({ kind: "restart" })
+      goto: (target) => requestEngineCommand({ kind: "goto", target }),
+      back: () => requestEngineCommand({ kind: "back" }),
+      forward: () => requestEngineCommand({ kind: "forward" }),
+      restart: () => requestEngineCommand({ kind: "restart" })
     });
-    globals.Story = Object.seal({
-      has: (name) => configuration.story.passages.some((passage) => passage.name === name),
-      current: () => configuration.story.current ?? undefined,
-      get: (name) => configuration.story.passages.find((passage) => passage.name === name),
-      visits: (name) => configuration.story.visits[name] ?? 0
+    scriptGlobals.Story = Object.seal({
+      has: (name) => runtimeConfiguration.story.passages.some((passage) => passage.name === name),
+      current: () => runtimeConfiguration.story.current ?? undefined,
+      get: (name) => runtimeConfiguration.story.passages.find((passage) => passage.name === name),
+      visits: (name) => runtimeConfiguration.story.visits[name] ?? 0
     });
   }
-  function setEngine(request) {
-    if (globals.__narrava !== undefined)
-      globals.__narrava.engine = request;
+  function requestEngineCommand(request) {
+    if (scriptGlobals.__narrava !== undefined)
+      scriptGlobals.__narrava.engine = request;
   }
-  function takeHostOperation() {
-    const pending = [...hostOperations.values()].filter((operation) => !operation.taken);
+  function claimHostOperation() {
+    const pending = [...hostOperationQueue.values()].filter((operation) => !operation.taken);
     if (pending.length !== 1) {
       return pending.length === 0 ? null : { kind: "invalid-count", count: pending.length };
     }
@@ -197,90 +197,100 @@
     const { id, kind, milliseconds } = pending[0];
     return { id, kind, milliseconds };
   }
-  function resolveHostOperation(id) {
-    const operation = hostOperations.get(id);
+  function completeHostOperation(id) {
+    const operation = hostOperationQueue.get(id);
     if (operation === undefined)
       throw new Error(`Host 异步操作不存在：${id}`);
-    hostOperations.delete(id);
+    hostOperationQueue.delete(id);
     operation.resolve();
   }
 
   // crates/narrava-loom-script/bootstrap/logger.ts
-  function installLogger() {
-    const logger = Object.fromEntries(["trace", "debug", "info", "warn", "error"].map((level) => [
+  function logger() {
+    const methods = Object.fromEntries(["trace", "debug", "info", "warn", "error"].map((level) => [
       level,
-      (target, message) => logs.push({ level, target, message })
+      (target, message) => logRecords.push({ level, target, message })
     ]));
-    Object.assign(logger, {
-      subscribe: () => allocateSubscription(),
+    Object.assign(methods, {
+      subscribe: () => subscriptionId(),
       take: () => [],
       unsubscribe: () => false
     });
-    globals.Logger = Object.seal(logger);
+    scriptGlobals.Logger = Object.seal(methods);
   }
 
   // crates/narrava-loom-script/bootstrap/macro.ts
-  function installMacro() {
-    globals.Macro = Object.seal({
+  function macro() {
+    scriptGlobals.Macro = Object.seal({
       add: (name, value) => {
-        const old = macros.get(name);
-        macros.set(name, value);
+        const old = macroDefinitions.get(name);
+        macroDefinitions.set(name, value);
         return old;
       },
       update: (name, value) => {
-        if (!macros.has(name))
+        if (!macroDefinitions.has(name))
           throw new Error(`Macro 不存在：${name}`);
-        const old = macros.get(name);
-        macros.set(name, value);
+        const old = macroDefinitions.get(name);
+        macroDefinitions.set(name, value);
         return old;
       },
       del: (name) => {
-        const old = macros.get(name);
-        macros.delete(name);
+        const old = macroDefinitions.get(name);
+        macroDefinitions.delete(name);
         return old;
       },
-      get: (name) => macros.get(name),
-      has: (name) => macros.has(name),
-      before: (name, hook) => subscribe("before", name, hook),
-      after: (name, hook) => subscribe("after", name, hook),
-      off: (id) => subscriptions.delete(id)
+      get: (name) => macroDefinitions.get(name),
+      has: (name) => macroDefinitions.has(name),
+      before: (name, hook) => registerHook("before", name, hook),
+      after: (name, hook) => registerHook("after", name, hook),
+      off: (id) => macroHooks.delete(id)
     });
   }
-  function subscribe(kind, name, hook) {
-    const id = allocateSubscription();
-    subscriptions.set(id, { kind, name, hook });
+  function registerHook(kind, name, hook) {
+    const id = subscriptionId();
+    macroHooks.set(id, { kind, name, hook });
     return id;
   }
 
   // crates/narrava-loom-script/bootstrap/reaction.ts
-  function normalizeMatcher(value) {
-    return value instanceof RegExp ? { regex: value.source } : { exact: String(value) };
+  function encodePassageMatcher(value) {
+    return value instanceof RegExp ? { regex: value.source, flags: value.flags } : { exact: String(value) };
   }
-  function normalizePassage(value) {
+  function encodePassageSelector(value) {
     if (value === undefined)
       return;
     if (typeof value === "string" || value instanceof RegExp) {
-      return { match: [normalizeMatcher(value)] };
+      return { match: [encodePassageMatcher(value)] };
     }
     if (Array.isArray(value))
-      return { match: value.map(normalizeMatcher) };
+      return { match: value.map(encodePassageMatcher) };
     const selector = value;
     return {
-      match: (selector.match ?? []).map(normalizeMatcher),
-      exclude: (selector.exclude ?? []).map(normalizeMatcher),
+      match: (selector.match ?? []).map(encodePassageMatcher),
+      exclude: (selector.exclude ?? []).map(encodePassageMatcher),
       tags: selector.tags
     };
   }
-  function installReaction() {
-    globals.Reaction = Object.freeze({
+  function encodeEmit(reactionId, value) {
+    if (value === undefined)
+      return;
+    const emit = value;
+    return {
+      name: emit.name,
+      payload: encodeScriptValue(`${String(reactionId ?? "<unknown>")}.emit.payload`, emit.payload)
+    };
+  }
+  function reaction() {
+    scriptGlobals.Reaction = Object.freeze({
       add: (definition) => {
         if (definition === null || typeof definition !== "object") {
           throw new TypeError("Reaction.add 需要配置对象");
         }
         return Object.freeze(JSON.parse(__narravaReactionAdd(JSON.stringify({
           ...definition,
-          passage: normalizePassage(definition.passage),
-          cond: definition.cond === undefined ? undefined : toHostValue(`${String(definition.id ?? "<unknown>")}.cond`, definition.cond)
+          passage: encodePassageSelector(definition.passage),
+          emit: encodeEmit(definition.id, definition.emit),
+          cond: definition.cond === undefined ? undefined : encodeScriptValue(`${String(definition.id ?? "<unknown>")}.cond`, definition.cond)
         }))));
       },
       get: (id) => {
@@ -294,8 +304,8 @@
   }
 
   // crates/narrava-loom-script/bootstrap/resource.ts
-  function installResource() {
-    globals.Resource = Object.seal({
+  function resources() {
+    scriptGlobals.Resource = Object.seal({
       paths: () => __narravaResourcePaths(),
       has: (path) => __narravaResourceHas(path),
       pick: (paths) => paths.find((path) => __narravaResourceHas(path)),
@@ -306,56 +316,56 @@
       },
       text: (path) => __narravaResourceText(path)
     });
-    globals.I18n = Object.freeze({
+    scriptGlobals.I18n = Object.freeze({
       get defaultLocale() {
-        return configuration.defaultLocale;
+        return runtimeConfiguration.defaultLocale;
       },
       get locale() {
-        return configuration.locale;
+        return runtimeConfiguration.locale;
       },
-      export: () => configuration.i18nExport
+      export: () => runtimeConfiguration.i18nExport
     });
   }
 
   // crates/narrava-loom-script/bootstrap/save.ts
-  function installSave() {
-    globals.Save = Object.seal({
+  function save() {
+    scriptGlobals.Save = Object.seal({
       capture: () => {
-        saveBefore("capture", undefined);
+        applyBeforeHooks("capture", undefined);
         try {
           const json = JSON.stringify({ variables: __narravaStateSnapshot("variables") });
-          saveAfter({ operation: "capture", succeeded: true });
+          finishSave({ operation: "capture", succeeded: true });
           return json;
         } catch (error) {
-          saveAfter({ operation: "capture", succeeded: false, error: String(error) });
+          finishSave({ operation: "capture", succeeded: false, error: String(error) });
           throw error;
         }
       },
       restore: (json) => {
-        saveBefore("restore", undefined);
+        applyBeforeHooks("restore", undefined);
         try {
           __narravaStateReplace("variables", JSON.parse(json).variables ?? {});
-          saveAfter({ operation: "restore", succeeded: true });
+          finishSave({ operation: "restore", succeeded: true });
         } catch (error) {
-          saveAfter({ operation: "restore", succeeded: false, error: String(error) });
+          finishSave({ operation: "restore", succeeded: false, error: String(error) });
           throw error;
         }
       },
       export: (target = "manual") => requestSave("export", target),
       import: (target = "manual") => requestSave("import", target),
-      before: (operation, hook) => subscribe2("before", operation, hook),
-      after: (operation, hook) => subscribe2("after", operation, hook),
+      before: (operation, hook) => registerHook2("before", operation, hook),
+      after: (operation, hook) => registerHook2("after", operation, hook),
       off: (id) => saveHooks.delete(id)
     });
   }
-  function saveAfter(completion) {
+  function finishSave(completion) {
     const frozen = Object.freeze({ ...completion });
     for (const hook of saveHooks.values()) {
       if (hook.stage === "after" && hook.operation === completion.operation)
         hook.callback(frozen);
     }
   }
-  function saveBefore(operation, target) {
+  function applyBeforeHooks(operation, target) {
     let nextTarget = target;
     for (const hook of saveHooks.values()) {
       if (hook.stage !== "before" || hook.operation !== operation)
@@ -366,69 +376,69 @@
     }
     return nextTarget;
   }
-  function subscribe2(stage, operation, callback) {
+  function registerHook2(stage, operation, callback) {
     if (!["capture", "restore", "export", "import"].includes(operation)) {
       throw new TypeError(`未知 Save 操作：${operation}`);
     }
     if (typeof callback !== "function")
       throw new TypeError("Save Hook 必须是函数");
-    const id = allocateSubscription();
+    const id = subscriptionId();
     saveHooks.set(id, { stage, operation, callback });
     return id;
   }
   function requestSave(operation, target) {
-    const rewritten = saveBefore(operation, target);
-    if (globals.__narrava !== undefined) {
-      globals.__narrava.save = { operation, target: rewritten };
+    const rewritten = applyBeforeHooks(operation, target);
+    if (scriptGlobals.__narrava !== undefined) {
+      scriptGlobals.__narrava.save = { operation, target: rewritten };
     }
   }
 
   // crates/narrava-loom-script/bootstrap/runtime.ts
-  function installRuntime(contract) {
-    const runtime = {
+  function runtime(contract) {
+    const bridge = {
       engine: null,
       save: null,
-      events,
-      logs,
-      macros,
+      events: eventRecords,
+      logs: logRecords,
+      macros: macroDefinitions,
       configure(value) {
-        Object.assign(configuration, value);
+        Object.assign(runtimeConfiguration, value);
       },
-      emitBuiltin,
-      emitReaction,
-      takeAuthorEvents,
-      completeSave: saveAfter,
+      emitBuiltin: publishBuiltin,
+      emitReaction: publishReaction,
+      takeAuthorEvents: drainAuthorEvents,
+      completeSave: finishSave,
       takeSave() {
         const request = this.save;
         this.save = null;
         return request;
       },
-      hasMacro: (name) => macros.has(name),
-      invokeMacro: (name, call) => macros.get(name).handler(call),
-      takeHostOperation,
-      resolveHostOperation,
-      call: (id, arguments_) => functions.get(id)(...arguments_)
+      hasMacro: (name) => macroDefinitions.has(name),
+      invokeMacro: (name, call) => macroDefinitions.get(name).handler(call),
+      takeHostOperation: claimHostOperation,
+      resolveHostOperation: completeHostOperation,
+      call: (id, arguments_) => scriptFunctions.get(id)(...arguments_)
     };
-    globals.__narrava = runtime;
+    scriptGlobals.__narrava = bridge;
     for (const name of contract.globals) {
-      if (globals[name] === undefined) {
+      if (scriptGlobals[name] === undefined) {
         throw new Error(`Script Contract 缺少全局：${name}`);
       }
     }
     for (const name of contract.surfaceBuilders) {
-      if (typeof globals.Surface?.[name] !== "function") {
+      if (typeof scriptGlobals.Surface?.[name] !== "function") {
         throw new Error(`Script Contract 缺少 Surface builder：${name}`);
       }
     }
   }
 
   // crates/narrava-loom-script/bootstrap/state.ts
-  function namespaceApi(namespace) {
+  function namespaceAccess(namespace) {
     return {
-      get: (key) => fromHostValue(__narravaStateGet(namespace, key)),
+      get: (key) => decodeScriptValue(__narravaStateGet(namespace, key)),
       has: (key) => __narravaStateHas(namespace, key),
-      set: (key, value) => fromHostValue(__narravaStateSet(namespace, key, toHostValue(key, value))),
-      del: (key) => fromHostValue(__narravaStateDel(namespace, key)),
+      set: (key, value) => decodeScriptValue(__narravaStateSet(namespace, key, encodeScriptValue(key, value))),
+      del: (key) => decodeScriptValue(__narravaStateDel(namespace, key)),
       extend: (values) => {
         let inserted = 0;
         let replaced = 0;
@@ -437,19 +447,19 @@
             replaced++;
           else
             inserted++;
-          __narravaStateSet(namespace, key, toHostValue(key, value));
+          __narravaStateSet(namespace, key, encodeScriptValue(key, value));
         }
         return { inserted, replaced };
       }
     };
   }
-  function propertyApi(namespace) {
+  function stateProxy(namespace) {
     return new Proxy(Object.create(null), {
-      get: (_target, key) => typeof key === "string" ? fromHostValue(__narravaStateGet(namespace, key)) : undefined,
+      get: (_target, key) => typeof key === "string" ? decodeScriptValue(__narravaStateGet(namespace, key)) : undefined,
       set: (_target, key, value) => {
         if (typeof key !== "string")
           return false;
-        __narravaStateSet(namespace, key, toHostValue(key, value));
+        __narravaStateSet(namespace, key, encodeScriptValue(key, value));
         return true;
       },
       deleteProperty: (_target, key) => {
@@ -467,32 +477,32 @@
           configurable: true,
           enumerable: true,
           writable: true,
-          value: fromHostValue(__narravaStateGet(namespace, key))
+          value: decodeScriptValue(__narravaStateGet(namespace, key))
         };
       }
     });
   }
-  function installState() {
-    globals.State = Object.seal({
-      global: namespaceApi("global"),
-      variables: namespaceApi("variables"),
-      temporary: namespaceApi("temporary"),
+  function state() {
+    scriptGlobals.State = Object.seal({
+      global: namespaceAccess("global"),
+      variables: namespaceAccess("variables"),
+      temporary: namespaceAccess("temporary"),
       setup: {
-        get: () => fromHostValue(__narravaStateGet("setup", "")),
-        set: (value) => fromHostValue(__narravaStateSet("setup", "", toHostValue("setup", value)))
+        get: () => decodeScriptValue(__narravaStateGet("setup", "")),
+        set: (value) => decodeScriptValue(__narravaStateSet("setup", "", encodeScriptValue("setup", value)))
       }
     });
-    globals.V = propertyApi("variables");
-    globals.T = propertyApi("temporary");
-    globals.setup = propertyApi("setup-properties");
+    scriptGlobals.V = stateProxy("variables");
+    scriptGlobals.T = stateProxy("temporary");
+    scriptGlobals.setup = stateProxy("setup-properties");
   }
 
   // crates/narrava-loom-script/bootstrap/surface.ts
   function surfaceNode(kind, value) {
     return Object.freeze({ __narravaSurface: kind, ...value });
   }
-  function installSurface() {
-    globals.Surface = Object.freeze({
+  function surface() {
+    scriptGlobals.Surface = Object.freeze({
       text: (text, options = {}) => surfaceNode("text", {
         text: String(text),
         key: options.key,
@@ -531,14 +541,14 @@
   }
 
   // crates/narrava-loom-script/bootstrap/index.ts
-  installState();
-  installReaction();
-  installMacro();
-  installLogger();
-  installEvent(script_contract_default.builtinEvents);
-  installHost();
-  installSave();
-  installResource();
-  installSurface();
-  installRuntime(script_contract_default);
+  state();
+  reaction();
+  macro();
+  logger();
+  events(script_contract_default.builtinEvents);
+  host();
+  save();
+  resources();
+  surface();
+  runtime(script_contract_default);
 })();

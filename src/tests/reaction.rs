@@ -1,6 +1,6 @@
 use crate::expression::value::Value;
 use crate::reaction::{
-    PassageMatcher, PassageSelector, ReactionDefinition, ReactionEffect, ReactionId,
+    PassageMatcher, PassageSelector, ReactionDefinition, ReactionEffect, ReactionEvent, ReactionId,
     ReactionRegistry, ReactionResolveError, ReactionSuccess, ReactionTrigger, StatePath,
     resolve_event_queue, resolve_lifecycle_reactions, resolve_state_changes,
 };
@@ -13,10 +13,10 @@ fn event_definition(id: &str, event: &str) -> ReactionDefinition {
         trigger: ReactionTrigger::Event(event.to_owned()),
         passage: None,
         effect: ReactionEffect {
-            emit: Some((
-                String::from("reaction:fired"),
-                crate::expression::value::Value::Null,
-            )),
+            emit: Some(ReactionEvent {
+                name: String::from("reaction:fired"),
+                payload: crate::expression::value::Value::Null,
+            }),
             ..ReactionEffect::default()
         },
         enabled: true,
@@ -38,10 +38,14 @@ fn event_resolver_preserves_order_payload_conditions_and_success_counts() {
 
     let result = resolve_event_queue(
         &mut registry,
+        None,
         [(String::from("quest:completed"), Value::Number(7.0))],
         8,
-        |condition, payload| {
-            Ok::<bool, ()>(condition == Some(&"accept") && payload == &Value::Number(7.0))
+        |condition, _emit_payload, payload, effect| {
+            Ok::<Option<ReactionEffect>, ()>(
+                (condition == Some(&"accept") && payload == &Value::Number(7.0))
+                    .then(|| effect.clone()),
+            )
         },
         |id, _effect| {
             effects.push(id.as_str().to_owned());
@@ -60,17 +64,26 @@ fn event_resolver_preserves_order_payload_conditions_and_success_counts() {
 fn event_resolver_queues_emitted_events_and_rejects_a_descendant_cycle() {
     let mut registry: ReactionRegistry<()> = ReactionRegistry::new();
     let mut first: ReactionDefinition = event_definition("first", "event:a");
-    first.effect.emit = Some((String::from("event:b"), Value::Null));
+    first.effect.emit = Some(ReactionEvent {
+        name: String::from("event:b"),
+        payload: Value::Null,
+    });
     let mut second: ReactionDefinition = event_definition("second", "event:b");
-    second.effect.emit = Some((String::from("event:a"), Value::Null));
+    second.effect.emit = Some(ReactionEvent {
+        name: String::from("event:a"),
+        payload: Value::Null,
+    });
     registry.add(first, None).unwrap();
     registry.add(second, None).unwrap();
 
     let error = resolve_event_queue(
         &mut registry,
+        None,
         [(String::from("event:a"), Value::Null)],
         8,
-        |_condition, _payload| Ok::<bool, ()>(true),
+        |_condition, _emit_payload, _payload, effect| {
+            Ok::<Option<ReactionEffect>, ()>(Some(effect.clone()))
+        },
         |_id, _effect| Ok::<(), ()>(()),
     )
     .unwrap_err();
@@ -93,9 +106,12 @@ fn event_resolver_does_not_count_a_failed_effect() {
 
     let error = resolve_event_queue(
         &mut registry,
+        None,
         [(String::from("event:a"), Value::Null)],
         8,
-        |_condition, _payload| Ok::<bool, &str>(true),
+        |_condition, _emit_payload, _payload, effect| {
+            Ok::<Option<ReactionEffect>, &str>(Some(effect.clone()))
+        },
         |_id, _effect| Err::<(), &str>("effect failed"),
     )
     .unwrap_err();
@@ -132,7 +148,10 @@ fn state_resolver_passes_before_after_and_continues_emitted_event_chain() {
     let mut registry: ReactionRegistry<&'static str> = ReactionRegistry::new();
     let mut state_rule = event_definition("friendship", "unused");
     state_rule.trigger = ReactionTrigger::State(StatePath::parse("$alice.affection").unwrap());
-    state_rule.effect.emit = Some((String::from("alice:friendship"), Value::Null));
+    state_rule.effect.emit = Some(ReactionEvent {
+        name: String::from("alice:friendship"),
+        payload: Value::Null,
+    });
     registry.add(state_rule, Some("crossed")).unwrap();
     registry
         .add(event_definition("notice", "alice:friendship"), None)
@@ -152,14 +171,15 @@ fn state_resolver_passes_before_after_and_continues_emitted_event_chain() {
 
     let resolution = resolve_state_changes(
         &mut registry,
+        None,
         &before,
         &after,
         8,
-        |condition, argument| {
+        |condition, _emit_payload, argument, effect| {
             if condition.is_some() {
                 arguments.push(argument.clone());
             }
-            Ok::<bool, ()>(true)
+            Ok::<Option<ReactionEffect>, ()>(Some(effect.clone()))
         },
         |_id, _effect| Ok::<(), ()>(()),
     )
@@ -202,12 +222,47 @@ fn lifecycle_resolver_applies_passage_selector_before_dynamic_condition() {
         &mut registry,
         &passage,
         8,
-        |_condition, _argument| Ok::<bool, ()>(true),
+        |_condition, _emit_payload, _argument, effect| {
+            Ok::<Option<ReactionEffect>, ()>(Some(effect.clone()))
+        },
         |_id, _effect| Ok::<(), ()>(()),
     )
     .unwrap();
 
     assert_eq!(resolution.triggered, [ReactionId::parse("tavern").unwrap()]);
+}
+
+#[test]
+fn passage_filter_applies_to_event_candidates_and_preserves_regex_flags() {
+    let source = SourcePath::fragment();
+    let tavern = HirPassage {
+        source: &source,
+        name: "TAVERN",
+        tags: vec!["indoor"],
+        body: Vec::new(),
+    };
+    let street = HirPassage {
+        source: &source,
+        name: "Street",
+        tags: Vec::new(),
+        body: Vec::new(),
+    };
+    let mut registry: ReactionRegistry<()> = ReactionRegistry::new();
+    let mut definition = event_definition("tavern-event", "talk");
+    definition.passage = Some(PassageSelector {
+        matches: vec![PassageMatcher::regex("^tavern$", "i").unwrap()],
+        ..PassageSelector::default()
+    });
+    registry.add(definition, None).unwrap();
+
+    assert_eq!(
+        registry.event_candidates("talk", Some(&tavern)),
+        [ReactionId::parse("tavern-event").unwrap()]
+    );
+    assert!(registry.event_candidates("talk", Some(&street)).is_empty());
+    assert!(registry.event_candidates("talk", None).is_empty());
+    assert!(PassageMatcher::regex("tavern", "g").is_err());
+    assert!(PassageMatcher::regex("tavern", "ii").is_err());
 }
 
 #[test]
@@ -221,7 +276,7 @@ fn registry_indexes_candidates_in_registration_order_and_honors_enabled_state() 
         .unwrap();
 
     assert_eq!(
-        registry.event_candidates("quest:completed"),
+        registry.event_candidates("quest:completed", None),
         vec![
             ReactionId::parse("first").unwrap(),
             ReactionId::parse("second").unwrap()
@@ -229,7 +284,7 @@ fn registry_indexes_candidates_in_registration_order_and_honors_enabled_state() 
     );
     assert!(registry.disable("first").unwrap());
     assert_eq!(
-        registry.event_candidates("quest:completed"),
+        registry.event_candidates("quest:completed", None),
         vec![ReactionId::parse("second").unwrap()]
     );
     assert!(!registry.disable("first").unwrap());
@@ -259,6 +314,8 @@ fn once_destroys_definition_while_limit_disables_and_reset_reactivates_it() {
         registry.record_success("limited").unwrap(),
         ReactionSuccess::Disabled
     );
+    assert!(!registry.get("limited").unwrap().enabled());
+    assert!(!registry.enable("limited").unwrap());
     assert!(!registry.get("limited").unwrap().enabled());
     assert!(registry.reset("limited").unwrap());
     assert!(registry.get("limited").unwrap().enabled());
@@ -299,6 +356,14 @@ fn runtime_state_restores_once_tombstones_and_limit_counters() {
     assert!(restored.get("once").is_none());
     assert_eq!(restored.get("limited").unwrap().triggered(), 1);
     assert!(restored.get("limited").unwrap().enabled());
+
+    let invalid = [crate::reaction::ReactionRuntimeState {
+        id: String::from("limited"),
+        enabled: true,
+        triggered: 2,
+        destroyed: false,
+    }];
+    assert!(restored.restore_runtime_state(&invalid).is_err());
 }
 
 #[test]
@@ -312,13 +377,10 @@ fn registration_rejects_ambiguous_or_context_invalid_contracts() {
     replace.effect.replace = Some(String::from("panel"));
     assert!(registry.add(replace, None).is_err());
 
-    let mut include: ReactionDefinition = event_definition("bad.include", "talk");
+    let mut include: ReactionDefinition = event_definition("append.include", "talk");
     include.effect.emit = None;
     include.effect.include = Some(String::from("Notice"));
-    assert_eq!(
-        registry.add(include, None),
-        Err(crate::reaction::ReactionError::IncludeWithoutReplace)
-    );
+    registry.add(include, None).unwrap();
 
     let mut limit: ReactionDefinition = event_definition("bad.limit", "talk");
     limit.limit = Some(0);

@@ -1,16 +1,16 @@
-import { allocateSubscription, globals, logs } from "./internal"
+import { logRecords, scriptGlobals, subscriptionId } from "./internal"
 
-export function installLogger(): void {
-  const logger = Object.fromEntries(
+export default function logger(): void {
+  const methods = Object.fromEntries(
     ["trace", "debug", "info", "warn", "error"].map((level) => [
       level,
-      (target: unknown, message: unknown) => logs.push({ level, target, message }),
+      (target: unknown, message: unknown) => logRecords.push({ level, target, message }),
     ]),
   )
-  Object.assign(logger, {
-    subscribe: () => allocateSubscription(),
+  Object.assign(methods, {
+    subscribe: () => subscriptionId(),
     take: () => [],
     unsubscribe: () => false,
   })
-  globals.Logger = Object.seal(logger)
+  scriptGlobals.Logger = Object.seal(methods)
 }

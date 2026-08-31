@@ -1,4 +1,4 @@
-import { globals } from "./internal"
+import { scriptGlobals } from "./internal"
 
 interface SurfaceOptions {
   key?: string
@@ -18,8 +18,8 @@ function surfaceNode(
   return Object.freeze({ __narravaSurface: kind, ...value })
 }
 
-export function installSurface(): void {
-  globals.Surface = Object.freeze({
+export default function surface(): void {
+  scriptGlobals.Surface = Object.freeze({
     text: (text: unknown, options: SurfaceOptions = {}) =>
       surfaceNode("text", {
         text: String(text),

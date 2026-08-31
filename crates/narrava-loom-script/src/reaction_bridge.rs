@@ -12,8 +12,8 @@ use boa_engine::{
 use narrava_loom_core::{
     expression::value::{ScriptCallable, Value},
     reaction::{
-        PassageMatcher, PassageSelector, PassageTagSelector, ReactionDefinition, ReactionEffect,
-        ReactionId, ReactionRegistry, ReactionTrigger, StatePath,
+        PassageMatcher, PassageSelector, PassageTagSelector, ReactionCallbacks, ReactionDefinition,
+        ReactionEffect, ReactionEvent, ReactionId, ReactionRegistry, ReactionTrigger, StatePath,
     },
 };
 use serde::Deserialize;
@@ -28,19 +28,19 @@ pub(super) struct ActiveReactions {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct DefinitionDto {
+struct ReactionDefinitionDto {
     id: String,
     event: Option<String>,
     state: Option<String>,
     #[serde(default)]
     lifecycle: bool,
     passage: Option<PassageDto>,
-    cond: Option<CallableDto>,
+    cond: Option<ScriptCallableDto>,
     widget: Option<String>,
     include: Option<String>,
     replace: Option<String>,
     goto: Option<String>,
-    emit: Option<EmitDto>,
+    emit: Option<ReactionEmitDto>,
     #[serde(default)]
     exit: bool,
     #[serde(default = "default_true")]
@@ -53,17 +53,30 @@ struct DefinitionDto {
 }
 
 #[derive(Deserialize)]
-struct CallableDto {
+struct ScriptCallableDto {
     #[serde(rename = "__narravaCallable")]
     id: u64,
     name: String,
 }
 
 #[derive(Deserialize)]
-struct EmitDto {
+struct ReactionEmitDto {
     name: String,
     #[serde(default)]
-    payload: serde_json::Value,
+    payload: EmitPayloadDto,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum EmitPayloadDto {
+    Callable(ScriptCallableDto),
+    Static(serde_json::Value),
+}
+
+impl Default for EmitPayloadDto {
+    fn default() -> Self {
+        Self::Static(serde_json::Value::Null)
+    }
 }
 
 #[derive(Deserialize)]
@@ -90,7 +103,7 @@ struct PassageTagsDto {
 #[serde(untagged)]
 enum MatcherDto {
     Exact { exact: String },
-    Regex { regex: String },
+    Regex { regex: String, flags: String },
 }
 
 pub(super) fn install(
@@ -101,19 +114,15 @@ pub(super) fn install(
     context.insert_data(ActiveReactions {
         registry: registry.clone(),
     });
-    register(context, "__narravaReactionAdd", reaction_add)?;
-    register(context, "__narravaReactionGet", reaction_get)?;
-    register(context, "__narravaReactionEnable", reaction_enable)?;
-    register(context, "__narravaReactionDisable", reaction_disable)?;
-    register(context, "__narravaReactionReset", reaction_reset)?;
+    register_bridge_function(context, "__narravaReactionAdd", reaction_add)?;
+    register_bridge_function(context, "__narravaReactionGet", reaction_get)?;
+    register_bridge_function(context, "__narravaReactionEnable", reaction_enable)?;
+    register_bridge_function(context, "__narravaReactionDisable", reaction_disable)?;
+    register_bridge_function(context, "__narravaReactionReset", reaction_reset)?;
     Ok(registry)
 }
 
-pub(super) fn get(context: &Context) -> JsResult<Ref<'_, ReactionRegistry<ScriptCallable>>> {
-    Ok(slot(context)?.borrow())
-}
-
-fn register(
+fn register_bridge_function(
     context: &mut Context,
     name: &'static str,
     function: fn(&JsValue, &[JsValue], &mut Context) -> JsResult<JsValue>,
@@ -126,25 +135,29 @@ fn register(
 }
 
 fn reaction_add(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let dto: DefinitionDto = serde_json::from_str(&argument(arguments, context)?).map_err(fail)?;
-    let (definition, condition): (ReactionDefinition, Option<ScriptCallable>) = convert(dto)?;
+    let dto: ReactionDefinitionDto =
+        serde_json::from_str(&string_argument(arguments, context)?).map_err(bridge_error)?;
+    let (definition, callbacks): (ReactionDefinition, ReactionCallbacks<ScriptCallable>) =
+        decode_definition(dto)?;
     let id: String = definition.id.as_str().to_owned();
-    slot(context)?
+    active_registry(context)?
         .borrow_mut()
-        .add(definition, condition)
-        .map_err(fail)?;
-    Ok(JsValue::new(JsString::from(status(context, &id)?.unwrap())))
+        .add(definition, callbacks)
+        .map_err(bridge_error)?;
+    Ok(JsValue::new(JsString::from(
+        serialize_status(context, &id)?.unwrap(),
+    )))
 }
 
 fn reaction_get(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let id: String = argument(arguments, context)?;
-    Ok(status(context, &id)?
+    let id: String = string_argument(arguments, context)?;
+    Ok(serialize_status(context, &id)?
         .map(|value: String| JsValue::new(JsString::from(value)))
         .unwrap_or_else(JsValue::undefined))
 }
 
 fn reaction_enable(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    mutate(arguments, context, ReactionRegistry::enable)
+    mutate_reaction(arguments, context, ReactionRegistry::enable)
 }
 
 fn reaction_disable(
@@ -152,14 +165,14 @@ fn reaction_disable(
     arguments: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    mutate(arguments, context, ReactionRegistry::disable)
+    mutate_reaction(arguments, context, ReactionRegistry::disable)
 }
 
 fn reaction_reset(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    mutate(arguments, context, ReactionRegistry::reset)
+    mutate_reaction(arguments, context, ReactionRegistry::reset)
 }
 
-fn mutate(
+fn mutate_reaction(
     arguments: &[JsValue],
     context: &mut Context,
     operation: fn(
@@ -167,44 +180,63 @@ fn mutate(
         &str,
     ) -> Result<bool, narrava_loom_core::reaction::ReactionError>,
 ) -> JsResult<JsValue> {
-    let id: String = argument(arguments, context)?;
-    operation(&mut slot(context)?.borrow_mut(), &id)
+    let id: String = string_argument(arguments, context)?;
+    operation(&mut active_registry(context)?.borrow_mut(), &id)
         .map(JsValue::new)
-        .map_err(fail)
+        .map_err(bridge_error)
 }
 
-fn convert(dto: DefinitionDto) -> JsResult<(ReactionDefinition, Option<ScriptCallable>)> {
+fn decode_definition(
+    dto: ReactionDefinitionDto,
+) -> JsResult<(ReactionDefinition, ReactionCallbacks<ScriptCallable>)> {
     let mut triggers: Vec<ReactionTrigger> = Vec::new();
     if let Some(event) = dto.event {
         triggers.push(ReactionTrigger::Event(event));
     }
     if let Some(state) = dto.state {
         triggers.push(ReactionTrigger::State(
-            StatePath::parse(state).map_err(fail)?,
+            StatePath::parse(state).map_err(bridge_error)?,
         ));
     }
     if dto.lifecycle {
         triggers.push(ReactionTrigger::Lifecycle);
     }
     if triggers.len() != 1 {
-        return Err(fail("Reaction 必须且只能声明 event、state、lifecycle 之一"));
+        return Err(bridge_error(
+            "Reaction 必须且只能声明 event、state、lifecycle 之一",
+        ));
     }
     let condition: Option<ScriptCallable> = dto
         .cond
-        .map(|callable: CallableDto| ScriptCallable::new(callable.id, callable.name));
-    let emit: Option<(String, Value)> = dto
-        .emit
-        .map(|emit: EmitDto| {
-            json_to_value(&emit.payload)
-                .map(|payload: Value| (emit.name, payload))
-                .map_err(|error| fail(error.message))
-        })
-        .transpose()?;
+        .map(|callable: ScriptCallableDto| ScriptCallable::new(callable.id, callable.name));
+    let (emit, emit_payload): (Option<ReactionEvent>, Option<ScriptCallable>) = match dto.emit {
+        None => (None, None),
+        Some(ReactionEmitDto {
+            name,
+            payload: EmitPayloadDto::Static(payload),
+        }) => (
+            Some(ReactionEvent {
+                name,
+                payload: json_to_value(&payload).map_err(|error| bridge_error(error.message))?,
+            }),
+            None,
+        ),
+        Some(ReactionEmitDto {
+            name,
+            payload: EmitPayloadDto::Callable(callable),
+        }) => (
+            Some(ReactionEvent {
+                name,
+                payload: Value::Null,
+            }),
+            Some(ScriptCallable::new(callable.id, callable.name)),
+        ),
+    };
     Ok((
         ReactionDefinition {
-            id: ReactionId::parse(dto.id).map_err(fail)?,
+            id: ReactionId::parse(dto.id).map_err(bridge_error)?,
             trigger: triggers.pop().unwrap(),
-            passage: dto.passage.map(convert_passage).transpose()?,
+            passage: dto.passage.map(decode_passage_selector).transpose()?,
             effect: ReactionEffect {
                 widget: dto.widget,
                 include: dto.include,
@@ -218,21 +250,24 @@ fn convert(dto: DefinitionDto) -> JsResult<(ReactionDefinition, Option<ScriptCal
             limit: dto.limit,
             tags: dto.tags,
         },
-        condition,
+        ReactionCallbacks {
+            condition,
+            emit_payload,
+        },
     ))
 }
 
-fn convert_passage(dto: PassageDto) -> JsResult<PassageSelector> {
+fn decode_passage_selector(dto: PassageDto) -> JsResult<PassageSelector> {
     Ok(PassageSelector {
         matches: dto
             .matches
             .into_iter()
-            .map(convert_matcher)
+            .map(decode_passage_matcher)
             .collect::<JsResult<Vec<PassageMatcher>>>()?,
         excludes: dto
             .excludes
             .into_iter()
-            .map(convert_matcher)
+            .map(decode_passage_matcher)
             .collect::<JsResult<Vec<PassageMatcher>>>()?,
         tags: PassageTagSelector {
             any: dto.tags.any,
@@ -242,15 +277,17 @@ fn convert_passage(dto: PassageDto) -> JsResult<PassageSelector> {
     })
 }
 
-fn convert_matcher(dto: MatcherDto) -> JsResult<PassageMatcher> {
+fn decode_passage_matcher(dto: MatcherDto) -> JsResult<PassageMatcher> {
     match dto {
-        MatcherDto::Exact { exact } => PassageMatcher::exact(exact).map_err(fail),
-        MatcherDto::Regex { regex } => PassageMatcher::regex(regex).map_err(fail),
+        MatcherDto::Exact { exact } => PassageMatcher::exact(exact).map_err(bridge_error),
+        MatcherDto::Regex { regex, flags } => {
+            PassageMatcher::regex(regex, flags).map_err(bridge_error)
+        }
     }
 }
 
-fn status(context: &Context, id: &str) -> JsResult<Option<String>> {
-    let reactions: Ref<'_, ReactionRegistry<ScriptCallable>> = get(context)?;
+fn serialize_status(context: &Context, id: &str) -> JsResult<Option<String>> {
+    let reactions: Ref<'_, ReactionRegistry<ScriptCallable>> = active_registry(context)?.borrow();
     let Some(entry) = reactions.get(id) else {
         return Ok(None);
     };
@@ -261,17 +298,17 @@ fn status(context: &Context, id: &str) -> JsResult<Option<String>> {
         "tags": entry.definition().tags,
     }))
     .map(Some)
-    .map_err(fail)
+    .map_err(bridge_error)
 }
 
-fn slot(context: &Context) -> JsResult<&Rc<RefCell<ReactionRegistry<ScriptCallable>>>> {
+fn active_registry(context: &Context) -> JsResult<&Rc<RefCell<ReactionRegistry<ScriptCallable>>>> {
     context
         .get_data::<ActiveReactions>()
         .map(|active: &ActiveReactions| &active.registry)
-        .ok_or_else(|| fail("Reaction bridge 未安装"))
+        .ok_or_else(|| bridge_error("Reaction bridge 未安装"))
 }
 
-fn argument(arguments: &[JsValue], context: &mut Context) -> JsResult<String> {
+fn string_argument(arguments: &[JsValue], context: &mut Context) -> JsResult<String> {
     arguments
         .get_or_undefined(0)
         .to_string(context)
@@ -282,6 +319,6 @@ fn default_true() -> bool {
     true
 }
 
-fn fail(error: impl std::fmt::Display) -> boa_engine::JsError {
+fn bridge_error(error: impl std::fmt::Display) -> boa_engine::JsError {
     JsNativeError::typ().with_message(error.to_string()).into()
 }

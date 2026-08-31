@@ -1,32 +1,32 @@
-import { fromHostValue, globals, toHostValue } from "./internal"
+import { decodeScriptValue, encodeScriptValue, scriptGlobals } from "./internal"
 
-function namespaceApi(namespace: string) {
+function namespaceAccess(namespace: string) {
   return {
-    get: (key: string) => fromHostValue(__narravaStateGet(namespace, key)),
+    get: (key: string) => decodeScriptValue(__narravaStateGet(namespace, key)),
     has: (key: string) => __narravaStateHas(namespace, key),
     set: (key: string, value: unknown) =>
-      fromHostValue(__narravaStateSet(namespace, key, toHostValue(key, value))),
-    del: (key: string) => fromHostValue(__narravaStateDel(namespace, key)),
+      decodeScriptValue(__narravaStateSet(namespace, key, encodeScriptValue(key, value))),
+    del: (key: string) => decodeScriptValue(__narravaStateDel(namespace, key)),
     extend: (values: Record<string, unknown>) => {
       let inserted = 0
       let replaced = 0
       for (const [key, value] of Object.entries(values)) {
         if (__narravaStateHas(namespace, key)) replaced++
         else inserted++
-        __narravaStateSet(namespace, key, toHostValue(key, value))
+        __narravaStateSet(namespace, key, encodeScriptValue(key, value))
       }
       return { inserted, replaced }
     },
   }
 }
 
-function propertyApi(namespace: string): Record<string, unknown> {
+function stateProxy(namespace: string): Record<string, unknown> {
   return new Proxy(Object.create(null) as Record<string, unknown>, {
     get: (_target, key) =>
-      typeof key === "string" ? fromHostValue(__narravaStateGet(namespace, key)) : undefined,
+      typeof key === "string" ? decodeScriptValue(__narravaStateGet(namespace, key)) : undefined,
     set: (_target, key, value) => {
       if (typeof key !== "string") return false
-      __narravaStateSet(namespace, key, toHostValue(key, value))
+      __narravaStateSet(namespace, key, encodeScriptValue(key, value))
       return true
     },
     deleteProperty: (_target, key) => {
@@ -42,24 +42,24 @@ function propertyApi(namespace: string): Record<string, unknown> {
         configurable: true,
         enumerable: true,
         writable: true,
-        value: fromHostValue(__narravaStateGet(namespace, key)),
+        value: decodeScriptValue(__narravaStateGet(namespace, key)),
       }
     },
   })
 }
 
-export function installState(): void {
-  globals.State = Object.seal({
-    global: namespaceApi("global"),
-    variables: namespaceApi("variables"),
-    temporary: namespaceApi("temporary"),
+export default function state(): void {
+  scriptGlobals.State = Object.seal({
+    global: namespaceAccess("global"),
+    variables: namespaceAccess("variables"),
+    temporary: namespaceAccess("temporary"),
     setup: {
-      get: () => fromHostValue(__narravaStateGet("setup", "")),
+      get: () => decodeScriptValue(__narravaStateGet("setup", "")),
       set: (value: unknown) =>
-        fromHostValue(__narravaStateSet("setup", "", toHostValue("setup", value))),
+        decodeScriptValue(__narravaStateSet("setup", "", encodeScriptValue("setup", value))),
     },
   })
-  globals.V = propertyApi("variables")
-  globals.T = propertyApi("temporary")
-  globals.setup = propertyApi("setup-properties")
+  scriptGlobals.V = stateProxy("variables")
+  scriptGlobals.T = stateProxy("temporary")
+  scriptGlobals.setup = stateProxy("setup-properties")
 }

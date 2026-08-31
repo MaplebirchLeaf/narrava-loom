@@ -1,29 +1,29 @@
 import {
-  allocateEventSequence,
-  allocateSubscription,
-  authorEvents,
+  authorEventQueue,
+  eventSequence,
   eventSubscriptions,
-  events,
-  globals,
+  eventRecords,
+  scriptGlobals,
+  subscriptionId,
   type EventRecord,
 } from "./internal"
 
 let builtinEvents = new Set<string>()
 
-export function installEvent(names: string[]): void {
+export default function events(names: string[]): void {
   builtinEvents = new Set(names)
-  globals.Event = Object.seal({
+  scriptGlobals.Event = Object.seal({
     emit: (name: string, payload: unknown = undefined) => {
       if (typeof name !== "string" || name.length === 0 || /\s/u.test(name)) {
         throw new TypeError("Event 名称不能为空或包含空白")
       }
       if (builtinEvents.has(name)) throw new TypeError(`Event 内置名称只能由 Engine 发出：${name}`)
-      const sequence = emitEvent(name, payload)
-      authorEvents.push(events.at(-1)!)
+      const sequence = publishEvent(name, payload)
+      authorEventQueue.push(eventRecords.at(-1)!)
       return sequence
     },
     subscribe: (filter: { name?: string } = {}) => {
-      const id = allocateSubscription()
+      const id = subscriptionId()
       eventSubscriptions.set(id, { name: filter.name, pending: [] })
       return id
     },
@@ -35,9 +35,9 @@ export function installEvent(names: string[]): void {
   })
 }
 
-export function emitEvent(name: string, payload: unknown): number {
-  const record: EventRecord = { sequence: allocateEventSequence(), name, payload }
-  events.push(record)
+function publishEvent(name: string, payload: unknown): number {
+  const record: EventRecord = { sequence: eventSequence(), name, payload }
+  eventRecords.push(record)
   for (const subscription of eventSubscriptions.values()) {
     if (subscription.name === undefined || subscription.name === name) {
       subscription.pending.push(record)
@@ -46,15 +46,15 @@ export function emitEvent(name: string, payload: unknown): number {
   return record.sequence
 }
 
-export function emitBuiltin(name: string, payload: unknown): number {
+export function publishBuiltin(name: string, payload: unknown): number {
   if (!builtinEvents.has(name)) throw new TypeError(`未知 Event 内置名称：${name}`)
-  return emitEvent(name, payload)
+  return publishEvent(name, payload)
 }
 
-export function emitReaction(name: string, payload: unknown): number {
-  return emitEvent(name, payload)
+export function publishReaction(name: string, payload: unknown): number {
+  return publishEvent(name, payload)
 }
 
-export function takeAuthorEvents(): EventRecord[] {
-  return authorEvents.splice(0)
+export function drainAuthorEvents(): EventRecord[] {
+  return authorEventQueue.splice(0)
 }
