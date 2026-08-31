@@ -47,6 +47,7 @@ function raiseReputation(): void {
 Reaction.add({
   id: "demo.quest.completed",
   event: "quest:completed",
+  passage: /^reactiongallery$/i,
   cond: (payload) =>
     typeof payload === "object" &&
     payload !== null &&
@@ -55,6 +56,10 @@ Reaction.add({
     V.reaction_enabled === true,
   widget: '<<highlightCard "Event Reaction：旧矿井任务已结算。">>',
   replace: "reaction-result",
+  emit: {
+    name: "quest:notice",
+    payload: (payload: NarravaData) => ({ source: "reaction", original: payload }),
+  },
   limit: 3,
   tags: ["example", "event"],
 })
@@ -65,9 +70,21 @@ Reaction.add({
   cond: ({ before, after }) =>
     typeof before === "number" && typeof after === "number" && before < 50 && after >= 50,
   include: "ReactionReputationNotice",
-  replace: "reaction-state-result",
   once: true,
   tags: ["example", "state"],
+})
+
+Reaction.add({
+  id: "demo.quest.notice",
+  event: "quest:notice",
+  passage: "ReactionGallery",
+  cond: (payload) =>
+    typeof payload === "object" &&
+    payload !== null &&
+    "source" in payload &&
+    payload.source === "reaction",
+  widget: '<<highlightCard "动态 emit payload 已进入后续 Event 链。">>',
+  tags: ["example", "event-chain"],
 })
 
 Reaction.add({

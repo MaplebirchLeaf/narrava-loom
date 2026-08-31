@@ -164,8 +164,10 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 
 - `add(definition)`、`get(id)`、`enable(id)`、`disable(id)`、`reset(id)`
 - 触发源三选一：`event`、`state: "$path"`、`lifecycle: true`
-- 效果：`widget`、`include + replace`、`goto`、`emit`，以及 lifecycle 专用 `exit`；
-  `include` 没有隐式插入位置，必须声明稳定 Slot 或 Region
+- 当前 Passage 过滤：`passage` 对 Event、State、lifecycle 都有效，支持字符串、数组、
+  `RegExp`（保留 `i/m/s/u`）与名称/Tag 选择器
+- 效果：`widget`、`include`、可选 `replace`、`goto`、静态或动态 payload 的 `emit`，
+  以及 lifecycle 专用 `exit`；`widget/include` 未提供 `replace` 时追加到当前输出
 - 状态：`enabled`、`once`、`limit`、`tags`；完整规则见 [Reaction](../author/reaction.md)
 
 ### `Host`

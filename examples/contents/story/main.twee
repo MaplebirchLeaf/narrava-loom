@@ -92,7 +92,7 @@ V/T/setup 在 scripts 中对应 Twee 的 $/_/setup，并直接代理活动 Rust 
 
 :: ReactionGallery [reference reaction]
 <<set $reputation to $reputation ?? 40>>
-Reaction 在 Runtime 安全点统一处理 Event、持久 State 变化与 Passage lifecycle。<br>
+Reaction 在 Runtime 安全点统一处理 Event、持久 State 变化与 Passage lifecycle；三类规则都可按当前 Passage 筛选。<br>
 规则次数和 once/limit 状态会随 Save 导出、导入；Reaction 自身不会让 Host 执行脚本逻辑。<br>
 <<slot "reaction-result">>Event Reaction 尚未触发。<</slot>><br>
 <<button [[触发任务完成 Event|ReactionGallery]]>><<run emitQuestCompleted()>><</button>><br>
@@ -102,8 +102,7 @@ Reaction 在 Runtime 安全点统一处理 Event、持久 State 变化与 Passag
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: ReactionStateResult [reference reaction]
-State Reaction 的 include 会替换下面这个明确命名的 Slot；该 once 规则成功后会销毁。<br>
-<<slot "reaction-state-result">>等待 State Reaction 输出。<</slot>><br>
+State Reaction 的 include 未声明 replace，因此把 fragment 追加到当前输出；该 once 规则成功后会销毁。<br>
 <<link [[返回 Reaction 示例|ReactionGallery]]>><</link>>
 
 :: ReactionReputationNotice

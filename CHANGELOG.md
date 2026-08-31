@@ -1,3 +1,22 @@
+# 变更记录
+
+本文件只记录使用者能够观察到的版本变化，不复制提交日志。
+
+## 0.5.1 - 2026-08-31
+
+### 已包含
+
+- Script Runtime 与 Protocol 收敛为 Host-neutral `RuntimeSession`，Tauri 与 TUI 共享事务、挂起操作、Save、I18n、Event 与 Reaction 调度；
+- Bootstrap 按职责拆成 TypeScript 模块，由 Bun 在开发期生成单一脚本；发布后的 Boa Runtime 和游戏作者不依赖 Bun；
+- 新增 Native Reaction 注册、索引、Event/State/lifecycle 触发、次数状态、Save 恢复、循环保护与事务回滚；
+- 作者脚本可直接使用 `V`、`T`、`setup` 代理，以及 Event 与 Reaction 的 TypeScript 契约和 VS Code 导航声明。
+
+### 当前限制
+
+- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
+- TUI 用于验证完整 Runtime 操作链，终端视觉能力仍受字符界面限制；
+- `0.5.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
+
 ## 0.3.1 - 2026-08-27
 
 ### 已包含
@@ -43,10 +62,6 @@
 - `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
 - TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
 - `0.2.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
-
-# 变更记录
-
-本文件只记录使用者能够观察到的版本变化，不复制提交日志。
 
 ## 0.1.0 - 2026-08-25
 

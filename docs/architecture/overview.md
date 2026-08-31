@@ -91,7 +91,7 @@ NarravaProject/
 [game]
 id = "example.forest"
 name = "Forest"
-version = "0.4.0"
+version = "1.0.0"
 default_locale = "zh-CN"
 ```
 

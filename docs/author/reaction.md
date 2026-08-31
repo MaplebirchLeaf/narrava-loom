@@ -18,7 +18,6 @@ Reaction.add({
   state: "$reputation",
   cond: ({ before, after }) => before < 50 && after >= 50,
   include: "ReputationNotice",
-  replace: "reputation-panel",
   once: true,
 })
 
@@ -78,7 +77,10 @@ Lifecycle 没有触发参数，但仍可直接读取 `V`：
 cond: () => V.lockdown === true
 ```
 
-`passage` 仅能用于 lifecycle，可写成：
+### 当前 Passage 过滤
+
+`passage` 是 Event、State 与 lifecycle 共用的候选过滤器。它读取规则触发时的当前
+Passage；没有活动 Passage 时，声明了 `passage` 的规则不会入选。写法包括：
 
 ```ts
 passage: "Hall"
@@ -95,7 +97,9 @@ passage: {
 }
 ```
 
-`match` 为空表示不限制名称；`exclude` 命中即排除。`any` 至少命中一个，`all` 必须全部命中，`none` 必须全部不命中。正则按 JavaScript `RegExp.source` 注册，不保留 flags。
+`match` 为空表示不限制名称；`exclude` 命中即排除。`any` 至少命中一个，`all`
+必须全部命中，`none` 必须全部不命中。正则保留 JavaScript flags；当前支持
+`i`、`m`、`s`、`u`，不支持或重复的 flag 会在注册时明确报错，不会静默降级。
 
 ## 效果
 
@@ -104,23 +108,24 @@ passage: {
 | 字段 | 含义 | 限制 |
 | --- | --- | --- |
 | `widget` | 执行一段已有 Twee Widget 调用源码 | 可直接追加；提供 `replace` 时替换目标 |
-| `include` | 原地执行一个 Passage fragment | 必须同时提供 `replace` |
+| `include` | 原地执行一个 Passage fragment | 可直接追加；提供 `replace` 时替换目标 |
 | `replace` | 把内容包装为对稳定 Slot 或 Region 的替换 | 不能脱离 `widget` 或 `include` 单独出现 |
 | `goto` | 通过 Engine 事务导航到 Passage | 会正常产生 lifecycle 与 history |
 | `emit` | 继续派发结构化 Event | 进入同一安全队列并接受循环保护 |
 | `exit` | 在正文前终止当前 Passage | 仅 lifecycle 可用 |
 
-`widget` 与 `include` 不能同时出现。`include` 没有隐式页尾位置，因此以下写法无效：
+`widget` 与 `include` 不能同时出现。二者未提供 `replace` 时，内容按 Reaction
+提交顺序追加到当前输出：
 
 ```ts
 Reaction.add({
-  id: "invalid.notice",
+  id: "notice.append",
   event: "notice",
-  include: "Notice", // 缺少 replace
+  include: "Notice",
 })
 ```
 
-先在 Twee 中声明稳定目标，再由 Reaction 替换：
+需要更新已有区域时，先在 Twee 中声明稳定目标，再由 Reaction 替换：
 
 ```twee
 <<slot "reputation-panel">>尚无声望消息。<</slot>>
@@ -174,14 +179,22 @@ interface NarravaReactionStatus {
 - `get` 返回当前状态；不存在或已经被 `once` 销毁时返回 `undefined`。
 - `enable`、`disable` 返回状态是否发生变化。
 - `reset` 把次数与启用状态恢复到定义初值，但不能复活已经被 `once` 销毁的规则。
+- `limit` 达到后 `enable` 返回 `false` 且规则保持禁用；只有 `reset` 清零次数后才能重新启用。
 
 ## 执行顺序与事务
 
-一次命令完成后，Runtime 进入统一安全点：
+字段在对象中的书写顺序不影响执行。Runtime 固定使用两个阶段：
+
+1. **解析阶段**：按候选顺序检查 `passage`，执行 `cond`，计算动态 `emit.payload`，
+   再解析并发布派生 Event 链。任何一步失败都不会留下成功次数。
+2. **应用阶段**：对已经解析的每条规则依次执行内容（`widget` 或 `include`），再执行
+   `replace`（没有时追加），然后执行 `goto`；只有没有 `goto` 时才应用 `exit`。
+
+一次普通命令完成后，Runtime 进入统一安全点：
 
 1. 按注册顺序处理已排队 Event Reaction。
 2. 比较命令前后的持久 State，按路径与注册顺序处理 State Reaction。
-3. 执行效果；派生 Event 在当前 Resolver 链继续处理并发布给订阅者，新的 State 变化进入下一轮。
+3. 按上述固定顺序应用效果；新的 State 变化进入下一轮。
 4. 队列稳定后一次性发布最终 Surface；`goto` 继续走正常 Engine 导航。
 
 Lifecycle Reaction 位于目标 Passage 的 Start 与正文之间，不等待上述命令后安全点。单个安全点最多执行 256 轮；Event 后代链重复同一“事件 + 规则”会作为循环拒绝。一个安全点只能提交一次 `goto`。
