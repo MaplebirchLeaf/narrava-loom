@@ -1,6 +1,6 @@
 [package]
 name = "narrava-loom-script" # ECMAScript 游戏脚本执行（Boa + Oxc）
-version = "0.5.1"            # 当前版本
+version = "0.5.2"            # 当前版本
 edition = "2024"             # Rust 2024 Edition
 description = "Host-neutral ECMAScript script runtime for Narrava games (Boa engine, Oxc transpiler)"
 

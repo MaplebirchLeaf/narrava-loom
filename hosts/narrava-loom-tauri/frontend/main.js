@@ -25,17 +25,17 @@ let resourcePaths = new Set()
 let barRegions = { expanded: [], stowed: [] }
 
 /** 同步侧栏视觉状态与无障碍状态；不改变 Core Story。 */
-function setBarStowed(stowed) {
+function setSidebarStowed(stowed) {
   bar.classList.toggle("stowed", stowed)
   story.classList.toggle("bar-stowed", stowed)
   barToggle.setAttribute("aria-expanded", String(!stowed))
   barToggle.setAttribute("aria-label", stowed ? "展开侧栏" : "收起侧栏")
   barToggle.title = stowed ? "展开侧栏" : "收起侧栏"
-  reconcile(barSurface, stowed ? barRegions.stowed : barRegions.expanded)
+  reconcileSurfaceNodes(barSurface, stowed ? barRegions.stowed : barRegions.expanded)
 }
 
-barToggle.addEventListener("click", () => setBarStowed(!bar.classList.contains("stowed")))
-if (window.matchMedia("(max-width: 39.5em)").matches) setBarStowed(true)
+barToggle.addEventListener("click", () => setSidebarStowed(!bar.classList.contains("stowed")))
+if (window.matchMedia("(max-width: 39.5em)").matches) setSidebarStowed(true)
 
 /** 开发者模式只注册 F12 开关 WebView DevTools；调试 State 请使用游戏内表现或未来控制台能力。 */
 function configureDeveloperMode(enabled) {
@@ -43,13 +43,13 @@ function configureDeveloperMode(enabled) {
   window.addEventListener("keydown", (event) => {
     if (event.key !== "F12") return
     event.preventDefault()
-    void invoke("toggle_devtools").catch(showError)
+    void invoke("toggle_devtools").catch(showHostError)
   })
   console.info("Narrava 开发者模式已开启。按 F12 开关 WebView DevTools。")
 }
 
 /** 按 key 协调 Surface DTO，保留仍存在的控件与焦点。 */
-function render(update) {
+function renderHostUpdate(update) {
   const focusedKey = document.activeElement?.closest?.("[data-surface-key]")?.dataset.surfaceKey
   passageRoot.dataset.passage = update.current
   passageRoot.setAttribute("aria-label", update.current)
@@ -66,21 +66,26 @@ function render(update) {
   const customRegionNodes = [...regions]
     .filter(([region]) => !standardRegions.has(region))
     .flatMap(([, nodes]) => nodes)
-  reconcile(passageHeader, regions.get("header") ?? [])
+  reconcileSurfaceNodes(passageHeader, regions.get("header") ?? [])
   // 自定义 Region 没有专用 DOM 插槽时回退到正文，内容不可静默丢失。
-  reconcile(passage, [...(regions.get("main") ?? []), ...main, ...customRegionNodes])
-  reconcile(passageFooter, regions.get("footer") ?? [])
+  unwrapPanelRows(passage)
+  reconcileSurfaceNodes(passage, [...(regions.get("main") ?? []), ...main, ...customRegionNodes])
+  reconcileSurfaceNodes(passageFooter, regions.get("footer") ?? [])
   barRegions = {
     expanded: regions.get("bar") ?? [],
     stowed: regions.get("bar-stowed") ?? [],
   }
-  reconcile(barSurface, bar.classList.contains("stowed") ? barRegions.stowed : barRegions.expanded)
-  resetDialogTabs()
-  reconcile(dialogSurface, regions.get("dialog") ?? [])
-  applyReplacements()
+  reconcileSurfaceNodes(
+    barSurface,
+    bar.classList.contains("stowed") ? barRegions.stowed : barRegions.expanded,
+  )
+  unwrapDialogPages()
+  reconcileSurfaceNodes(dialogSurface, regions.get("dialog") ?? [])
+  applySurfaceReplacements()
+  wrapPanelRows(passage)
   if (dialogSurface.childElementCount > 0) {
-    const panels = buildDialogTabs()
-    selectDialogTab(0, panels)
+    const panels = mountDialogPages()
+    showDialogPage(0, panels)
     dialogMessage.hidden = true
     if (!dialog.open) dialog.showModal()
   } else if (dialog.open && dialogMessage.hidden) {
@@ -99,7 +104,7 @@ function render(update) {
 
 /** 64 级色阶（0..=63）→ RGB；与 TUI 的 palette_rgb 使用同一映射。
  *  灰阶 0-7（白 1 → 黑 7），光谱 8-63（红 8 → 橙 16 → 黄 24 → 绿 32 → 蓝 40 → 紫 48 → 深紫 63）。 */
-function paletteColor(index) {
+function colorForPaletteIndex(index) {
   if (!(index >= 1)) return ""
   const stops = [
     [1, [255, 255, 255]],
@@ -132,8 +137,8 @@ function paletteColor(index) {
   return ""
 }
 
-/** 重绘前把页签 Panel 里的原节点放回 keyed reconcile 容器。 */
-function resetDialogTabs() {
+/** 重绘前把 Dialog 页面里的原节点放回 keyed reconcile 容器。 */
+function unwrapDialogPages() {
   for (const panel of dialogSurface.querySelectorAll(":scope > .dialog-panel")) {
     panel.querySelector(".dialog-heading-source")?.classList.remove("dialog-heading-source")
     panel.replaceWith(...panel.childNodes)
@@ -142,7 +147,7 @@ function resetDialogTabs() {
 }
 
 /** 顶层语义标题划分页签，标题之后的节点归入对应页面。 */
-function buildDialogTabs() {
+function mountDialogPages() {
   const headings = [...dialogSurface.children].filter((element) => element.matches("h1, h2"))
   const pageHeadings = headings.length > 0 ? headings : [null]
   const panels = pageHeadings.map(() => {
@@ -168,7 +173,7 @@ function buildDialogTabs() {
     tab.setAttribute("role", "tab")
     tab.setAttribute("aria-selected", String(index === 0))
     panel.hidden = index !== 0
-    tab.addEventListener("click", () => selectDialogTab(index, panels))
+    tab.addEventListener("click", () => showDialogPage(index, panels))
     dialogTabs.append(tab)
   })
   dialogSurface.append(...panels)
@@ -176,7 +181,7 @@ function buildDialogTabs() {
 }
 
 /** 切换活动页签：更新按钮的 active/aria-selected 与对应面板的 hidden。 */
-function selectDialogTab(activeIndex, panels) {
+function showDialogPage(activeIndex, panels) {
   ;[...dialogTabs.children].forEach((tab, index) => {
     const active = index === activeIndex
     tab.classList.toggle("active", active)
@@ -185,23 +190,70 @@ function selectDialogTab(activeIndex, panels) {
   })
 }
 
+/** 重绘前拆回 Host panel row 包装，保证 keyed reconcile 仍直接面对 Surface 节点。 */
+function unwrapPanelRows(container) {
+  for (const group of container.querySelectorAll(":scope > .surface-row")) {
+    for (const separator of group.querySelectorAll(":scope > .surface-row-separator")) {
+      separator.classList.remove("surface-row-separator")
+    }
+    group.replaceWith(...group.childNodes)
+  }
+}
+
+/** 连续 row panel 是一个块级布局组；其间仅用于源码排版的空白文本不成为 flex item。 */
+function wrapPanelRows(container) {
+  const children = Array.from(container.children)
+  let group = null
+  for (let index = 0; index < children.length; index++) {
+    const element = children[index]
+    if (element.matches(".surface-panel.surface-flow-row")) {
+      if (group === null) {
+        group = document.createElement("div")
+        group.className = "surface-row"
+        element.before(group)
+      }
+      group.append(element)
+      continue
+    }
+    const sourceWhitespace = element.matches(".surface-text") && element.textContent.trim() === ""
+    const invisibleCommand = element.matches("[data-surface-replace]")
+    if (group !== null && (sourceWhitespace || invisibleCommand)) {
+      const nextVisible = children
+        .slice(index + 1)
+        .find(
+          (candidate) =>
+            !(
+              (candidate.matches(".surface-text") && candidate.textContent.trim() === "") ||
+              candidate.matches("[data-surface-replace]")
+            ),
+        )
+      if (nextVisible?.matches(".surface-panel.surface-flow-row")) {
+        if (sourceWhitespace) element.classList.add("surface-row-separator")
+        group.append(element)
+        continue
+      }
+    }
+    group = null
+  }
+}
+
 /** 以 DTO key 为身份做最小 DOM 更新；key 类型变化时才替换元素。 */
-function reconcile(container, nodes) {
+function reconcileSurfaceNodes(container, nodes) {
   const existing = new Map(
     [...container.children].map((element) => [element.dataset.surfaceKey, element]),
   )
   let cursor = container.firstElementChild
   for (const node of nodes) {
     let element = existing.get(node.key)
-    if (element === undefined || element.dataset.surfaceType !== nodeDomType(node)) {
-      const replacement = createNode(node)
+    if (element === undefined || element.dataset.surfaceType !== surfaceElementType(node)) {
+      const replacement = createSurfaceElement(node)
       if (element === undefined) element = replacement
       else {
         element.replaceWith(replacement)
         element = replacement
       }
     }
-    updateNode(element, node)
+    updateSurfaceElement(element, node)
     existing.delete(node.key)
     if (element !== cursor) container.insertBefore(element, cursor)
     cursor = element.nextElementSibling
@@ -209,8 +261,8 @@ function reconcile(container, nodes) {
   for (const element of existing.values()) element.remove()
 }
 
-/** 按 DTO 节点类型创建语义元素骨架并绑定交互事件；字段值由 updateNode 填充。 */
-function createNode(node) {
+/** 按 DTO 节点类型创建语义元素骨架并绑定交互事件；字段值由 updateSurfaceElement 填充。 */
+function createSurfaceElement(node) {
   let element
   if (node.type === "hardBreak") {
     element = document.createElement("br")
@@ -250,7 +302,7 @@ function createNode(node) {
             )
           : JSON.parse(element.dataset.inputValue)
       try {
-        await submitInput(element.dataset.interaction, value)
+        await submitInputValue(element.dataset.interaction, value)
         if (node.type === "radiobutton") {
           for (const radio of story.querySelectorAll(
             `input[type="radio"][name="${CSS.escape(element.name)}"]`,
@@ -267,7 +319,7 @@ function createNode(node) {
             : [element]
         for (const control of controls)
           control.checked = control.dataset.committedChecked === "true"
-        showError(error)
+        showHostError(error)
       }
     })
   } else if (node.type === "textbox") {
@@ -276,35 +328,35 @@ function createNode(node) {
     element.addEventListener("change", async () => {
       const previous = element.dataset.committedValue ?? ""
       try {
-        await submitInput(element.dataset.interaction, element.value)
+        await submitInputValue(element.dataset.interaction, element.value)
         element.dataset.committedValue = element.value
       } catch (error) {
         element.value = previous
-        showError(error)
+        showHostError(error)
       }
     })
   } else if (node.type === "navigation" || node.type === "button" || node.type === "safeReturn") {
     element = document.createElement("button")
     element.type = "button"
     if (node.type === "navigation" || node.type === "safeReturn") element.className = "choice"
-    element.addEventListener("click", () => activate(element.dataset.interaction))
+    element.addEventListener("click", () => activateInteraction(element.dataset.interaction))
   } else {
-    element = document.createElement(node.type === "styledText" ? styledTag(node) : "span")
+    element = document.createElement(node.type === "styledText" ? tagForStyledText(node) : "span")
   }
   element.dataset.surfaceKey = node.key
-  element.dataset.surfaceType = nodeDomType(node)
+  element.dataset.surfaceType = surfaceElementType(node)
   return element
 }
 
-/** 返回会影响元素标签或内部结构的类型身份，供 reconcile 判断能否复用。 */
-function nodeDomType(node) {
-  if (node.type === "styledText") return `${node.type}:${styledTag(node)}`
+/** 返回会影响元素标签或内部结构的类型身份，供 Surface reconcile 判断能否复用。 */
+function surfaceElementType(node) {
+  if (node.type === "styledText") return `${node.type}:${tagForStyledText(node)}`
   if (node.type === "component") return `${node.type}:${node.capability}:${node.version}`
   return node.type
 }
 
 /** 语义字形 → 原生语义标签；结构性标题级别 → h1/h2；无字形时回退 span。 */
-function styledTag(node) {
+function tagForStyledText(node) {
   if (node.heading === 1) return "h1"
   if (node.heading === 2) return "h2"
   const styles = node.styles
@@ -320,7 +372,7 @@ function styledTag(node) {
 }
 
 /** 把一个 DTO 的可变字段同步到已经创建的语义元素。 */
-function updateNode(element, node) {
+function updateSurfaceElement(element, node) {
   if (node.type === "text") {
     element.className = "surface-text"
     element.textContent = node.text
@@ -330,7 +382,7 @@ function updateNode(element, node) {
     element.className = `surface-text ${node.styles.map((style) => `text-${style}`).join(" ")}`
     element.dataset.color = String(node.color)
     if (node.color > 0) {
-      element.style.setProperty("--narrava-color", paletteColor(node.color))
+      element.style.setProperty("--narrava-color", colorForPaletteIndex(node.color))
     } else {
       element.style.removeProperty("--narrava-color")
     }
@@ -346,7 +398,7 @@ function updateNode(element, node) {
   if (node.type === "image") {
     const image = element.querySelector("img")
     const caption = element.querySelector("figcaption")
-    image.src = resourceUrl(node.resource)
+    image.src = urlForResourcePath(node.resource)
     image.alt = node.alt
     caption.textContent = node.caption ?? ""
     caption.hidden = node.caption === null
@@ -359,12 +411,12 @@ function updateNode(element, node) {
       const label = element.querySelector("span")
       const meter = element.querySelector("meter")
       label.textContent = typeof node.properties.label === "string" ? node.properties.label : ""
-      meter.min = finiteNumber(node.properties.min, 0)
-      meter.max = finiteNumber(node.properties.max, 100)
-      meter.value = finiteNumber(node.properties.value, meter.min)
+      meter.min = finiteNumberOrFallback(node.properties.min, 0)
+      meter.max = finiteNumberOrFallback(node.properties.max, 100)
+      meter.value = finiteNumberOrFallback(node.properties.value, meter.min)
       meter.setAttribute("aria-label", label.textContent || "数值")
     } else {
-      reconcile(element.querySelector("[data-component-fallback]"), node.fallback)
+      reconcileSurfaceNodes(element.querySelector("[data-component-fallback]"), node.fallback)
     }
     return
   }
@@ -374,13 +426,13 @@ function updateNode(element, node) {
       node.presentation === "panel"
         ? `surface-container surface-panel${flowClass}`
         : "surface-container surface-slot"
-    reconcile(element, node.nodes)
+    reconcileSurfaceNodes(element, node.nodes)
     return
   }
   if (node.type === "replace") {
     element.dataset.targetKind = node.target.kind
     element.dataset.targetValue = node.target.value
-    reconcile(element, node.nodes)
+    reconcileSurfaceNodes(element, node.nodes)
     return
   }
   if (node.type === "action") {
@@ -419,12 +471,12 @@ function updateNode(element, node) {
 }
 
 /** 只接受有限数值，否则回退默认值（组件属性的防御性解析）。 */
-function finiteNumber(value, fallback) {
+function finiteNumberOrFallback(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
 /** 把 Core 的 Region 或 Surface key 替换映射到 Tauri 页面。 */
-function applyReplacements() {
+function applySurfaceReplacements() {
   const regions = new Map([
     ["header", passageHeader],
     ["main", passage],
@@ -444,42 +496,42 @@ function applyReplacements() {
 }
 
 /** 把交互 ID 送回 Worker 执行；成功后渲染并返回新的 Surface 更新。 */
-async function activate(interaction) {
-  setBusy(true, "正在处理行动…")
+async function activateInteraction(interaction) {
+  setHostBusy(true, "正在处理行动…")
   try {
     const update = await invoke("activate", { interaction })
-    render(update)
+    renderHostUpdate(update)
   } catch (error) {
-    showError(error)
+    showHostError(error)
   } finally {
-    setBusy(false)
+    setHostBusy(false)
   }
 }
 
 /** Story 历史由 RuntimeSession 重放；WebView 不使用浏览器 history 冒充游戏状态。 */
-async function moveHistory(backward) {
-  setBusy(true, backward ? "正在返回上一页…" : "正在前往下一页…")
+async function navigateHistory(backward) {
+  setHostBusy(true, backward ? "正在返回上一页…" : "正在前往下一页…")
   historyBackward.disabled = true
   historyForward.disabled = true
   try {
-    render(await invoke("history", { backward }))
+    renderHostUpdate(await invoke("history", { backward }))
   } catch (error) {
-    showError(error)
+    showHostError(error)
   } finally {
-    setBusy(false)
+    setHostBusy(false)
   }
 }
 
-historyBackward.addEventListener("click", () => void moveHistory(true))
-historyForward.addEventListener("click", () => void moveHistory(false))
+historyBackward.addEventListener("click", () => void navigateHistory(true))
+historyForward.addEventListener("click", () => void navigateHistory(false))
 
 /** 输入先由 Worker 校验并写入 State；失败时调用方负责恢复控件的已提交值。 */
-async function submitInput(interaction, value) {
+async function submitInputValue(interaction, value) {
   await invoke("input", { interaction, value })
 }
 
 /** 忙碌期间禁用全部交互控件并同步 aria-busy；message 非空时写入状态行。 */
-function setBusy(isBusy, message = "") {
+function setHostBusy(isBusy, message = "") {
   story.setAttribute("aria-busy", String(isBusy))
   for (const control of story.querySelectorAll(
     "button[data-interaction], button[data-surface-action], input[data-interaction]",
@@ -490,11 +542,11 @@ function setBusy(isBusy, message = "") {
 }
 
 /** Runtime 错误复用 Host Dialog，但清空普通 Dialog 页签以免混入旧内容。 */
-function showError(error) {
+function showHostError(error) {
   const code = typeof error?.code === "string" ? error.code : "tauri_host.unknown"
   const message = typeof error?.message === "string" ? error.message : String(error)
-  resetDialogTabs()
-  reconcile(dialogSurface, [])
+  unwrapDialogPages()
+  reconcileSurfaceNodes(dialogSurface, [])
   dialogSurface.hidden = true
   dialogTabs.replaceChildren()
   const errorTab = document.createElement("button")
@@ -512,13 +564,13 @@ function showError(error) {
 }
 
 /** 作者 CSS 只在 Host 默认主题后追加；resource() 被收敛到只读自定义协议。 */
-function applyAuthorStyles(assets) {
+function installAuthorStyles(assets) {
   document.title = assets.title
   resourcePaths = new Set(assets.resources.map((resource) => resource.path))
   for (const style of assets.styles) {
     const css = style.css.replace(
       /resource\(\s*(["'])([^"']+)\1\s*\)/gu,
-      (_match, _quote, path) => `url("${resourceUrl(path)}")`,
+      (_match, _quote, path) => `url("${urlForResourcePath(path)}")`,
     )
     const url = URL.createObjectURL(new Blob([css], { type: "text/css" }))
     objectUrls.add(url)
@@ -531,14 +583,14 @@ function applyAuthorStyles(assets) {
 }
 
 /** 把 Resource 逻辑路径编码为只读自定义协议的 URL；未收录的路径抛错。 */
-function resourceUrl(path) {
+function urlForResourcePath(path) {
   if (!resourcePaths.has(path)) throw new Error(`Resource 不存在：${path}`)
   const encoded = path.split("/").map(encodeURIComponent).join("/")
   return `narrava-resource://localhost/${encoded}`
 }
 
 /** 并行取得只读资产、开发开关和首个 Surface，再进行首次渲染。 */
-async function start() {
+async function startHost() {
   try {
     const [assets, developer, update] = await Promise.all([
       invoke("host_assets"),
@@ -546,10 +598,10 @@ async function start() {
       invoke("start_game"),
     ])
     configureDeveloperMode(developer)
-    applyAuthorStyles(assets)
-    render(update)
+    installAuthorStyles(assets)
+    renderHostUpdate(update)
   } catch (error) {
-    showError(error)
+    showHostError(error)
   }
 }
 
@@ -557,4 +609,4 @@ window.addEventListener("beforeunload", () => {
   for (const url of objectUrls) URL.revokeObjectURL(url)
 })
 
-start()
+startHost()

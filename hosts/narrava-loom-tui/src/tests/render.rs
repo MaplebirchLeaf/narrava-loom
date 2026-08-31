@@ -102,11 +102,7 @@ fn styled_text_with_delay_is_parked_then_revealed() {
     assert_eq!(now.delayed[0].lines, ["两秒后出现"]);
 
     let later = renderer.render_at("Delay", &output, 2500);
-    assert_eq!(
-        later.main,
-        ["立即显示", "两秒后出现"],
-        "超过延迟后应进入正文"
-    );
+    assert_eq!(later.main, ["立即显示两秒后出现"], "超过延迟后应进入正文");
     assert!(later.delayed.is_empty());
 }
 
@@ -122,6 +118,25 @@ fn explicit_line_break_becomes_two_terminal_lines() {
     let frame = TuiRenderer::default().render("Break", &output);
 
     assert_eq!(frame.main, ["第一行", "第二行"]);
+}
+
+#[test]
+fn adjacent_text_styles_and_punctuation_stay_on_the_same_line() {
+    let output = Surface::from_nodes(vec![
+        SurfaceNode::Text(TextValue::from("你发现了")),
+        SurfaceNode::StyledText {
+            text: TextValue::from(" 发光的钥匙"),
+            styles: vec![narrava_loom_core::semantic::TextStyle::Strong],
+            color: TextColor::DEFAULT,
+            delay: None,
+            heading: None,
+        },
+        SurfaceNode::Text(TextValue::from("。")),
+    ]);
+
+    let frame = TuiRenderer::default().render("Inline", &output);
+
+    assert_eq!(frame.main, ["你发现了** 发光的钥匙**。"]);
 }
 
 #[test]
@@ -286,6 +301,11 @@ fn auxiliary_regions_are_bordered_and_sidebar_variants_are_exclusive() {
     assert!(output.contains("弹窗：\n┌──────────┐\n│ 弹窗内容 │\n└──────────┘"));
     assert!(output.contains("页脚：\n┌──────┐\n│ 页尾 │\n└──────┘"));
     assert!(output.contains("正文：\n正文"), "正文自身不增加区域边框");
+    assert!(!output.contains("== Regions =="), "不显示 Passage 标题");
+    assert!(
+        output.find("侧栏：").unwrap() < output.find("正文：").unwrap(),
+        "侧栏应显示在正文上方"
+    );
 
     let mut stowed: TuiFrame = frame;
     stowed.sidebar_mode = crate::TuiSidebarMode::Stowed;
@@ -493,7 +513,7 @@ fn terminal_loop_is_operable_with_plain_stdin_and_stdout() {
     .unwrap();
 
     let printed = String::from_utf8(output).unwrap();
-    assert!(printed.contains("== Start =="));
+    assert!(!printed.contains("== Start =="));
     assert!(printed.contains("未知命令"));
     assert!(printed.contains("set <序号> <文字>"));
     assert!(activated);

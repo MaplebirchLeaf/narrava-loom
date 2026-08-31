@@ -1,6 +1,6 @@
 # 项目状态
 
-> 基线版本：0.5.1
+> 基线版本：0.5.2
 >
 > 更新日期：2026-09-01
 
@@ -29,7 +29,7 @@
 - TUI 已使用共享 RuntimeSession 执行完整游戏目录；仍无存档／语言菜单和终端尺寸自适应布局；
 - Tauri 自动测试不代替真实 WebView 的像素与交互验收；
 - Android/iOS 平台工程、签名、打包与真机验收尚未接通；当前可发行目标是桌面端；
-- `Renderer.Model`、`Renderer.Audio`、ModLoader 和 ModUtils 不在 0.5.1 范围内。
+- `Renderer.Model`、`Renderer.Audio`、ModLoader 和 ModUtils 不在 0.5.2 范围内。
 
 ## 下一阶段
 

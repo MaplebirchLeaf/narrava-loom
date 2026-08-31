@@ -217,7 +217,7 @@ nv-passage :is(tr, th, td, caption) {
 }
 
 .passage-main {
-  white-space: pre-wrap;
+  white-space: normal;
 }
 .surface-container.surface-slot {
   display: contents;
@@ -225,22 +225,27 @@ nv-passage :is(tr, th, td, caption) {
 .surface-panel {
   display: block;
   box-sizing: border-box;
-  margin-block: 1rem;
+  margin-block: 0.5rem;
   padding: 1rem;
   border: 1px solid var(--narrava-border);
   background: var(--narrava-surface);
 }
 .surface-panel.surface-flow-row {
-  display: inline-block;
   inline-size: max-content;
   max-inline-size: 100%;
-  vertical-align: top;
 }
-.surface-panel.surface-flow-row + .surface-panel.surface-flow-row {
-  margin-inline-start: 0.75rem;
+.surface-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-block: 0.5rem;
 }
-.surface-panel.surface-flow-row + :not(.surface-panel.surface-flow-row) {
-  display: block;
+.surface-row > .surface-panel {
+  margin-block: 0;
+}
+.surface-row-separator {
+  display: none;
 }
 .passage-header,
 .passage-footer {
