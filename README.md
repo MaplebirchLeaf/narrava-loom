@@ -32,7 +32,7 @@ cargo run --locked -p narrava-loom-core -- examples
 | 路径 | 职责 |
 |---|---|
 | `src/` | `narrava-loom-core` library 与最小 CLI Host |
-| `crates/narrava-loom-modloader/` | Core 的可选 ModLoader 附属；只允许依赖 Core |
+| `crates/` | Protocol 与 Script Runtime 等可复用 crate |
 | `hosts/narrava-loom-tauri/` | Tauri Host 与最小前端 |
 | `bindings/typescript/` | Script 与 Tauri 的 TypeScript 契约 |
 | `editors/vscode-narrava-loom/` | `.twee` 的 VS Code 高亮与编辑扩展 |
@@ -44,18 +44,18 @@ cargo run --locked -p narrava-loom-core -- examples
 核心依赖方向固定为：
 
 ```text
-narrava-loom-core
-       ↑
-narrava-loom-modloader / Host / Binding
-       ↑
-Host Renderer
+narrava-loom-core + narrava-loom-protocol
+                   ↑
+        Script Runtime / Host
+                   ↑
+              Host Renderer
 ```
 
 所有构建产物统一输出到 `dist/`（gitignore 忽略）：游戏发行目录为
 `dist/NarravaGame/`，VS Code 扩展包为 `dist/vscode-narrava-loom/*.vsix`。
 `target/` 只保留 cargo 缓存，`cargo clean` 不会影响交付物。
 
-Core 不依赖 ModLoader、Tauri、DOM、CSS 或具体 Renderer。详细边界见
+Core 不依赖 Tauri、DOM、CSS 或具体 Renderer。详细边界见
 [架构纲要](docs/architecture/overview.md)、
 [仓库布局](docs/development/repository-layout.md)和
 [Host 与 Surface](docs/architecture/protocol.md)。
@@ -81,8 +81,7 @@ Host Surface、I18n fallback、Save 数据模型、Resource、Event，以及 Scr
 Core 已建立 `.nar` 的拥有型源码记录、游戏身份、格式版本、内容哈希、可直接反序列化的
 拥有型 Bytecode、Script Bundle 与逐资源哈希边界。更广的平台能力只在出现稳定用例后扩展。
 Tauri Host 已在 Rust Worker 内通过 Boa/Oxc 执行游戏 JS/TS，并提供默认 Renderer、可选作者
-CSS，以及供作者脚本调用的存档、语言和诊断能力；具体管理界面仍由游戏作者定义。模组 patch、模组 Story/Resource
-组合和玩家模组属于独立 `narrava-loom-modloader`，均不计入 Core 完成度。当前状态以各领域
+CSS，以及供作者脚本调用的存档、语言和诊断能力；具体管理界面仍由游戏作者定义。模组加载尚未实现，不属于当前 API。当前状态以各领域
 文档为准；当前完成度和下一阶段边界统一记录在
 [项目状态](docs/development/status.md)，不在多个计划文件中重复维护。
 

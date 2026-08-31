@@ -18,8 +18,8 @@
 5. [Event](event.md)：作者事件、拉取订阅、Engine Passage 事件与 Reaction 事件链；
 6. [Story、Engine、Logger、I18n 与 Save](runtime-and-save.md)：重新开始、诊断、多语言与存档；
 7. [Reaction](reaction.md)：Event、State 与 lifecycle 的声明式叙事反应；
-8. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错；
-9. [继续查阅](further-reading.md)：架构与参考文档的入口。
+8. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错。
 
 精确的宏、内置函数、运算符和公开脚本 API 不在教程里重复维护，统一见
 [作者 API 与语法速查](../reference/api-and-syntax.md)。
+架构、Host 和仓库开发文档见[文档总入口](../README.md)。

@@ -159,7 +159,7 @@ cargo run -p narrava-loom-tauri -- examples
 - Host 提供语言包选择和有界结构化诊断能力，但不生成“存档／语言／日志”固定页面；
 - 游戏内管理弹窗的标题、页签、控件、文案与布局全部由游戏作者通过 Twee、脚本和
   Surface 定义；Host 只拥有原生 Dialog 外壳与经过验证的平台动作；
-- Mod 管理界面属于 `narrava-loom-modloader`，不进入本 Host 的 Core 完成条件。
+- 模组管理尚未实现，不进入本 Host 的完成条件。
 
 默认主题包含窄屏、safe-area 与 coarse pointer 规则。这只说明共享页面具备移动布局基础，
 不代表 Android WebView 或 iOS WKWebView 已完成平台验收。

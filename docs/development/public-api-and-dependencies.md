@@ -27,7 +27,6 @@ microtask；`Host.delay(ms)` 则建立真实 Core suspension，由 Rust Worker �
 
 - library 在 `Cargo.toml` 使用可兼容的 semver 范围，除非已知上游版本不兼容。
 - 仓库提交根 `Cargo.lock`，Core CLI 和 Tauri Host 的可重现检查使用 `--locked`。
-- 独立的 ModLoader 有自己的 lockfile，不属于根 workspace 验证。
 - 更新 lockfile 必须是有意的依赖更新，不应成为普通构建的副作用。
 
 仓库标准检查见[仓库命令](commands.md)。

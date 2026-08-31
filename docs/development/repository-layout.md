@@ -13,8 +13,7 @@ Narrava Loom/
 │   └── narrava-loom-tui/           Host-neutral 终端 Renderer 与输入前端
 ├── crates/
 │   ├── narrava-loom-protocol/      零 Core 依赖的拥有型 Runtime/Host DTO
-│   ├── narrava-loom-script/        ECMAScript 执行、RuntimeSession 与 Core/Protocol 适配
-│   └── narrava-loom-modloader/     独立演进的可选附属，不属于 Core workspace
+│   └── narrava-loom-script/        ECMAScript 执行、RuntimeSession 与 Core/Protocol 适配
 ├── bindings/typescript/            游戏脚本 TypeScript 契约
 ├── editors/vscode-narrava-loom/    Twee 编辑器扩展源码
 ├── examples/                       唯一完整、无 Rust 的示例游戏
@@ -45,12 +44,9 @@ narrava-loom-core ─────────┐
                            ├─→ narrava-loom-script ──→ Host
 narrava-loom-protocol ─────┘               ↑
               └────────────────────────────┘
-
-narrava-loom-modloader ──→ narrava-loom-core
 ```
 
-`narrava-loom-modloader` 可以依赖 Core，Core 不能感知 ModLoader。Host 若需要模组能力，应显式依赖
-两者，不得让 Core 提供 `mod_loader` feature 或另一套 Engine、State、Story、I18n 类型。
+Core 不得依赖 Host 或具体 Renderer。Host 通过 Script Runtime 和 Protocol 驱动 Core。
 
 ## 构建输出
 

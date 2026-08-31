@@ -78,7 +78,7 @@ ECMAScript。WebView 只负责显示，不执行游戏脚本。
 | `narrava-loom-tauri` | Tauri Worker、Renderer 与默认 CSS；当前可运行入口是桌面端 | 否 |
 | 你的游戏目录 | `config.toml`、Twee、脚本、资源、翻译、可选 CSS | 是 |
 
-`narrava-loom-modloader` 是另一个附属项目，不属于 Core，也不是制作普通游戏的前置条件。
+模组加载尚未实现，不是制作普通游戏的前置条件。
 
 ## 创建自己的游戏
 

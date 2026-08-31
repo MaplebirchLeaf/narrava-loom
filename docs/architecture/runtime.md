@@ -248,7 +248,7 @@ Core 只拥有 Resource 的逻辑路径、字节、媒体类型、完整性和�
 
 Event 使用稳定序号、名称和拥有型 `Value` 载荷。`emit` 先保存事实，再投递给当时存在且匹配的订阅；`subscribe` 返回进程内稳定 ID；`take` 一次性取走待处理事件；`unsubscribe` 释放订阅及队列；`clear` 清空历史与队列但不重置序号。ScriptCallable 等不可拥有平台函数的数据不得作为跨边界事件载荷。Tauri Host 把五阶段 Passage 生命周期发布为保留事件 `passage:init/start/render/display/end`，统一载荷为 Passage 名和 tags，作者不能伪造保留名。
 
-I18n 已完成文本目录、NMSG／字典 JSON、`.nlang` 导入导出、自动 fallback、Runtime 替换和稳定 Diagnostic。Save 已能捕获 `$variables` 与 Story 时间线、编码 JSON 并原子恢复。ModLoader 已移出 Core，独立 `narrava-loom-modloader` 当前只保留单向依赖边界；Story／Resource 模组合成属于该附属项目，不计入 Core 完成度。详细边界见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md)、[/docs/architecture/save.md](/docs/architecture/save.md) 与 [/docs/architecture/modloader.md](/docs/architecture/modloader.md)。
+I18n 已完成文本目录、NMSG／字典 JSON、`.nlang` 导入导出、fallback、Runtime 替换和 Diagnostic。Save 可捕获 `$variables` 与 Story 时间线、编码 JSON 并原子恢复。模组合成尚未实现，不计入 Core 完成度。详细边界见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md) 与 [/docs/architecture/save.md](/docs/architecture/save.md)。
 
 有效构建顺序固定为先 I18n、后 `.nmod`：模组清单和依赖可以预先验证，但模组内容修改只作用于当前语言已经修正后的候选内容。
 

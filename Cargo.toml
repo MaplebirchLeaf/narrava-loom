@@ -4,9 +4,8 @@ version = "0.5.1"     # 项目版本
 edition = "2024"      # Rust 2024 Edition
 
 [workspace]
-members = ["crates/narrava-loom-protocol", "crates/narrava-loom-script", "hosts/narrava-loom-tauri", "hosts/narrava-loom-tui"] # 零 Core 依赖的拥有型协议、Runtime 与官方 Host；ModLoader 独立演进
-exclude = ["crates/narrava-loom-modloader"]
-resolver = "3"                         # Rust 2024 的依赖解析器
+members = ["crates/narrava-loom-protocol", "crates/narrava-loom-script", "hosts/narrava-loom-tauri", "hosts/narrava-loom-tui"] # 零 Core 依赖的拥有型协议、Runtime 与官方 Host
+resolver = "3" # Rust 2024 的依赖解析器
 
 [dependencies]
 semver = "1" # 语义化版本处理

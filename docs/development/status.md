@@ -2,7 +2,7 @@
 
 > 基线版本：0.5.1
 >
-> 更新日期：2026-08-29
+> 更新日期：2026-09-01
 
 本页只记录仓库级完成度和下一阶段边界。已实现 API 的精确定义以
 [参考文档](../reference/api-and-syntax.md)为准，设计理由以[架构文档](../architecture/overview.md)为准。
@@ -25,7 +25,7 @@
 
 ## 当前限制
 
-- `narrava-loom-modloader` 不属于 Core，当前仅保留独立 crate 边界；
+- 模组加载尚未实现；
 - TUI 已使用共享 RuntimeSession 执行完整游戏目录；仍无存档／语言菜单和终端尺寸自适应布局；
 - Tauri 自动测试不代替真实 WebView 的像素与交互验收；
 - Android/iOS 平台工程、签名、打包与真机验收尚未接通；当前可发行目标是桌面端；
@@ -38,7 +38,7 @@
 1. 用真实 Tauri 窗口完成发行目录的视觉、输入、Resource、I18n 与 Save 回归；
 2. 用实际嵌入方反馈稳定 RuntimeSession、ScriptAdapter 与 Protocol 的公开边界；
 3. 根据实际游戏用例稳定 0.5.x 的公开 API 与诊断，不预先扩张平台能力；
-4. Core 稳定后，再单独设计 `narrava-loom-modloader` 的最小 `.nmod` 纵向链。
+4. Core 稳定后，再从可验证的 `.nmod` 纵向用例开始设计模组加载。
 
 ## 发布门禁
 

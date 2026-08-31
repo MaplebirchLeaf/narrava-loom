@@ -9,17 +9,11 @@
 - Script Runtime 与 Protocol 收敛为 Host-neutral `RuntimeSession`，Tauri 与 TUI 共享事务、挂起操作、Save、I18n、Event 与 Reaction 调度；
 - Bootstrap 按职责拆成 TypeScript 模块，由 Bun 在开发期生成单一脚本；发布后的 Boa Runtime 和游戏作者不依赖 Bun；
 - 新增 Native Reaction 注册、索引、Event/State/lifecycle 触发、次数状态、Save 恢复、循环保护与事务回滚；
-- 作者脚本可直接使用 `V`、`T`、`setup` 代理，以及 Event 与 Reaction 的 TypeScript 契约和 VS Code 导航声明。
+- 作者脚本可直接使用 `V`、`T`、`setup` 代理，以及 Event 与 Reaction 的 TypeScript 契约和 VS Code 导航声明；
 - `slot` 新增可选 `panel` 与 `stack`／`row` 标准语义：Protocol 保留容器意图和上下／同行排列，TUI 映射为字符方框，Tauri 映射为主题面板；默认 `plain + stack`；
 - TUI 为页眉、页脚和侧栏增加区域边框，Dialog 按标题页分别成框，操作按正文、页面和侧栏分组；空页眉／页脚仍不显示，`s` 命令在互斥的展开与收起侧栏内容之间切换；
 - TUI 与 Tauri 的同行 panel 之间保留 Host 间距，panel 组后的普通正文从下一行继续；
 - 修正 Reaction widget/include 的追加时机说明与根 README 中已失效的 TUI example 命令。
-
-### 当前限制
-
-- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
-- TUI 用于验证完整 Runtime 操作链，终端视觉能力仍受字符界面限制；
-- `0.5.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
 
 ## 0.3.1 - 2026-08-27
 
@@ -29,12 +23,6 @@
 - TUI Host 补全：支持 `game.nar` 发行包加载（含魔数校验与哈希验证），并渲染 `Bar`／`BarStowed` 特殊区域（隔离 State/Story 视图）；`Source`/`SourceList` 支持 Clone；
 - 文档补充 `.nar` 容器结构与魔数说明。
 
-### 当前限制
-
-- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
-- TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
-- `0.3.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
-
 ## 0.3.0 - 2026-08-27
 
 ### 已包含
@@ -42,12 +30,6 @@
 - 拆出独立 `narrava-loom-protocol` crate：跨 Host 的 Surface 传输协议（`HostErrorDto`、节点/更新 DTO 与脚本 bridge 的受验证转换），单向依赖 Core；
 - Host 与 `narrava-loom-modloader` 统一改为同时依赖 `narrava-loom-protocol` 与 `narrava-loom-core`，依赖方向固定为 `host/modloader → protocol → core`；
 - 纯内部重构：Core 语义（Surface 等）与 Host 传输层分离，作者侧 API 与既有 DTO 公开形态不变。
-
-### 当前限制
-
-- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
-- TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
-- `0.3.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
 
 ## 0.2.0 - 2026-08-27
 
@@ -61,12 +43,6 @@
 - 修复 `if`／`switch` 默认分支与后续文本合并导致的 I18n placeholder 错位；
 - 文档按读者收束：`reference/` 只保留契约速查，设计说明移入 `architecture/`，作者手册去编号并统一入口，清除遗留合并冲突标记。
 
-### 当前限制
-
-- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
-- TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
-- `0.2.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
-
 ## 0.1.0 - 2026-08-25
 
 Narrava Loom 的首个开发基线。
@@ -78,9 +54,3 @@ Narrava Loom 的首个开发基线。
 - Tauri 桌面 Host、最小 TUI Presentation 适配器和 VS Code Twee 扩展；
 - 作者控制的 `Bar`／`BarStowed` 侧栏、Footer Runtime 状态和存档／语言／日志 Host 工具；
 - 可移动 `NarravaGame/` 发行目录与 GitHub Actions 构建流水线。
-
-### 当前限制
-
-- `narrava-loom-modloader` 只保留独立附属边界，尚未实现模组加载流程；
-- TUI 是跨 Host 语义验证适配器，不是完整终端游戏壳；
-- `0.1.x` 阶段公开 API 仍可能调整，不提供跨版本兼容承诺。
