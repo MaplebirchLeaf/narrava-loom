@@ -248,8 +248,10 @@ fn dialog_pages_have_independent_borders_and_interaction_groups() {
     let mut output: Vec<u8> = Vec::new();
     write_frame(&mut output, &frame).unwrap();
     let output: String = String::from_utf8(output).unwrap();
-    assert!(output.contains("弹窗 · 第一页：\n    1. 默认按钮"));
-    assert!(output.contains("弹窗 · 第二页：\n    2. 危险按钮"));
+    assert!(output.contains("    1. 默认按钮"));
+    assert!(output.contains(&format!("{}\n    2. 危险按钮", "-".repeat(80))));
+    assert!(!output.contains("弹窗 · 第一页："));
+    assert!(!output.contains("弹窗 · 第二页："));
 }
 
 #[test]
@@ -295,15 +297,20 @@ fn auxiliary_regions_are_bordered_and_sidebar_variants_are_exclusive() {
     write_frame(&mut output, &frame).unwrap();
     let output: String = String::from_utf8(output).unwrap();
 
-    assert!(output.contains("页眉：\n┌──────┐\n│ 标题 │\n└──────┘"));
-    assert!(output.contains("侧栏：\n┌──────────┐\n│ 展开侧栏 │\n└──────────┘"));
-    assert!(!output.contains("收起侧栏："));
-    assert!(output.contains("弹窗：\n┌──────────┐\n│ 弹窗内容 │\n└──────────┘"));
-    assert!(output.contains("页脚：\n┌──────┐\n│ 页尾 │\n└──────┘"));
-    assert!(output.contains("正文：\n正文"), "正文自身不增加区域边框");
+    assert!(output.contains("┌──────┐\n│ 标题 │\n└──────┘"));
+    assert!(output.contains("┌──────────┐\n│ 展开侧栏 │\n└──────────┘"));
+    assert!(!output.contains("侧栏："));
+    assert!(output.contains("┌──────────┐\n│ 弹窗内容 │\n└──────────┘"));
+    assert!(output.contains("┌──────┐\n│ 页尾 │\n└──────┘"));
+    assert!(!output.contains("页眉："));
+    assert!(!output.contains("弹窗："));
+    assert!(!output.contains("页脚："));
+    assert!(output.contains(&format!("{}\n正文", "=".repeat(80))));
+    assert!(!output.contains("正文："));
+    assert!(!output.contains("操作："));
     assert!(!output.contains("== Regions =="), "不显示 Passage 标题");
     assert!(
-        output.find("侧栏：").unwrap() < output.find("正文：").unwrap(),
+        output.find("│ 展开侧栏 │").unwrap() < output.find("\n正文\n").unwrap(),
         "侧栏应显示在正文上方"
     );
 
@@ -312,8 +319,8 @@ fn auxiliary_regions_are_bordered_and_sidebar_variants_are_exclusive() {
     let mut stowed_output: Vec<u8> = Vec::new();
     write_frame(&mut stowed_output, &stowed).unwrap();
     let stowed_output: String = String::from_utf8(stowed_output).unwrap();
-    assert!(!stowed_output.contains("\n侧栏："));
-    assert!(stowed_output.contains("收起侧栏：\n┌──────────┐\n│ 收起侧栏 │\n└──────────┘"));
+    assert!(!stowed_output.contains("侧栏："));
+    assert!(stowed_output.contains("┌──────────┐\n│ 收起侧栏 │\n└──────────┘"));
 }
 
 #[test]

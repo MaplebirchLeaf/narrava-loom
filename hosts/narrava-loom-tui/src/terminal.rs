@@ -2,6 +2,10 @@
 
 use crate::renderer::panel_lines;
 use crate::{TuiCommand, TuiFrame, TuiInput, TuiInteraction, TuiOperation, TuiSidebarMode};
+use terminal_size::{Width, terminal_size};
+
+const FALLBACK_TERMINAL_WIDTH: usize = 80;
+const MINIMUM_DIVIDER_WIDTH: usize = 8;
 use std::{
     fmt,
     io::{self, BufRead, Write},
@@ -76,23 +80,33 @@ where
 
 /// 打印一帧完整终端画面。空区域不会制造无意义标题。
 pub fn write_frame(writer: &mut impl Write, frame: &TuiFrame) -> io::Result<()> {
-    write_bordered_region(writer, "页眉", &frame.header)?;
+    let terminal_width: usize = terminal_size()
+        .map(|(Width(width), _)| usize::from(width))
+        .unwrap_or(FALLBACK_TERMINAL_WIDTH);
+    let section_divider: String = "=".repeat(terminal_width.max(MINIMUM_DIVIDER_WIDTH));
+    let group_divider: String = "-".repeat(terminal_width.max(MINIMUM_DIVIDER_WIDTH));
+    write_bordered_region(writer, &frame.header)?;
     match frame.sidebar_mode {
-        TuiSidebarMode::Expanded => write_bordered_region(writer, "侧栏", &frame.bar)?,
-        TuiSidebarMode::Stowed => write_bordered_region(writer, "收起侧栏", &frame.bar_stowed)?,
+        TuiSidebarMode::Expanded => write_bordered_region(writer, &frame.bar)?,
+        TuiSidebarMode::Stowed => write_bordered_region(writer, &frame.bar_stowed)?,
     }
-    write_region(writer, "正文", &frame.main)?;
-    write_region(writer, "弹窗", &frame.dialog)?;
-    write_bordered_region(writer, "页脚", &frame.footer)?;
+    if !frame.main.is_empty() {
+        writeln!(writer, "\n{section_divider}")?;
+    }
+    write_region(writer, &frame.main)?;
+    write_region(writer, &frame.dialog)?;
+    write_bordered_region(writer, &frame.footer)?;
+    writeln!(writer, "\n{section_divider}")?;
     if frame.interactions.is_empty() {
-        writeln!(writer, "\n（当前没有可操作项；输入 help 查看命令）")?;
+        writeln!(writer, "（当前没有可操作项；输入 help 查看命令）")?;
     } else {
-        writeln!(writer, "\n操作：")?;
         let mut group: &str = "";
         for (index, interaction) in frame.interactions.iter().enumerate() {
             if interaction.group != group {
+                if !group.is_empty() {
+                    writeln!(writer, "{group_divider}")?;
+                }
                 group = interaction.group.as_str();
-                writeln!(writer, "  {group}：")?;
             }
             writeln!(
                 writer,
@@ -106,9 +120,8 @@ pub fn write_frame(writer: &mut impl Write, frame: &TuiFrame) -> io::Result<()> 
     Ok(())
 }
 
-fn write_region(writer: &mut impl Write, name: &str, lines: &[String]) -> io::Result<()> {
+fn write_region(writer: &mut impl Write, lines: &[String]) -> io::Result<()> {
     if !lines.is_empty() {
-        writeln!(writer, "\n{name}：")?;
         for line in lines {
             writeln!(writer, "{line}")?;
         }
@@ -116,11 +129,11 @@ fn write_region(writer: &mut impl Write, name: &str, lines: &[String]) -> io::Re
     Ok(())
 }
 
-fn write_bordered_region(writer: &mut impl Write, name: &str, lines: &[String]) -> io::Result<()> {
+fn write_bordered_region(writer: &mut impl Write, lines: &[String]) -> io::Result<()> {
     if lines.is_empty() {
         return Ok(());
     }
-    writeln!(writer, "\n{name}：")?;
+    writeln!(writer)?;
     for line in panel_lines(lines.to_vec()) {
         writeln!(writer, "{line}")?;
     }
