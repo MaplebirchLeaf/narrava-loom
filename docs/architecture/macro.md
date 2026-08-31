@@ -304,7 +304,7 @@ Runtime 逻辑分派现已直接识别 HIR 的 `Run`、`Set`、`Unset`、`Includ
 
 小写 `<<for target range start to end>>` 与可选的 `step amount` 也已接入。Range 包含终点；起点、终点和步长只求值一次。默认步长根据方向选择 `1` 或 `-1`，显式步长必须是有限、非零且朝终点移动的 Number。
 
-Text 与 `silently` 已进入 Host-neutral Surface 边界。`link` 已有 Navigation 语义，并能将容器正文原子登记到延迟动作所有权容器；Host 已能在同一检查点内执行同步或异步正文并导航。正文输出不做瞬时呈现，主要用于 State 与逻辑副作用；`button` 复用同一延迟正文语义，只要求 Host 呈现为按钮角色。`slot`／`replace` 已提供跨 Host 的稳定 Key 区域替换；`print` Macro 的 `delay` 只规定内容在到期前不可见，不规定动画（见 [/docs/reference/api-and-syntax.md](/docs/reference/api-and-syntax.md)）。`choice` 后续只有在形成不同于 `link` 的稳定跨 Host 语义时才扩展。
+Text 与 `silently` 已进入 Host-neutral Surface 边界。`link` 已有 Navigation 语义，并能将容器正文原子登记到延迟动作所有权容器；Host 已能在同一检查点内执行同步或异步正文并导航。正文输出不做瞬时呈现，主要用于 State 与逻辑副作用；`button` 复用同一延迟正文语义，只要求 Host 呈现为按钮角色。`slot`／`replace` 已提供跨 Host 的稳定 Key 区域替换；`slot` 的可选 `panel` 是 Protocol 标准内容分组语义，具体方框或 card 属于 Host。`print` Macro 的 `delay` 只规定内容在到期前不可见，不规定动画（见 [/docs/reference/api-and-syntax.md](/docs/reference/api-and-syntax.md)）。`choice` 后续只有在形成不同于 `link` 的稳定跨 Host 语义时才扩展。
 
 ## Capture
 
@@ -334,7 +334,7 @@ HIR 已使用专用 Capture 节点保存有序且不重复的局部变量名与�
 | `goto` | Runtime 已实现 | 否 | 请求导航并结束当前 Passage 后续执行 |
 | `print` | Runtime 已实现 | 否 | 求值 Expression 或输出反引号字面文本，产生语义 Text |
 | `silently` | Runtime 已实现 | 否 | 保留正文副作用与控制信号，丢弃本块 Surface 输出 |
-| `slot` | Runtime 与 Host 已实现 | 否 | 建立带稳定 Surface Key 的普通内容容器 |
+| `slot` | Runtime 与 Host 已实现 | 否 | 建立带稳定 Surface Key 的内容容器；可选 `plain`／`panel` 表现 |
 | `replace` | Runtime 与 Host 已实现 | 否 | 替换固定 Region 或已存在的稳定 Key |
 | `link` | Runtime 与 Host 已实现 | 否 | 产生导航；激活后执行容器正文并进入目标 Passage |
 | `button` | Runtime 与 Host 已实现 | 否 | 使用按钮角色呈现同一延迟正文导航语义 |

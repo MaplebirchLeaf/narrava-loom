@@ -159,12 +159,12 @@ Runtime 用 `BodyExecution` 同时返回 `BodyControl` 和有序 `Surface`。当
 
 - Text、HardBreak，以及可组合的 StyledText（`TextStyle + TextColor`、可见延迟 `delay`、结构性 `heading`）；
 - Image 与 Region（Header／Main／Footer／Bar／BarStowed／Dialog）；
-- Container 与 Replace（稳定 Surface Key）；
+- Container 与 Replace（稳定 Surface Key；Container 支持透明 `plain` 与独立面板 `panel`）；
 - Component（capability、properties 与 fallback）与 Dismiss Action；
 - 状态绑定 Input（checkbox／radiobutton／textbox）；
 - Navigation 与 SafeReturn。
 
-Native Twee 正文整体产生字面 Text，`$name` 与 `${expression}` 都没有自动求值特权。固有 `print` Macro 已显式产生动态或反引号字面 Text；include 与 Widget 的输出进入同一有序执行链。`silently` 使用隔离输出缓冲区执行正文，保留 State 副作用与 `goto`、`exit` 等控制信号，但丢弃该块产生的语义输出。
+Native Twee 正文整体产生字面 Text，`$name` 与 `${expression}` 都没有自动求值特权。固有 `print` Macro 已显式产生动态或反引号字面 Text；普通 include 与 Widget 调用在源码调用位置进入同一有序执行链，不会统一移到 Passage 尾部。Reaction 的 widget/include 则在对应安全点按规则提交顺序追加；lifecycle Reaction 位于正文之前，事件／状态 Reaction 通常位于当时已经累计的输出之后。`silently` 使用隔离输出缓冲区执行正文，保留 State 副作用与 `goto`、`exit` 等控制信号，但丢弃该块产生的语义输出。
 
 普通 Passage 完成后若没有作者 Navigation，Engine 可以追加指向最近安全 history 项的 SafeReturn。Core 只规定动作语义和目标；文字、布局以及按钮、链接、3D 对象或 TUI 选项等表现由 Host 决定。
 

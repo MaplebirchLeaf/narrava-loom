@@ -60,7 +60,13 @@ impl From<&SurfaceNode> for SemanticNode {
                 region: region.clone(),
                 content: SemanticOutput::from(content),
             },
-            SurfaceNode::Container { content } => SemanticNode::Container {
+            SurfaceNode::Container {
+                presentation,
+                flow,
+                content,
+            } => SemanticNode::Container {
+                presentation: *presentation,
+                flow: *flow,
                 content: SemanticOutput::from(content),
             },
             SurfaceNode::Component {

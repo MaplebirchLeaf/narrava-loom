@@ -2255,6 +2255,7 @@ dependencies = [
  "narrava-loom-protocol",
  "narrava-loom-script",
  "serde_json",
+ "unicode-width",
 ]
 
 [[package]]

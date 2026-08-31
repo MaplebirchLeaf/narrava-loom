@@ -24,7 +24,10 @@ use serde::Serialize;
 
 pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
 pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
-pub use narrava_loom_protocol::{HostErrorDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
+pub use narrava_loom_protocol::{
+    ContainerFlowDto, ContainerPresentationDto, HostErrorDto, HostNodeDto, HostReplaceTargetDto,
+    HostUpdateDto,
+};
 
 use package::{load_release_package, load_tauri_config};
 

@@ -68,8 +68,10 @@ Component。Tauri 再决定 DOM、CSS、Dialog 布局和更新算法。
 的输入语义：Core 提供 opaque group ID，WebView 映射为 HTML `name`，TUI 可映射为自己的
 RadioGroup。
 
-普通 Key 由 `slot` 容器显式建立。Tauri 把 slot 映射为无额外视觉样式的稳定 DOM 容器；空 slot
-也会保留目标节点，随后由 `replace` 更新其子节点。
+普通 Key 由 `slot` 容器显式建立。Tauri 把默认 `plain` slot 映射为无额外视觉样式的稳定
+DOM 容器，把 `panel` 映射为由 Host 主题控制的 section/card；空 slot 也会保留目标节点，
+随后由 `replace` 更新其子节点而不丢失容器表现。连续 `row` panel 可同行并自然换行，Host
+主题在相邻面板间留出间距；该组结束后的普通正文恢复为块级流，从下一行开始。
 
 Runtime Worker 使用 Boa 执行游戏 `.js`，并先通过 Oxc 去除 `.ts` 类型；游戏脚本不会进入
 WebView。默认 locale 在加载时注入脚本环境；Resource 只注入原生只读 adapter，启动配置不再

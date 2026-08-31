@@ -264,6 +264,26 @@ pub enum NavigationRole {
     Button,
 }
 
+/// 普通内容容器的宿主无关表现；不规定边框、圆角、间距或尺寸。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ContainerPresentation {
+    /// 透明分组，只提供稳定身份与替换边界。
+    #[default]
+    Plain,
+    /// 与相邻正文形成感知边界的独立内容面板。
+    Panel,
+}
+
+/// 内容容器在同级正文中的宿主无关排列方式。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ContainerFlow {
+    /// 独占一行或一列，是向后兼容的默认排列。
+    #[default]
+    Stack,
+    /// 与连续的同类容器共同填充一行；空间处理由 Host 决定。
+    Row,
+}
+
 /// 状态绑定输入控件的宿主无关种类。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SemanticInputKind {
@@ -415,6 +435,8 @@ pub enum SemanticNode {
     },
     /// 由稳定 key 标识、可被后续 `replace` 定位的普通内容容器。
     Container {
+        presentation: ContainerPresentation,
+        flow: ContainerFlow,
         content: SemanticOutput,
     },
     Component {
@@ -526,7 +548,7 @@ impl SemanticOutput {
         self.nodes.iter().any(|node: &SemanticNode| match node {
             SemanticNode::Navigation { .. } => true,
             SemanticNode::Region { content, .. }
-            | SemanticNode::Container { content }
+            | SemanticNode::Container { content, .. }
             | SemanticNode::Replace { content, .. } => content.has_navigation(),
             SemanticNode::Component { fallback, .. } => fallback.has_navigation(),
             _ => false,
@@ -548,7 +570,7 @@ impl SemanticOutput {
                     target,
                 } if candidate == id => Some(target.as_str()),
                 SemanticNode::Region { content, .. }
-                | SemanticNode::Container { content }
+                | SemanticNode::Container { content, .. }
                 | SemanticNode::Replace { content, .. } => content.interaction_target(id),
                 SemanticNode::Component { fallback, .. } => fallback.interaction_target(id),
                 _ => None,
@@ -565,7 +587,7 @@ impl SemanticOutput {
                     binding,
                 } if candidate == id => Some(binding),
                 SemanticNode::Region { content, .. } => content.input_binding(id),
-                SemanticNode::Container { content } => content.input_binding(id),
+                SemanticNode::Container { content, .. } => content.input_binding(id),
                 SemanticNode::Replace { content, .. } => content.input_binding(id),
                 SemanticNode::Component { fallback, .. } => fallback.input_binding(id),
                 _ => None,

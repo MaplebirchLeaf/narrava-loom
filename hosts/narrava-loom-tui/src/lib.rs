@@ -5,13 +5,18 @@
 //! `delay_ms` 之后用 `render_at` 重新渲染。
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     io::{self, BufRead, Write},
 };
 
-use narrava_loom_core::semantic::{HeadingLevel, NavigationRole, RegionId, TextColor, TextStyle};
-use narrava_loom_protocol::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
+use narrava_loom_core::semantic::{
+    ContainerFlow, ContainerPresentation, HeadingLevel, NavigationRole, RegionId, TextColor,
+    TextStyle,
+};
+use narrava_loom_protocol::{
+    ContainerFlowDto, ContainerPresentationDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto,
+};
 use narrava_loom_script::protocol_adapter::{
     Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
 };
@@ -39,6 +44,8 @@ pub enum TuiInput {
 /// `id` 为 `None` 的动作（如 dismiss）没有可回传的身份。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TuiInteraction {
+    /// 终端操作列表中的来源分组；仅影响 Host 展示，不参与回传身份。
+    pub group: String,
     /// Core 交互身份；`None` 表示纯客户端动作。
     pub id: Option<String>,
     /// 展示给玩家的动作文本。
@@ -57,6 +64,7 @@ pub enum TuiCommand {
     Help,
     Back,
     Forward,
+    ToggleSidebar,
     Redraw,
     Quit,
 }
@@ -76,6 +84,9 @@ impl TuiCommand {
         }
         if matches!(trimmed, "f" | "forward") {
             return Ok(Self::Forward);
+        }
+        if matches!(trimmed, "s" | "sidebar") {
+            return Ok(Self::ToggleSidebar);
         }
         if matches!(trimmed, "q" | "quit" | "exit") {
             return Ok(Self::Quit);
@@ -120,6 +131,7 @@ impl TuiCommand {
             Self::Help => Ok(TuiOperation::Help),
             Self::Back => Ok(TuiOperation::Back),
             Self::Forward => Ok(TuiOperation::Forward),
+            Self::ToggleSidebar => Ok(TuiOperation::ToggleSidebar),
             Self::Redraw => Ok(TuiOperation::Redraw),
             Self::Quit => Ok(TuiOperation::Quit),
         }
@@ -135,6 +147,7 @@ pub enum TuiOperation {
     Help,
     Back,
     Forward,
+    ToggleSidebar,
     Redraw,
     Quit,
 }
@@ -259,6 +272,11 @@ where
                 write_frame(writer, &frame)?;
                 continue;
             }
+            TuiOperation::ToggleSidebar => {
+                frame.sidebar_mode = frame.sidebar_mode.toggled();
+                write_frame(writer, &frame)?;
+                continue;
+            }
             operation => match dispatch(operation) {
                 Ok(Some(next)) => {
                     frame = next;
@@ -274,20 +292,27 @@ where
 /// 打印一帧完整终端画面。空区域不会制造无意义标题。
 pub fn write_frame(writer: &mut impl Write, frame: &TuiFrame) -> io::Result<()> {
     writeln!(writer, "\n== {} ==", frame.current)?;
-    write_region(writer, "页眉", &frame.header)?;
+    write_bordered_region(writer, "页眉", &frame.header)?;
     write_region(writer, "正文", &frame.main)?;
-    write_region(writer, "侧栏", &frame.bar)?;
-    write_region(writer, "收起侧栏", &frame.bar_stowed)?;
+    match frame.sidebar_mode {
+        TuiSidebarMode::Expanded => write_bordered_region(writer, "侧栏", &frame.bar)?,
+        TuiSidebarMode::Stowed => write_bordered_region(writer, "收起侧栏", &frame.bar_stowed)?,
+    }
     write_region(writer, "弹窗", &frame.dialog)?;
-    write_region(writer, "页脚", &frame.footer)?;
+    write_bordered_region(writer, "页脚", &frame.footer)?;
     if frame.interactions.is_empty() {
         writeln!(writer, "\n（当前没有可操作项；输入 help 查看命令）")?;
     } else {
         writeln!(writer, "\n操作：")?;
+        let mut group: &str = "";
         for (index, interaction) in frame.interactions.iter().enumerate() {
+            if interaction.group != group {
+                group = interaction.group.as_str();
+                writeln!(writer, "  {group}：")?;
+            }
             writeln!(
                 writer,
-                "  {}. {} {}",
+                "    {}. {} {}",
                 index + 1,
                 interaction.label,
                 interaction_hint(interaction)
@@ -303,6 +328,17 @@ fn write_region(writer: &mut impl Write, name: &str, lines: &[String]) -> io::Re
         for line in lines {
             writeln!(writer, "{line}")?;
         }
+    }
+    Ok(())
+}
+
+fn write_bordered_region(writer: &mut impl Write, name: &str, lines: &[String]) -> io::Result<()> {
+    if lines.is_empty() {
+        return Ok(());
+    }
+    writeln!(writer, "\n{name}：")?;
+    for line in panel_lines(lines.to_vec()) {
+        writeln!(writer, "{line}")?;
     }
     Ok(())
 }
@@ -323,16 +359,79 @@ fn write_help(writer: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(writer, "  set <序号> <文字>   修改文本框；空文字也允许")?;
     writeln!(writer, "  redraw              重绘当前画面")?;
+    writeln!(writer, "  sidebar             切换侧栏展开／收起")?;
     writeln!(writer, "  help                显示本帮助")?;
     writeln!(writer, "  quit                退出")
 }
 
-/// 区域内的一个行文本块；`key` 为 `None` 时只能整块替换，为 `Some` 时可被
-/// Replace 按 key 局部覆盖。
+/// TUI 对 Protocol 内容分组语义的本地映射。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum TuiBlockPresentation {
+    #[default]
+    Plain,
+    Panel,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum TuiBlockFlow {
+    #[default]
+    Stack,
+    Row,
+}
+
+impl From<ContainerFlow> for TuiBlockFlow {
+    fn from(value: ContainerFlow) -> Self {
+        match value {
+            ContainerFlow::Stack => Self::Stack,
+            ContainerFlow::Row => Self::Row,
+        }
+    }
+}
+
+impl From<ContainerFlowDto> for TuiBlockFlow {
+    fn from(value: ContainerFlowDto) -> Self {
+        match value {
+            ContainerFlowDto::Stack => Self::Stack,
+            ContainerFlowDto::Row => Self::Row,
+        }
+    }
+}
+
+impl TuiBlockPresentation {
+    fn render(self, lines: Vec<String>) -> Vec<String> {
+        match self {
+            Self::Plain => lines,
+            Self::Panel => panel_lines(lines),
+        }
+    }
+}
+
+impl From<ContainerPresentation> for TuiBlockPresentation {
+    fn from(value: ContainerPresentation) -> Self {
+        match value {
+            ContainerPresentation::Plain => Self::Plain,
+            ContainerPresentation::Panel => Self::Panel,
+        }
+    }
+}
+
+impl From<ContainerPresentationDto> for TuiBlockPresentation {
+    fn from(value: ContainerPresentationDto) -> Self {
+        match value {
+            ContainerPresentationDto::Plain => Self::Plain,
+            ContainerPresentationDto::Panel => Self::Panel,
+        }
+    }
+}
+
+/// 区域内的一个行文本块；保留 key 与表现语义，使 Replace 只更新内容。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct TuiBlock {
     key: Option<String>,
+    presentation: TuiBlockPresentation,
+    flow: TuiBlockFlow,
     lines: Vec<String>,
+    page_title: Option<String>,
 }
 
 /// 单个区域下按出现顺序排列的文本块集合。
@@ -342,12 +441,55 @@ struct TuiSurface {
 }
 
 impl TuiSurface {
-    /// 按块顺序拼接全部行。
+    /// 按块顺序输出；连续 Panel 横向拼成同一组终端行。
     fn lines(&self) -> Vec<String> {
-        self.blocks
-            .iter()
-            .flat_map(|block| block.lines.iter().cloned())
-            .collect()
+        Self::lines_for(&self.blocks)
+    }
+
+    fn lines_for(blocks: &[TuiBlock]) -> Vec<String> {
+        let mut lines: Vec<String> = Vec::new();
+        let mut index: usize = 0;
+        while index < blocks.len() {
+            if blocks[index].presentation == TuiBlockPresentation::Plain
+                || blocks[index].flow == TuiBlockFlow::Stack
+            {
+                lines.extend(blocks[index].lines.iter().cloned());
+                index += 1;
+                continue;
+            }
+            let start: usize = index;
+            while index < blocks.len()
+                && blocks[index].presentation == TuiBlockPresentation::Panel
+                && blocks[index].flow == TuiBlockFlow::Row
+            {
+                index += 1;
+            }
+            lines.extend(join_panel_blocks(&blocks[start..index]));
+        }
+        lines
+    }
+
+    /// Tauri 用页签切换 Dialog；TUI 没有页签，因此把每个标题页呈现为独立面板。
+    fn dialog_lines(&self) -> Vec<String> {
+        let mut pages: Vec<&[TuiBlock]> = Vec::new();
+        let mut start: usize = 0;
+        for index in 1..self.blocks.len() {
+            if self.blocks[index].page_title.is_some() {
+                pages.push(&self.blocks[start..index]);
+                start = index;
+            }
+        }
+        if start < self.blocks.len() {
+            pages.push(&self.blocks[start..]);
+        }
+        let mut lines: Vec<String> = Vec::new();
+        for page in pages {
+            if !lines.is_empty() {
+                lines.push(String::new());
+            }
+            lines.extend(panel_lines(Self::lines_for(page)));
+        }
+        lines
     }
 
     /// 用新行替换首个匹配 key 的块；找不到匹配时返回 `false`。
@@ -359,7 +501,7 @@ impl TuiSurface {
         else {
             return false;
         };
-        block.lines = lines.to_vec();
+        block.lines = block.presentation.render(lines.to_vec());
         true
     }
 }
@@ -373,6 +515,23 @@ pub struct TuiDelayedText {
     pub lines: Vec<String>,
     /// 到达显示时刻前还需等待的毫秒数。
     pub delay_ms: u64,
+}
+
+/// TUI 侧栏当前显示状态；两套 Region 内容始终保留，但只呈现其中一套。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TuiSidebarMode {
+    #[default]
+    Expanded,
+    Stowed,
+}
+
+impl TuiSidebarMode {
+    fn toggled(self) -> Self {
+        match self {
+            Self::Expanded => Self::Stowed,
+            Self::Stowed => Self::Expanded,
+        }
+    }
 }
 
 /// 一帧静态可打印画面：按区域拆分的行文本、可触发动作与尚未到时的延迟文本。
@@ -390,6 +549,8 @@ pub struct TuiFrame {
     pub bar: Vec<String>,
     /// 收起状态的侧栏区域。
     pub bar_stowed: Vec<String>,
+    /// 决定当前呈现 `bar` 还是 `bar-stowed`；两者不会同时显示。
+    pub sidebar_mode: TuiSidebarMode,
     /// 弹窗区域。
     pub dialog: Vec<String>,
     /// Host 不认识的开放区域；按逻辑 RegionId 原名保留，绝不静默丢弃。
@@ -410,9 +571,16 @@ pub struct TuiRenderer {
     interactions: Vec<TuiInteraction>,
     /// 本帧停放、尚未到时的延迟文本。
     delayed: Vec<TuiDelayedText>,
+    /// TUI 本地侧栏状态，不进入 Core 或 Protocol。
+    sidebar_mode: TuiSidebarMode,
 }
 
 impl TuiRenderer {
+    /// 在两套作者提供的侧栏内容之间切换；不会修改 Runtime Surface。
+    pub fn toggle_sidebar(&mut self) {
+        self.sidebar_mode = self.sidebar_mode.toggled();
+    }
+
     /// 直接渲染 Runtime Protocol DTO；Native Host 不需要回借 Core `HostUpdate`。
     pub fn render_update(&mut self, update: &HostUpdateDto) -> TuiFrame {
         self.surfaces.clear();
@@ -423,7 +591,18 @@ impl TuiRenderer {
     }
 
     fn render_dto_nodes(&mut self, region: &str, nodes: &[HostNodeDto], elapsed_ms: u64) {
+        let mut interaction_group: String = region_group(region);
         for node in nodes {
+            if region == "dialog"
+                && let HostNodeDto::StyledText {
+                    text,
+                    heading: Some(_),
+                    ..
+                } = node
+            {
+                interaction_group = format!("弹窗 · {}", text.trim());
+            }
+            let interaction_start: usize = self.interactions.len();
             match node {
                 HostNodeDto::Region { region, nodes, .. } => {
                     self.render_dto_nodes(region, nodes, elapsed_ms);
@@ -433,7 +612,13 @@ impl TuiRenderer {
                     match target {
                         HostReplaceTargetDto::Region(target) => {
                             self.surfaces.entry(target.clone()).or_default().blocks =
-                                vec![TuiBlock { key: None, lines }];
+                                vec![TuiBlock {
+                                    key: None,
+                                    presentation: TuiBlockPresentation::Plain,
+                                    flow: TuiBlockFlow::Stack,
+                                    lines,
+                                    page_title: None,
+                                }];
                         }
                         HostReplaceTargetDto::Key(target) => {
                             for surface in self.surfaces.values_mut() {
@@ -457,19 +642,45 @@ impl TuiRenderer {
                     }
                 }
                 _ => {
-                    let lines: Vec<String> = render_dto_node(node, &mut self.interactions);
-                    if !lines.is_empty() {
+                    let (lines, presentation, flow): (
+                        Vec<String>,
+                        TuiBlockPresentation,
+                        TuiBlockFlow,
+                    ) = match node {
+                        HostNodeDto::Container {
+                            presentation,
+                            flow,
+                            nodes,
+                            ..
+                        } => {
+                            let presentation: TuiBlockPresentation = (*presentation).into();
+                            let flow: TuiBlockFlow = (*flow).into();
+                            let lines: Vec<String> =
+                                render_dto_content(nodes, &mut self.interactions);
+                            (presentation.render(lines), presentation, flow)
+                        }
+                        _ => (
+                            render_dto_node(node, &mut self.interactions),
+                            TuiBlockPresentation::Plain,
+                            TuiBlockFlow::Stack,
+                        ),
+                    };
+                    if !lines.is_empty() || matches!(node, HostNodeDto::Container { .. }) {
                         self.surfaces
                             .entry(region.to_owned())
                             .or_default()
                             .blocks
                             .push(TuiBlock {
                                 key: Some(dto_key(node).to_owned()),
+                                presentation,
+                                flow,
                                 lines,
+                                page_title: dto_page_title(node),
                             });
                     }
                 }
             }
+            self.label_new_interactions(interaction_start, &interaction_group);
         }
     }
 
@@ -490,7 +701,18 @@ impl TuiRenderer {
 
     /// 递归渲染输出树：Region 下钻、Replace 就地覆盖、未到时的延迟文本停放。
     fn render_output(&mut self, region: RegionId, output: &Surface, elapsed_ms: u64) {
+        let mut interaction_group: String = region_group(region.as_str());
         for (index, node) in output.nodes().iter().enumerate() {
+            if region == RegionId::dialog()
+                && let SurfaceNode::StyledText {
+                    text,
+                    heading: Some(_),
+                    ..
+                } = node
+            {
+                interaction_group = format!("弹窗 · {}", unicode(text).trim());
+            }
+            let interaction_start: usize = self.interactions.len();
             let key = output.key(index).map(|key| key.as_str().to_owned());
             match node {
                 SurfaceNode::Region { region, content } => {
@@ -500,7 +722,13 @@ impl TuiRenderer {
                     let lines = render_content(content, &mut self.interactions);
                     match target {
                         SurfaceTarget::Region(target) => {
-                            self.surface_mut(target).blocks = vec![TuiBlock { key: None, lines }];
+                            self.surface_mut(target).blocks = vec![TuiBlock {
+                                key: None,
+                                presentation: TuiBlockPresentation::Plain,
+                                flow: TuiBlockFlow::Stack,
+                                lines,
+                                page_title: None,
+                            }];
                         }
                         SurfaceTarget::Key(target) => {
                             for surface in self.surfaces.values_mut() {
@@ -524,13 +752,47 @@ impl TuiRenderer {
                     }
                 }
                 _ => {
-                    let lines = render_node(node, &mut self.interactions);
-                    if !lines.is_empty() {
-                        self.surface_mut(&region)
-                            .blocks
-                            .push(TuiBlock { key, lines });
+                    let (lines, presentation, flow): (
+                        Vec<String>,
+                        TuiBlockPresentation,
+                        TuiBlockFlow,
+                    ) = match node {
+                        SurfaceNode::Container {
+                            presentation,
+                            flow,
+                            content,
+                        } => {
+                            let presentation: TuiBlockPresentation = (*presentation).into();
+                            let flow: TuiBlockFlow = (*flow).into();
+                            let lines: Vec<String> =
+                                render_content(content, &mut self.interactions);
+                            (presentation.render(lines), presentation, flow)
+                        }
+                        _ => (
+                            render_node(node, &mut self.interactions),
+                            TuiBlockPresentation::Plain,
+                            TuiBlockFlow::Stack,
+                        ),
+                    };
+                    if !lines.is_empty() || matches!(node, SurfaceNode::Container { .. }) {
+                        self.surface_mut(&region).blocks.push(TuiBlock {
+                            key,
+                            presentation,
+                            flow,
+                            lines,
+                            page_title: surface_page_title(node),
+                        });
                     }
                 }
+            }
+            self.label_new_interactions(interaction_start, &interaction_group);
+        }
+    }
+
+    fn label_new_interactions(&mut self, start: usize, group: &str) {
+        for interaction in &mut self.interactions[start..] {
+            if interaction.group.is_empty() {
+                interaction.group = group.to_owned();
             }
         }
     }
@@ -542,6 +804,23 @@ impl TuiRenderer {
 
     /// 把当前缓冲整理为一帧可打印画面。
     fn frame(&self, current: &str) -> TuiFrame {
+        let mut seen_interactions: BTreeSet<&str> = BTreeSet::new();
+        let hidden_sidebar_group: &str = match self.sidebar_mode {
+            TuiSidebarMode::Expanded => "收起侧栏",
+            TuiSidebarMode::Stowed => "侧栏",
+        };
+        let interactions: Vec<TuiInteraction> = self
+            .interactions
+            .iter()
+            .filter(|interaction| interaction.group != hidden_sidebar_group)
+            .filter(|interaction| {
+                interaction
+                    .id
+                    .as_deref()
+                    .is_none_or(|id| seen_interactions.insert(id))
+            })
+            .cloned()
+            .collect();
         TuiFrame {
             current: current.to_owned(),
             header: self.lines(RegionId::header()),
@@ -549,14 +828,18 @@ impl TuiRenderer {
             footer: self.lines(RegionId::footer()),
             bar: self.lines(RegionId::bar()),
             bar_stowed: self.lines(RegionId::bar_stowed()),
-            dialog: self.lines(RegionId::dialog()),
+            sidebar_mode: self.sidebar_mode,
+            dialog: self
+                .surfaces
+                .get(RegionId::dialog().as_str())
+                .map_or_else(Vec::new, TuiSurface::dialog_lines),
             custom: self
                 .surfaces
                 .iter()
                 .filter(|(region, _)| !is_standard_region(region))
                 .map(|(region, surface)| (region.clone(), surface.lines()))
                 .collect(),
-            interactions: self.interactions.clone(),
+            interactions,
             delayed: self.delayed.clone(),
         }
     }
@@ -622,10 +905,15 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
                 .map(|value| format!(" — {value}"))
                 .unwrap_or_default()
         )],
-        HostNodeDto::Component { fallback, .. }
-        | HostNodeDto::Container {
-            nodes: fallback, ..
+        HostNodeDto::Container {
+            presentation,
+            nodes,
+            ..
+        } => {
+            let presentation: TuiBlockPresentation = (*presentation).into();
+            presentation.render(render_dto_content(nodes, interactions))
         }
+        HostNodeDto::Component { fallback, .. }
         | HostNodeDto::Region {
             nodes: fallback, ..
         }
@@ -634,6 +922,7 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
         } => render_dto_content(fallback, interactions),
         HostNodeDto::Action { label, action, .. } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: None,
                 label: label.clone(),
                 kind: match action.as_str() {
@@ -652,6 +941,7 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
             ..
         } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: Some(id.clone()),
                 label: if *selected { "[x]" } else { "[ ]" }.to_owned(),
                 kind: "checkbox",
@@ -670,6 +960,7 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
             ..
         } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: Some(id.clone()),
                 label: if *selected { "(o)" } else { "( )" }.to_owned(),
                 kind: "radiobutton",
@@ -682,6 +973,7 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
         }
         HostNodeDto::Textbox { id, value, .. } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: Some(id.clone()),
                 label: format!("[{value}]"),
                 kind: "textbox",
@@ -701,6 +993,80 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
     }
 }
 
+fn panel_lines(lines: Vec<String>) -> Vec<String> {
+    let mut lines: Vec<String> = lines
+        .into_iter()
+        .flat_map(|line| line.split('\n').map(str::to_owned).collect::<Vec<_>>())
+        .collect();
+    while lines.first().is_some_and(|line| line.trim().is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    let width = lines
+        .iter()
+        .map(|line| terminal_width(line))
+        .max()
+        .unwrap_or(0);
+    let mut framed = Vec::with_capacity(lines.len() + 2);
+    framed.push(format!("┌{}┐", "─".repeat(width + 2)));
+    for line in lines {
+        let padding = width.saturating_sub(terminal_width(line.as_str()));
+        framed.push(format!("│ {line}{} │", " ".repeat(padding)));
+    }
+    framed.push(format!("└{}┘", "─".repeat(width + 2)));
+    framed
+}
+
+fn join_panel_blocks(blocks: &[TuiBlock]) -> Vec<String> {
+    let height: usize = blocks
+        .iter()
+        .map(|block| block.lines.len())
+        .max()
+        .unwrap_or(0);
+    (0..height)
+        .map(|row| {
+            blocks
+                .iter()
+                .map(|block| {
+                    let width: usize = block
+                        .lines
+                        .iter()
+                        .map(|line| terminal_width(line))
+                        .max()
+                        .unwrap_or(0);
+                    block
+                        .lines
+                        .get(row)
+                        .cloned()
+                        .unwrap_or_else(|| " ".repeat(width))
+                })
+                .collect::<Vec<String>>()
+                .join(" ")
+        })
+        .collect()
+}
+
+fn terminal_width(line: &str) -> usize {
+    use unicode_width::UnicodeWidthChar;
+
+    let mut width = 0;
+    let mut characters = line.chars();
+    while let Some(character) = characters.next() {
+        if character == '\u{1b}' && matches!(characters.next(), Some('[')) {
+            for control in characters.by_ref() {
+                if control.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+            continue;
+        }
+        width += UnicodeWidthChar::width(character).unwrap_or(0);
+    }
+    width
+}
+
 fn push_dto_action(
     interactions: &mut Vec<TuiInteraction>,
     id: &str,
@@ -708,6 +1074,7 @@ fn push_dto_action(
     kind: &'static str,
 ) -> Vec<String> {
     interactions.push(TuiInteraction {
+        group: String::new(),
         id: Some(id.to_owned()),
         label: label.to_owned(),
         kind,
@@ -784,9 +1151,17 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
                 .unwrap_or_default()
         )],
         SurfaceNode::Component { fallback, .. } => render_content(fallback, interactions),
-        SurfaceNode::Container { content } => render_content(content, interactions),
+        SurfaceNode::Container {
+            presentation,
+            content,
+            ..
+        } => {
+            let presentation: TuiBlockPresentation = (*presentation).into();
+            presentation.render(render_content(content, interactions))
+        }
         SurfaceNode::Action { label, action, .. } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: None,
                 label: unicode(label),
                 kind: match action {
@@ -827,6 +1202,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
                 }
             };
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: Some(id.as_str().to_owned()),
                 label,
                 kind,
@@ -838,6 +1214,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
             id, label, role, ..
         } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: Some(id.as_str().to_owned()),
                 label: unicode(label),
                 kind: match role {
@@ -850,6 +1227,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
         }
         SurfaceNode::SafeReturn { id, target } => {
             interactions.push(TuiInteraction {
+                group: String::new(),
                 id: Some(id.as_str().to_owned()),
                 label: format!("返回 {target}"),
                 kind: "safe-return",
@@ -947,6 +1325,40 @@ fn is_standard_region(region: &str) -> bool {
         region,
         "header" | "main" | "footer" | "bar" | "bar-stowed" | "dialog"
     )
+}
+
+fn region_group(region: &str) -> String {
+    match region {
+        "main" => String::from("正文"),
+        "header" => String::from("页眉"),
+        "footer" => String::from("页脚"),
+        "bar" => String::from("侧栏"),
+        "bar-stowed" => String::from("收起侧栏"),
+        "dialog" => String::from("弹窗"),
+        custom => format!("区域 · {custom}"),
+    }
+}
+
+fn dto_page_title(node: &HostNodeDto) -> Option<String> {
+    match node {
+        HostNodeDto::StyledText {
+            text,
+            heading: Some(_),
+            ..
+        } => Some(text.trim().to_owned()),
+        _ => None,
+    }
+}
+
+fn surface_page_title(node: &SurfaceNode) -> Option<String> {
+    match node {
+        SurfaceNode::StyledText {
+            text,
+            heading: Some(_),
+            ..
+        } => Some(unicode(text).trim().to_owned()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

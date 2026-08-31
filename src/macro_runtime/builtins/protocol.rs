@@ -484,20 +484,35 @@ pub fn replace(target: &str, content: SemanticOutput) -> Result<BodyExecution, D
     })
 }
 
-/// 建立一个由稳定 key 标识的普通内容槽，供后续 `replace` 跨 Host 定位。
-pub fn slot(key: &str, content: SemanticOutput) -> Result<BodyExecution, Diagnostic> {
+/// 建立由稳定 key 标识的内容槽；表现语义由 Host 映射，内容可供后续 `replace` 定位。
+pub fn slot(
+    key: &str,
+    presentation: crate::semantic::ContainerPresentation,
+    flow: crate::semantic::ContainerFlow,
+    content: SemanticOutput,
+) -> Result<BodyExecution, Diagnostic> {
     let key: &str = key.trim();
     if key.is_empty() {
         return Err(slot_error("`slot` key 不能为空"));
     }
-    if matches!(key, "header" | "main" | "footer" | "bar" | "dialog") {
+    if matches!(
+        key,
+        "header" | "main" | "footer" | "bar" | "bar-stowed" | "dialog"
+    ) {
         return Err(slot_error("`slot` key 不能使用保留的 Region 名称"));
     }
     let key =
         crate::semantic::SemanticKey::parse(key).map_err(|_| slot_error("`slot` key 无效"))?;
     let mut output = SemanticOutput::default();
     output
-        .push_keyed(key, SemanticNode::Container { content })
+        .push_keyed(
+            key,
+            SemanticNode::Container {
+                presentation,
+                flow,
+                content,
+            },
+        )
         .map_err(|error| slot_error(&error.to_string()))?;
     Ok(BodyExecution {
         control: BodyControl::Continue,

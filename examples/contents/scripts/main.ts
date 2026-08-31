@@ -278,11 +278,11 @@ Macro.add("dialogDemo", {
         "dialog",
         [
           Surface.text("第一页", { key: "dialog-page-one", heading: 2 }),
-          Surface.text("默认显示第一页。点击标题栏中的页签可以切换内容。"),
+          Surface.text("WebView 用页签切换；TUI 则把这一页单独成框，并把操作归到第一页。"),
           Surface.action("默认按钮", "dismiss", { key: "default-action", role: "default" }),
           Surface.action("主要按钮", "dismiss", { key: "primary-action", role: "primary" }),
           Surface.text("第二页", { key: "dialog-page-two", heading: 2 }),
-          Surface.text("第二页继续展示次要与危险动作。"),
+          Surface.text("第二页独立展示次要与危险动作；TUI 操作编号仍跨页连续。"),
           Surface.action("次要按钮", "dismiss", {
             key: "secondary-action",
             role: "secondary",

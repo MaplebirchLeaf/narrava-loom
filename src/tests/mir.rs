@@ -104,6 +104,57 @@ fn mir_story_owns_the_i18n_catalog_from_the_same_hir() {
 }
 
 #[test]
+fn dynamic_container_body_does_not_shift_following_i18n_identity() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("示例 Source 应可读取");
+    let span = |start: usize, end: usize| Span {
+        start,
+        end,
+        line: 1,
+        column: start + 1,
+    };
+    let hir: HirStory<'_> = HirStory {
+        passages: vec![HirPassage {
+            source: &source.path,
+            name: "Start",
+            tags: Vec::new(),
+            body: vec![
+                HirBodyNode {
+                    kind: HirBodyKind::Macro(HirMacro {
+                        name: "slot",
+                        arguments: HirMacroArguments::Raw("\"status\""),
+                        syntax_kind: MacroSyntaxKind::Container,
+                        body: vec![HirBodyNode {
+                            kind: HirBodyKind::Text("槽内文字"),
+                            span: span(10, 14),
+                        }],
+                    }),
+                    span: span(0, 15),
+                },
+                HirBodyNode {
+                    kind: HirBodyKind::Text("槽后正文"),
+                    span: span(16, 20),
+                },
+            ],
+        }],
+    };
+
+    let mir: MirStory<'_, '_> = MirStory::lower(&hir).expect("Story 应进入 MIR");
+    let MirInstruction::Text {
+        i18n: Some(identity),
+        ..
+    } = &mir.passage("Start").unwrap().instructions()[1]
+    else {
+        panic!("slot 后正文应携带自己的 I18n 身份");
+    };
+
+    assert_eq!(identity.id().as_str(), "p5:Start:body.1");
+}
+
+#[test]
 fn lowers_capture_names_onto_nested_dynamic_macros() {
     let body: Vec<HirBodyNode<'_>> = vec![node(HirBodyKind::Capture(HirCapture {
         locals: vec!["name", "index"],

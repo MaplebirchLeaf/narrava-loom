@@ -119,7 +119,7 @@ pub fn dispatch_macro<'hir, 'source>(
     }
     if matches!(call.name, "replace" | "slot") {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("replace 参数无效：{error:?}"),
+            error: format!("{} 参数无效：{error:?}", call.name),
             scopes: scopes.clone(),
         })?;
         let arguments: Vec<Value> = {
@@ -128,15 +128,32 @@ pub fn dispatch_macro<'hir, 'source>(
                 evaluate_with_mut(expression, &mut context)
             })
             .map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("replace 参数无法求值：{error:?}"),
+                error: format!("{} 参数无法求值：{error:?}", call.name),
                 scopes: scopes.clone(),
             })?
         };
-        let [Value::String(target)] = arguments.as_slice() else {
-            return Err(EngineMirMacroCallbackFailure {
-                error: format!("{} 必须接收一个文字 key", call.name),
-                scopes,
-            });
+        let (target, presentation, flow) = match arguments.as_slice() {
+            [Value::String(target)] => (target, None, None),
+            [Value::String(target), Value::String(presentation)] if call.name == "slot" => {
+                (target, Some(presentation), None)
+            }
+            [
+                Value::String(target),
+                Value::String(presentation),
+                Value::String(flow),
+            ] if call.name == "slot" => (target, Some(presentation), Some(flow)),
+            _ => {
+                return Err(EngineMirMacroCallbackFailure {
+                    error: if call.name == "slot" {
+                        String::from(
+                            "slot 必须接收文字 key、可选的 plain/panel 表现与 stack/row 排列",
+                        )
+                    } else {
+                        String::from("replace 必须接收一个文字目标")
+                    },
+                    scopes,
+                });
+            }
         };
         let target: String =
             target
@@ -145,6 +162,64 @@ pub fn dispatch_macro<'hir, 'source>(
                     error: format!("{} key 必须是有效 Unicode", call.name),
                     scopes: scopes.clone(),
                 })?;
+        let slot_presentation = if call.name == "slot" {
+            let presentation = match presentation {
+                Some(value) => {
+                    value
+                        .to_unicode_string()
+                        .ok_or_else(|| EngineMirMacroCallbackFailure {
+                            error: String::from("slot 表现必须是有效 Unicode"),
+                            scopes: scopes.clone(),
+                        })?
+                }
+                None => String::from("plain"),
+            };
+            Some(match presentation.as_str() {
+                "plain" => narrava_loom_core::semantic::ContainerPresentation::Plain,
+                "panel" => narrava_loom_core::semantic::ContainerPresentation::Panel,
+                _ => {
+                    return Err(EngineMirMacroCallbackFailure {
+                        error: String::from("slot 表现只支持 plain 或 panel"),
+                        scopes,
+                    });
+                }
+            })
+        } else {
+            None
+        };
+        if flow.is_some()
+            && slot_presentation != Some(narrava_loom_core::semantic::ContainerPresentation::Panel)
+        {
+            return Err(EngineMirMacroCallbackFailure {
+                error: String::from("slot 排列参数只适用于 panel"),
+                scopes,
+            });
+        }
+        let slot_flow = if call.name == "slot" {
+            let flow: String = match flow {
+                Some(value) => {
+                    value
+                        .to_unicode_string()
+                        .ok_or_else(|| EngineMirMacroCallbackFailure {
+                            error: String::from("slot 排列必须是有效 Unicode"),
+                            scopes: scopes.clone(),
+                        })?
+                }
+                None => String::from("stack"),
+            };
+            Some(match flow.as_str() {
+                "stack" => narrava_loom_core::semantic::ContainerFlow::Stack,
+                "row" => narrava_loom_core::semantic::ContainerFlow::Row,
+                _ => {
+                    return Err(EngineMirMacroCallbackFailure {
+                        error: String::from("slot 排列只支持 stack 或 row"),
+                        scopes,
+                    });
+                }
+            })
+        } else {
+            None
+        };
         let source_call: &'hir HirMacro<'source> = find_hir_macro(hir, invocation.call)
             .ok_or_else(|| EngineMirMacroCallbackFailure {
                 error: format!("无法从原始 HIR 找回 {} 容器正文", call.name),
@@ -158,7 +233,7 @@ pub fn dispatch_macro<'hir, 'source>(
             runtime.execute_fragment(source_call.body.as_slice())
         }
         .map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("replace 正文执行失败：{error:?}"),
+            error: format!("{} 正文执行失败：{error:?}", call.name),
             scopes: scopes.clone(),
         })?;
         if !matches!(
@@ -171,7 +246,12 @@ pub fn dispatch_macro<'hir, 'source>(
             });
         }
         let execution: BodyExecution = if call.name == "slot" {
-            slot(target.as_str(), body_execution.output)
+            slot(
+                target.as_str(),
+                slot_presentation.expect("slot 分支必须已解析表现语义"),
+                slot_flow.expect("slot 分支必须已解析排列语义"),
+                body_execution.output,
+            )
         } else {
             replace(target.as_str(), body_execution.output)
         }

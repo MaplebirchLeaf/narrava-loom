@@ -114,8 +114,9 @@ passage: {
 | `emit` | 继续派发结构化 Event | 进入同一安全队列并接受循环保护 |
 | `exit` | 在正文前终止当前 Passage | 仅 lifecycle 可用 |
 
-`widget` 与 `include` 不能同时出现。二者未提供 `replace` 时，内容按 Reaction
-提交顺序追加到当前输出：
+`widget` 与 `include` 不能同时出现。二者未提供 `replace` 时，内容在对应 Reaction 安全点按
+提交顺序追加到当前累计输出。lifecycle Reaction 在 Passage 正文前执行，因此形成输出前缀；
+事件与状态 Reaction 则追加在该安全点已经累计的输出之后：
 
 ```ts
 Reaction.add({
@@ -128,7 +129,7 @@ Reaction.add({
 需要更新已有区域时，先在 Twee 中声明稳定目标，再由 Reaction 替换：
 
 ```twee
-<<slot "reputation-panel">>尚无声望消息。<</slot>>
+<<slot "reputation-panel" "panel">>尚无声望消息。<</slot>>
 ```
 
 ```ts

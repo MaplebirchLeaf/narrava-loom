@@ -11,6 +11,7 @@ use narrava_loom_core::{
         SemanticOutput, SemanticTarget, SemanticValue, TextStyle,
     },
 };
+use narrava_loom_protocol::{ContainerFlowDto, ContainerPresentationDto};
 pub use narrava_loom_protocol::{HostNodeDto, HostReplaceTargetDto, HostUpdateDto};
 
 /// 把 Core 的 HostUpdate 转换为 IPC DTO。
@@ -74,9 +75,27 @@ fn convert_output(output: &SemanticOutput, scope: &str) -> Vec<HostNodeDto> {
                     key,
                     region: region.as_str().to_owned(),
                 },
-                SemanticNode::Container { content } => HostNodeDto::Container {
+                SemanticNode::Container {
+                    presentation,
+                    flow,
+                    content,
+                } => HostNodeDto::Container {
                     nodes: convert_output(content, &key),
                     key,
+                    presentation: match presentation {
+                        narrava_loom_core::semantic::ContainerPresentation::Plain => {
+                            ContainerPresentationDto::Plain
+                        }
+                        narrava_loom_core::semantic::ContainerPresentation::Panel => {
+                            ContainerPresentationDto::Panel
+                        }
+                    },
+                    flow: match flow {
+                        narrava_loom_core::semantic::ContainerFlow::Stack => {
+                            ContainerFlowDto::Stack
+                        }
+                        narrava_loom_core::semantic::ContainerFlow::Row => ContainerFlowDto::Row,
+                    },
                 },
                 SemanticNode::Component {
                     capability,

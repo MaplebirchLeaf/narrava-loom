@@ -111,6 +111,8 @@ fn keyed_container_keeps_empty_replace_target_visible_to_hosts() {
         .push_keyed(
             SemanticKey::parse("replace-me").unwrap(),
             SemanticNode::Container {
+                presentation: crate::semantic::ContainerPresentation::Plain,
+                flow: crate::semantic::ContainerFlow::Stack,
                 content: SemanticOutput::default(),
             },
         )
@@ -119,7 +121,7 @@ fn keyed_container_keeps_empty_replace_target_visible_to_hosts() {
     assert_eq!(output.key(0).unwrap().as_str(), "replace-me");
     assert!(matches!(
         output.nodes(),
-        [SemanticNode::Container { content }] if content.is_empty()
+        [SemanticNode::Container { content, .. }] if content.is_empty()
     ));
 }
 

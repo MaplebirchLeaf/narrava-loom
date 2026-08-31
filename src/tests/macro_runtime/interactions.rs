@@ -182,8 +182,13 @@ fn replace_uses_host_neutral_region_or_key_targets() {
 #[test]
 fn slot_creates_a_keyed_container_for_later_replace() {
     let content = SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("初始内容"))]);
-    let execution: BodyExecution =
-        crate::macro_runtime::slot("status-panel", content).expect("有效 key 应建立稳定替换槽");
+    let execution: BodyExecution = crate::macro_runtime::slot(
+        "status-panel",
+        ContainerPresentation::Plain,
+        crate::semantic::ContainerFlow::Stack,
+        content,
+    )
+    .expect("有效 key 应建立稳定替换槽");
 
     assert_eq!(
         execution.output.key(0).map(|key| key.as_str()),
@@ -191,6 +196,40 @@ fn slot_creates_a_keyed_container_for_later_replace() {
     );
     assert!(matches!(
         execution.output.nodes(),
-        [SemanticNode::Container { content }] if content.len() == 1
+        [SemanticNode::Container { presentation: ContainerPresentation::Plain, content, .. }]
+            if content.len() == 1
     ));
+}
+
+#[test]
+fn slot_can_request_a_host_neutral_panel_presentation() {
+    let execution: BodyExecution = crate::macro_runtime::slot(
+        "character-status",
+        ContainerPresentation::Panel,
+        crate::semantic::ContainerFlow::Row,
+        SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("体力：42"))]),
+    )
+    .expect("panel 应是有效的 Slot 表现语义");
+
+    assert!(matches!(
+        execution.output.nodes(),
+        [SemanticNode::Container { presentation: ContainerPresentation::Panel, content, .. }]
+            if content.len() == 1
+    ));
+}
+
+#[test]
+fn slot_rejects_every_standard_region_name_as_a_replace_key() {
+    for region in ["header", "main", "footer", "bar", "bar-stowed", "dialog"] {
+        assert!(
+            crate::macro_runtime::slot(
+                region,
+                ContainerPresentation::Plain,
+                crate::semantic::ContainerFlow::Stack,
+                SemanticOutput::default(),
+            )
+            .is_err(),
+            "{region} 应保留给 Region replace"
+        );
+    }
 }

@@ -71,11 +71,21 @@ Surface 语义由 Core 定义，Runtime 将其转换为 `narrava-loom-protocol`
 - Navigation、SafeReturn 和不触发 Story 导航的 Dismiss Action；
 - 状态绑定 Input（checkbox／radiobutton／textbox），receiver 与允许值由 Core 保留；
 - 版本化 Component capability、纯数据 properties 与必须存在的 fallback；
-- `SurfaceKey` 与普通 Container，供 Host 在更新间复用或替换同一语义节点。
+- `SurfaceKey` 与 Container，供 Host 在更新间复用或替换同一语义节点；Container 的
+  `plain`／`panel` 是 Protocol 标准表现语义，不是 CSS 或可选 capability。
 
-Twee 用 `<<slot "name">>...<</slot>>` 建立普通稳定 Key 容器，再用
+Twee 用 `<<slot "name">>...<</slot>>` 建立视觉透明的稳定 Key 容器，也可用
+`<<slot "name" "panel">>...<</slot>>` 请求独立内容面板。第三参数只接受 `stack`／`row`：
+默认 `stack` 让面板上下排列，连续的 `row` 面板同行排列。随后可用
 `<<replace "name">>...<</replace>>` 替换它。`silently` 会丢弃整块 Surface，因此其中建立的
 slot 不可见也不可替换；需要空目标时直接写 `<<slot "name">><</slot>>`。
+
+Twee 省略第三参数时由 Runtime 显式生成 `stack`；Protocol Container 本身必须携带 `flow`，
+缺失字段属于无效协议数据，不承担未正式发布格式的兼容。
+
+`panel` 只承诺内容组与相邻正文形成感知边界。TUI 可映射为字符方框，Tauri 可映射为
+section/card，Godot 可映射为 `PanelContainer`；边框形状、背景、圆角、阴影、尺寸、间距和
+内部布局始终属于 Host。Protocol 不提供跨平台 CSS/layout 参数。
 
 文本样式共 8 个：emphasis、strong、code、quote、marked、small、inserted、deleted；
 `TextColor` 是 0..=63 的标准调色板索引：0-7 为默认色与灰阶，8-63 为红到深紫的色谱。

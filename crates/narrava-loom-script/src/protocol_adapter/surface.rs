@@ -9,8 +9,8 @@ use std::{collections::BTreeMap, error::Error, fmt};
 use narrava_loom_core::{
     expression::value::TextValue,
     semantic::{
-        ActionRole, ComponentCapability, HeadingLevel, InputGroupId, InteractionId, NavigationRole,
-        RegionId, SemanticKey, TextColor, TextStyle,
+        ActionRole, ComponentCapability, ContainerFlow, ContainerPresentation, HeadingLevel,
+        InputGroupId, InteractionId, NavigationRole, RegionId, SemanticKey, TextColor, TextStyle,
     },
 };
 
@@ -141,6 +141,8 @@ pub enum SurfaceNode {
     },
     /// 由稳定 key 标识、可被后续 `replace` 定位的普通内容容器。
     Container {
+        presentation: ContainerPresentation,
+        flow: ContainerFlow,
         content: Surface,
     },
     Component {
@@ -252,7 +254,7 @@ impl Surface {
         self.nodes.iter().any(|node: &SurfaceNode| match node {
             SurfaceNode::Navigation { .. } => true,
             SurfaceNode::Region { content, .. }
-            | SurfaceNode::Container { content }
+            | SurfaceNode::Container { content, .. }
             | SurfaceNode::Replace { content, .. } => content.has_navigation(),
             SurfaceNode::Component { fallback, .. } => fallback.has_navigation(),
             _ => false,
@@ -272,7 +274,7 @@ impl Surface {
                 target,
             } if candidate == id => Some(target.as_str()),
             SurfaceNode::Region { content, .. }
-            | SurfaceNode::Container { content }
+            | SurfaceNode::Container { content, .. }
             | SurfaceNode::Replace { content, .. } => content.interaction_target(id),
             SurfaceNode::Component { fallback, .. } => fallback.interaction_target(id),
             _ => None,
@@ -287,7 +289,7 @@ impl Surface {
                 binding,
             } if candidate == id => Some(binding),
             SurfaceNode::Region { content, .. } => content.input_binding(id),
-            SurfaceNode::Container { content } => content.input_binding(id),
+            SurfaceNode::Container { content, .. } => content.input_binding(id),
             SurfaceNode::Replace { content, .. } => content.input_binding(id),
             SurfaceNode::Component { fallback, .. } => fallback.input_binding(id),
             _ => None,

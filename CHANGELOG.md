@@ -10,6 +10,10 @@
 - Bootstrap 按职责拆成 TypeScript 模块，由 Bun 在开发期生成单一脚本；发布后的 Boa Runtime 和游戏作者不依赖 Bun；
 - 新增 Native Reaction 注册、索引、Event/State/lifecycle 触发、次数状态、Save 恢复、循环保护与事务回滚；
 - 作者脚本可直接使用 `V`、`T`、`setup` 代理，以及 Event 与 Reaction 的 TypeScript 契约和 VS Code 导航声明。
+- `slot` 新增可选 `panel` 与 `stack`／`row` 标准语义：Protocol 保留容器意图和上下／同行排列，TUI 映射为字符方框，Tauri 映射为主题面板；默认 `plain + stack`；
+- TUI 为页眉、页脚和侧栏增加区域边框，Dialog 按标题页分别成框，操作按正文、页面和侧栏分组；空页眉／页脚仍不显示，`s` 命令在互斥的展开与收起侧栏内容之间切换；
+- TUI 与 Tauri 的同行 panel 之间保留 Host 间距，panel 组后的普通正文从下一行继续；
+- 修正 Reaction widget/include 的追加时机说明与根 README 中已失效的 TUI example 命令。
 
 ### 当前限制
 

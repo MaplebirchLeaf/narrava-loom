@@ -249,14 +249,29 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         .expect("replace 页面应执行");
     assert!(replace_gallery.nodes.iter().any(|node| matches!(
         node,
-        HostNodeDto::Container { key, .. } if key == "status-panel"
+        HostNodeDto::Container { key, presentation, flow, .. }
+            if key == "status-panel"
+                && *presentation == narrava_loom_protocol::ContainerPresentationDto::Panel
+                && *flow == narrava_loom_protocol::ContainerFlowDto::Row
+    )));
+    assert!(replace_gallery.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Container { key, presentation, flow, .. }
+            if key == "location-panel"
+                && *presentation == narrava_loom_protocol::ContainerPresentationDto::Panel
+                && *flow == narrava_loom_protocol::ContainerFlowDto::Row
     )));
     assert!(replace_gallery.nodes.iter().any(|node| matches!(
             node,
             HostNodeDto::Replace { target, nodes, .. }
                 if matches!(target, crate::HostReplaceTargetDto::Key(key) if key == "status-panel")
-                    && nodes.iter().any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("已被替换")))
+                    && nodes.iter().any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("Surface Key 替换")))
         )));
+    assert!(replace_gallery.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Text { text, .. }
+            if text.contains("横排方框结束后，正文从下一行继续")
+    )));
     assert!(replace_gallery.nodes.iter().any(|node| matches!(
             node,
             HostNodeDto::Replace { target, nodes, .. }

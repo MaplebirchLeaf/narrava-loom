@@ -33,7 +33,7 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
 | `button` | `<<button [[文本\|Passage]]>>...<</button>>` | 与 link 共享事务语义，但由 Host 呈现为按钮 |
 | `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Surface key |
-| `slot` | `<<slot "status">>...<</slot>>` | 建立可由 `replace "status"` 定位的稳定内容槽 |
+| `slot` | `<<slot "status">>...<</slot>>` 或 `<<slot "status" "panel" "row">>...<</slot>>` | 建立稳定内容槽；`panel` 请求面板，`stack`／`row` 选择上下或同行排列 |
 | `silently` | `<<silently>>...<</silently>>` | 执行正文但抑制其直接输出 |
 | `exit` | `<<exit>>` | 停止当前执行正文 |
 | `return` | `<<return expression>>` | 从可返回的 Macro/Widget 正文返回，可省略值 |
@@ -51,6 +51,13 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 `replace` 不接受 CSS selector、HTML 字符串、DOM 节点或终端坐标。固定区域名由每个 Host 映射；
 普通 key 必须先由 `slot` 或 Script Surface 建立。`slot` 放进 `silently` 后输出会被丢弃，
 因此不会留下可替换目标。
+
+`slot` 的表现默认为 `plain`，保持视觉透明；可选 `panel` 表达“与相邻正文形成感知边界的
+独立内容组”。Protocol 不规定方框字符、HTML 标签、边框、圆角、阴影、尺寸或间距：TUI
+可以画矩形框，Tauri 可以使用 card/panel，Godot 可以映射为 `PanelContainer`。未知表现值会
+在 Runtime 边界报错，不会作为 Host 样式字符串透传。
+排列默认为 `stack`。第三参数只接受 `stack` 或 `row`，且仅描述同级容器上下堆叠或连续同行，
+只适用于 `panel`；不携带宽度、gap、对齐、换行点或任何 CSS/layout 参数。
 其他名称按稳定 Surface key 解析。当前正文支持静态文本与 Core 逻辑节点；嵌套动态 `print`
 的 I18n 身份和动态／异步脚本 Macro 尚未接通，遇到时会报错而不是忽略。
 

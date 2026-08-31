@@ -198,6 +198,8 @@ fn surface_node_discriminators_match_the_canonical_contract() {
         },
         HostNodeDto::Container {
             key: key(),
+            presentation: ContainerPresentationDto::Panel,
+            flow: crate::ContainerFlowDto::Stack,
             nodes: Vec::new(),
         },
         HostNodeDto::Component {
@@ -259,4 +261,52 @@ fn surface_node_discriminators_match_the_canonical_contract() {
         nodes.iter().map(discriminator).collect::<Vec<_>>(),
         generated_names(contract::SURFACE_NODES)
     );
+}
+
+#[test]
+fn container_presentation_round_trips_as_a_protocol_semantic() {
+    let node = HostNodeDto::Container {
+        key: String::from("status"),
+        presentation: ContainerPresentationDto::Panel,
+        flow: crate::ContainerFlowDto::Row,
+        nodes: Vec::new(),
+    };
+    let json = serde_json::to_value(&node).unwrap();
+
+    assert_eq!(json["presentation"], "panel");
+    assert_eq!(json["flow"], "row");
+    assert_eq!(serde_json::from_value::<HostNodeDto>(json).unwrap(), node);
+}
+
+#[test]
+fn container_without_presentation_defaults_to_plain() {
+    let node: HostNodeDto = serde_json::from_value(serde_json::json!({
+        "type": "container",
+        "key": "legacy-slot",
+        "flow": "stack",
+        "nodes": []
+    }))
+    .unwrap();
+
+    assert!(matches!(
+        node,
+        HostNodeDto::Container {
+            presentation: ContainerPresentationDto::Plain,
+            flow: crate::ContainerFlowDto::Stack,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn container_without_flow_is_rejected() {
+    let error = serde_json::from_value::<HostNodeDto>(serde_json::json!({
+        "type": "container",
+        "key": "missing-flow",
+        "presentation": "panel",
+        "nodes": []
+    }))
+    .expect_err("当前 Protocol Container 必须显式携带 flow");
+
+    assert!(error.to_string().contains("flow"));
 }

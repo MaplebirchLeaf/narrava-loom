@@ -35,9 +35,9 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 从 `Start` 进入 `Hall` 后可以逐项打开：
 
 - `SurfaceGallery`：Region、Component、Resource 图片、语义文字和未知组件 fallback；
-- `DialogGallery`：Dialog 页签及四种动作角色；
+- `DialogGallery`：WebView Dialog 页签、TUI 独立页面边框及按页分组的四种动作角色；
 - `FormGallery`：checkbox、radiobutton、textbox 与 State 写回；
-- `ReplaceGallery`：稳定 slot、Region 和 key 替换；
+- `ReplaceGallery`：透明 plain slot、有间距的显式 `row` 相邻 panel、后续正文换行、Region 与稳定 key 替换；
 - `StateGallery`：scripts 的 `V/T/setup` 与 Twee `$/_/setup` 共享状态；
 - `AuthorToolsGallery`：Save 导出/导入、Logger 与 I18n 导出；
 - `ReactionGallery`：Event、State、lifecycle、replace、include、goto、once/limit 与 Save 状态；
@@ -45,7 +45,8 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 - `MacroGallery`：switch、for、while、break/continue、unset 与 include。
 
 从任意演示页使用侧栏的后退／前进按钮即可检查 Story 历史；进入第二个 Passage 后后退才会启用，
-后退一次后前进才会启用。TUI 对应命令为 `b` 和 `f`。
+后退一次后前进才会启用。TUI 对应命令为 `b` 和 `f`，使用 `s` 在 `Bar` 与
+`BarStowed` 两套互斥侧栏内容之间切换。
 
 `scripts/main.ts` 中的函数通过 `State.global.extend()` 暴露给 Twee；日常状态访问使用 `V.name`、
 `T.name` 和 `setup.name`。`State.*` 留给动态键、旧值返回与批量导入。

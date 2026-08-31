@@ -66,7 +66,7 @@ Core 不依赖 ModLoader、Tauri、DOM、CSS 或具体 Renderer。详细边界�
 |---|---|
 | `cargo run --locked -p narrava-loom-core -- examples` | 检查示例游戏源码和完整编译管线 |
 | `cargo run --locked -p narrava-loom-tauri -- examples` | 启动 Tauri 桌面 Host |
-| `cargo run --locked -p narrava-loom-tui --example visual_demo` | 启动可操作的 TUI 语义示例 |
+| `cargo run --locked -p narrava-loom-tui -- examples` | 用根目录示例游戏启动可操作的 TUI Host |
 | `cargo test --workspace --all-targets --locked` | 运行 Rust workspace 测试 |
 | `bun run check` | 检查 TypeScript、前端、格式和 VS Code 扩展 |
 

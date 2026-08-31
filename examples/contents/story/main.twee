@@ -54,16 +54,22 @@
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: ReplaceGallery [reference]
-<<slot "status-panel">>
+<<slot "plain-status">>
+  默认 plain 槽只建立稳定 key，不增加额外视觉边界。
+<</slot>>
+<<slot "status-panel" "panel" "row">>
   这段默认内容会被同一份 Surface 中稍后的 replace 替换。
 <</slot>>
 <<replace "status-panel">>
-  稳定槽 status-panel 已被替换；Tauri 与 TUI 都按 Surface Key 定位它。
+  任务状态：已按 Surface Key 替换。
 <</replace>>
+<<slot "location-panel" "panel" "row">>
+  所在地点：大厅。
+<</slot>>
 <<replace "header">>
   替换后的页眉：这是由 replace 容器正文产生的 Surface。
 <</replace>>
-正文仍保留在 Passage Main；TUI 与 WebView 都能把 header 映射到自己的区域。<br>
+横排方框结束后，正文从下一行继续；TUI 与 WebView 都能把 header 映射到自己的区域。<br>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: AuthorToolsGallery [reference]

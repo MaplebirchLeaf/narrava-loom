@@ -159,3 +159,39 @@
 ```
 
 `silently` 只丢弃显示输出，不撤销变量修改。它不是事务回滚，也不是注释。
+
+## 可替换内容槽与面板
+
+`slot` 在正文当前位置建立稳定内容槽；随后出现的 `replace` 可以按 key 替换它：
+
+```twee
+<<slot "quest-status">>尚未接受任务。<</slot>>
+<<replace "quest-status">>任务已经开始。<</replace>>
+```
+
+默认 `plain` 槽不增加视觉边界。需要让一组正文与相邻内容形成独立面板时，传入
+`"panel"`：
+
+```twee
+<<slot "quest-panel" "panel">>
+任务：寻找旧地图。<br>
+线索：旧船长最后一次在码头见过地图。
+<</slot>>
+```
+
+面板默认使用 `stack` 上下排列。需要多个相邻面板同行时，对每个面板显式写第三参数 `"row"`：
+
+```twee
+<<slot "quest" "panel" "row">>任务：寻找旧地图。<</slot>>
+<<slot "place" "panel" "row">>地点：码头。<</slot>>
+```
+
+第三参数只接受 `stack`／`row`；不提供尺寸、间距或任意布局参数。
+
+Semantic/Protocol 的 Container 可以承载现有文本、Component、按钮和输入节点；`panel` 只表达
+内容分组边界。TUI 可以画字符方框，Tauri 可以显示 card，其他 Host 可采用自己的原生容器；
+Twee 不指定边框字符、颜色、圆角、尺寸或排列方式。
+
+当前 Twee `slot`／`replace` 正文只接通静态文本和 Core 逻辑节点；嵌套动态 `print`、输入、按钮
+或脚本 Macro 尚未接通时会报错，不会静默丢失。该限制属于当前 Twee 执行入口，不是
+Container 或 Protocol 的内容模型限制。

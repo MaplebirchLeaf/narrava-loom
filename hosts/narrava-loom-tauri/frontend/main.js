@@ -229,7 +229,6 @@ function createNode(node) {
     }
   } else if (node.type === "container") {
     element = document.createElement("div")
-    element.className = "surface-slot"
   } else if (node.type === "replace") {
     element = document.createElement("div")
     element.hidden = true
@@ -370,6 +369,11 @@ function updateNode(element, node) {
     return
   }
   if (node.type === "container") {
+    const flowClass = node.flow === "row" ? " surface-flow-row" : ""
+    element.className =
+      node.presentation === "panel"
+        ? `surface-container surface-panel${flowClass}`
+        : "surface-container surface-slot"
     reconcile(element, node.nodes)
     return
   }

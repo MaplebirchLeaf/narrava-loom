@@ -31,7 +31,7 @@ fn runtime_dto_renders_without_borrowing_core_host_update() {
 
 use crate::{
     TuiCommand, TuiCommandError, TuiFrame, TuiInput, TuiInteraction, TuiOperation, TuiRenderer,
-    run_terminal,
+    run_terminal, write_frame,
 };
 
 /// Region 与 Replace（按 key）就地更新对应终端区域，交互被收集进帧。
@@ -41,6 +41,8 @@ fn region_and_key_replacements_update_terminal_surfaces() {
     main.push_keyed(
         SurfaceKey::parse("status").unwrap(),
         SurfaceNode::Container {
+            presentation: narrava_loom_core::semantic::ContainerPresentation::Plain,
+            flow: narrava_loom_core::semantic::ContainerFlow::Stack,
             content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("旧状态"))]),
         },
     )
@@ -134,12 +136,284 @@ fn custom_region_falls_back_without_losing_content() {
     assert_eq!(frame.custom.get("hud").unwrap(), &["状态"]);
 }
 
+#[test]
+fn protocol_panel_container_becomes_a_bordered_terminal_block() {
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Panel"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![narrava_loom_protocol::HostNodeDto::Container {
+            key: String::from("status"),
+            presentation: narrava_loom_protocol::ContainerPresentationDto::Panel,
+            flow: narrava_loom_protocol::ContainerFlowDto::Stack,
+            nodes: vec![narrava_loom_protocol::HostNodeDto::Text {
+                key: String::from("status:text"),
+                text: String::from("体力：42"),
+            }],
+        }],
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(frame.main, ["┌──────────┐", "│ 体力：42 │", "└──────────┘"]);
+}
+
+#[test]
+fn adjacent_panel_containers_share_terminal_rows() {
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Panels"),
+        can_back: false,
+        can_forward: false,
+        nodes: ["A", "B"]
+            .into_iter()
+            .map(|text| narrava_loom_protocol::HostNodeDto::Container {
+                key: format!("panel-{text}"),
+                presentation: narrava_loom_protocol::ContainerPresentationDto::Panel,
+                flow: narrava_loom_protocol::ContainerFlowDto::Row,
+                nodes: vec![narrava_loom_protocol::HostNodeDto::Text {
+                    key: format!("text-{text}"),
+                    text: text.to_owned(),
+                }],
+            })
+            .collect(),
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(frame.main, ["┌───┐ ┌───┐", "│ A │ │ B │", "└───┘ └───┘"]);
+}
+
+#[test]
+fn dialog_pages_have_independent_borders_and_interaction_groups() {
+    let page = |key: &str, title: &str, action: &str| {
+        vec![
+            narrava_loom_protocol::HostNodeDto::StyledText {
+                key: format!("{key}-title"),
+                text: title.to_owned(),
+                styles: Vec::new(),
+                color: 0,
+                heading: Some(2),
+                delay: None,
+            },
+            narrava_loom_protocol::HostNodeDto::Button {
+                key: format!("{key}-button"),
+                id: format!("{key}-action"),
+                label: action.to_owned(),
+                target: String::new(),
+            },
+        ]
+    };
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Dialog"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![narrava_loom_protocol::HostNodeDto::Region {
+            key: String::from("dialog"),
+            region: String::from("dialog"),
+            nodes: page("one", "第一页", "默认按钮")
+                .into_iter()
+                .chain(page("two", "第二页", "危险按钮"))
+                .collect(),
+        }],
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(
+        frame
+            .dialog
+            .iter()
+            .filter(|line| line.starts_with('┌'))
+            .count(),
+        2
+    );
+    assert_eq!(frame.interactions[0].group, "弹窗 · 第一页");
+    assert_eq!(frame.interactions[1].group, "弹窗 · 第二页");
+
+    let mut output: Vec<u8> = Vec::new();
+    write_frame(&mut output, &frame).unwrap();
+    let output: String = String::from_utf8(output).unwrap();
+    assert!(output.contains("弹窗 · 第一页：\n    1. 默认按钮"));
+    assert!(output.contains("弹窗 · 第二页：\n    2. 危险按钮"));
+}
+
+#[test]
+fn panel_discards_source_layout_whitespace_at_its_edges() {
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Panel whitespace"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![narrava_loom_protocol::HostNodeDto::Container {
+            key: String::from("panel"),
+            presentation: narrava_loom_protocol::ContainerPresentationDto::Panel,
+            flow: narrava_loom_protocol::ContainerFlowDto::Stack,
+            nodes: vec![narrava_loom_protocol::HostNodeDto::Text {
+                key: String::from("text"),
+                text: String::from("\n状态\n"),
+            }],
+        }],
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(frame.main, ["┌──────┐", "│ 状态 │", "└──────┘"]);
+}
+
+#[test]
+fn auxiliary_regions_are_bordered_and_sidebar_variants_are_exclusive() {
+    let frame = TuiFrame {
+        current: String::from("Regions"),
+        header: vec![String::from("标题")],
+        main: vec![String::from("正文")],
+        footer: vec![String::from("页尾")],
+        bar: vec![String::from("展开侧栏")],
+        bar_stowed: vec![String::from("收起侧栏")],
+        dialog: vec![
+            String::from("┌──────────┐"),
+            String::from("│ 弹窗内容 │"),
+            String::from("└──────────┘"),
+        ],
+        ..TuiFrame::default()
+    };
+    let mut output: Vec<u8> = Vec::new();
+
+    write_frame(&mut output, &frame).unwrap();
+    let output: String = String::from_utf8(output).unwrap();
+
+    assert!(output.contains("页眉：\n┌──────┐\n│ 标题 │\n└──────┘"));
+    assert!(output.contains("侧栏：\n┌──────────┐\n│ 展开侧栏 │\n└──────────┘"));
+    assert!(!output.contains("收起侧栏："));
+    assert!(output.contains("弹窗：\n┌──────────┐\n│ 弹窗内容 │\n└──────────┘"));
+    assert!(output.contains("页脚：\n┌──────┐\n│ 页尾 │\n└──────┘"));
+    assert!(output.contains("正文：\n正文"), "正文自身不增加区域边框");
+
+    let mut stowed: TuiFrame = frame;
+    stowed.sidebar_mode = crate::TuiSidebarMode::Stowed;
+    let mut stowed_output: Vec<u8> = Vec::new();
+    write_frame(&mut stowed_output, &stowed).unwrap();
+    let stowed_output: String = String::from_utf8(stowed_output).unwrap();
+    assert!(!stowed_output.contains("\n侧栏："));
+    assert!(stowed_output.contains("收起侧栏：\n┌──────────┐\n│ 收起侧栏 │\n└──────────┘"));
+}
+
+#[test]
+fn mutually_exclusive_sidebar_regions_do_not_duplicate_the_same_interaction() {
+    let navigation = |key: &str| narrava_loom_protocol::HostNodeDto::SafeReturn {
+        key: key.to_owned(),
+        id: String::from("safe-return:Hall"),
+        target: String::from("Hall"),
+    };
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Hall"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![
+            narrava_loom_protocol::HostNodeDto::Region {
+                key: String::from("bar"),
+                region: String::from("bar"),
+                nodes: vec![navigation("bar-return")],
+            },
+            narrava_loom_protocol::HostNodeDto::Region {
+                key: String::from("bar-stowed"),
+                region: String::from("bar-stowed"),
+                nodes: vec![navigation("bar-stowed-return")],
+            },
+        ],
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(frame.interactions.len(), 1);
+    assert_eq!(
+        frame.interactions[0].id.as_deref(),
+        Some("safe-return:Hall")
+    );
+}
+
+#[test]
+fn empty_header_and_footer_remain_hidden() {
+    let frame = TuiFrame {
+        current: String::from("Empty chrome"),
+        main: vec![String::from("正文")],
+        ..TuiFrame::default()
+    };
+    let mut output: Vec<u8> = Vec::new();
+
+    write_frame(&mut output, &frame).unwrap();
+    let output: String = String::from_utf8(output).unwrap();
+
+    assert!(!output.contains("页眉："));
+    assert!(!output.contains("页脚："));
+}
+
+#[test]
+fn replacing_panel_content_keeps_the_panel_boundary() {
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Panel replace"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![
+            narrava_loom_protocol::HostNodeDto::Container {
+                key: String::from("status"),
+                presentation: narrava_loom_protocol::ContainerPresentationDto::Panel,
+                flow: narrava_loom_protocol::ContainerFlowDto::Stack,
+                nodes: vec![narrava_loom_protocol::HostNodeDto::Text {
+                    key: String::from("old"),
+                    text: String::from("旧"),
+                }],
+            },
+            narrava_loom_protocol::HostNodeDto::Replace {
+                key: String::from("replace"),
+                target: narrava_loom_protocol::HostReplaceTargetDto::Key(String::from("status")),
+                nodes: vec![narrava_loom_protocol::HostNodeDto::Text {
+                    key: String::from("new"),
+                    text: String::from("新状态"),
+                }],
+            },
+        ],
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(frame.main, ["┌────────┐", "│ 新状态 │", "└────────┘"]);
+}
+
+#[test]
+fn empty_plain_container_remains_a_replace_target() {
+    let update = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Empty slot"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![
+            narrava_loom_protocol::HostNodeDto::Container {
+                key: String::from("empty"),
+                presentation: narrava_loom_protocol::ContainerPresentationDto::Plain,
+                flow: narrava_loom_protocol::ContainerFlowDto::Stack,
+                nodes: Vec::new(),
+            },
+            narrava_loom_protocol::HostNodeDto::Replace {
+                key: String::from("replace"),
+                target: narrava_loom_protocol::HostReplaceTargetDto::Key(String::from("empty")),
+                nodes: vec![narrava_loom_protocol::HostNodeDto::Text {
+                    key: String::from("replacement"),
+                    text: String::from("后来出现"),
+                }],
+            },
+        ],
+    };
+
+    let frame = TuiRenderer::default().render_update(&update);
+
+    assert_eq!(frame.main, ["后来出现"]);
+}
+
 /// 玩家使用一基序号；文本框必须显式使用 set，避免直接选择时误清空内容。
 #[test]
 fn terminal_commands_resolve_against_current_frame() {
     let frame = TuiFrame {
         interactions: vec![
             TuiInteraction {
+                group: String::from("正文"),
                 id: Some(String::from("route:quiet")),
                 label: String::from("( )"),
                 kind: "radiobutton",
@@ -151,6 +425,7 @@ fn terminal_commands_resolve_against_current_frame() {
                 }),
             },
             TuiInteraction {
+                group: String::from("正文"),
                 id: Some(String::from("name")),
                 label: String::from("[旅人]"),
                 kind: "textbox",
@@ -193,6 +468,7 @@ fn terminal_loop_is_operable_with_plain_stdin_and_stdout() {
         current: String::from("Start"),
         main: vec![String::from("请选择。")],
         interactions: vec![TuiInteraction {
+            group: String::from("正文"),
             id: Some(String::from("go")),
             label: String::from("继续"),
             kind: "link",

@@ -44,7 +44,15 @@ pub(super) fn attach_i18n(
         .collect();
     let groups: Vec<Vec<usize>> = visible_text_groups(&body.instructions);
 
-    for (group, message) in groups.into_iter().zip(messages) {
+    let mut message_cursor: usize = 0;
+    for group in groups {
+        let group_span: Span = visible_group_span(&body.instructions, &group);
+        let relative_index: usize = messages[message_cursor..]
+            .iter()
+            .position(|message| message.span() == group_span)
+            .expect("MIR 可见文本组必须对应后续同一源码 Span 的 I18n 消息");
+        let message: &&I18nMessage = &messages[message_cursor + relative_index];
+        message_cursor += relative_index + 1;
         let mut placeholders = message.placeholders().iter();
         for index in group {
             let instruction: &mut MirInstruction<'_, '_> = &mut body.instructions[index];
@@ -68,6 +76,19 @@ pub(super) fn attach_i18n(
             });
         }
     }
+}
+
+/// 用首尾可见指令的源码范围匹配目录消息，避免动态 Macro 容器正文插入目录后错位。
+fn visible_group_span(instructions: &[MirInstruction<'_, '_>], group: &[usize]) -> Span {
+    let instruction_span = |index: usize| match &instructions[index] {
+        MirInstruction::Text { span, .. }
+        | MirInstruction::PrintLiteral { span, .. }
+        | MirInstruction::PrintExpression { span, .. } => *span,
+        _ => unreachable!("I18n 文本组只能包含带 Span 的输出指令"),
+    };
+    let mut span: Span = instruction_span(group[0]);
+    span.end = instruction_span(*group.last().expect("可见文本组不能为空")).end;
+    span
 }
 
 /// 把连续的可见输出指令聚成组；只有包含非空白静态文本的组才对应翻译消息。

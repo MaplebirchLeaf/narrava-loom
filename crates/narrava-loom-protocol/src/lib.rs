@@ -101,9 +101,12 @@ pub enum HostNodeDto {
         region: String,
         nodes: Vec<HostNodeDto>,
     },
-    /// 可按稳定 key 定位的普通容器。
+    /// 可按稳定 key 定位、带标准表现语义的内容容器。
     Container {
         key: String,
+        #[serde(default)]
+        presentation: ContainerPresentationDto,
+        flow: ContainerFlowDto,
         nodes: Vec<HostNodeDto>,
     },
     /// 版本化 Host capability，不支持时使用 fallback。
@@ -169,6 +172,25 @@ pub enum HostNodeDto {
         id: String,
         target: String,
     },
+}
+
+/// 内容容器的跨 Host 标准表现语义。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ContainerPresentationDto {
+    /// 透明分组，只保留身份与替换边界。
+    #[default]
+    Plain,
+    /// 与相邻内容形成感知边界的独立面板。
+    Panel,
+}
+
+/// 内容容器在同级输出中的标准排列语义。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ContainerFlowDto {
+    Stack,
+    Row,
 }
 
 /// Replace 的可移植定位目标。
