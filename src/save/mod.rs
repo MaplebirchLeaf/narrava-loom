@@ -16,11 +16,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     GameIdentity,
     diagnostic::{Diagnostic, DiagnosticSeverity},
-    state::{State, StateCheckpoint, StateSnapshot},
-    story::{Story, StoryHistoryEntry, StorySnapshot},
+    state::{State, StateSnapshot},
+    story::{Story, StoryHistoryEntry},
 };
 
 use value::SaveValueGraph;
+
+const SAVE_MAGIC: &[u8; 8] = b"NRSAVE\0\x01";
 
 /// 一份不包含平台对象、脚本函数或临时执行状态的存档。
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -29,7 +31,6 @@ pub struct SaveDocument {
     game: SaveGame,
     state: SaveValueGraph,
     story: SaveStory,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     reactions: Vec<crate::reaction::ReactionRuntimeState>,
 }
 
@@ -74,8 +75,7 @@ impl SaveDocument {
         state: &State,
         story: &Story<'_, '_>,
     ) -> Result<Self, SaveError> {
-        let snapshot: StateSnapshot = state.snapshot();
-        let graph: SaveValueGraph = SaveValueGraph::encode(snapshot.variables())?;
+        let graph: SaveValueGraph = SaveValueGraph::encode(state.persistent_variables())?;
         let history: Vec<SaveStoryEntry> = story
             .history()
             .iter()
@@ -109,16 +109,25 @@ impl SaveDocument {
         &self.reactions
     }
 
-    /// 序列化为带缩进的 JSON 字符串。
-    pub fn to_json(&self) -> Result<String, SaveError> {
-        serde_json::to_string_pretty(self).map_err(|error: serde_json::Error| SaveError::Encode {
+    /// 编码正式 `.nsave`：固定 magic/schema header 后接紧凑、确定性的字段协议。
+    pub fn to_bytes(&self) -> Result<Vec<u8>, SaveError> {
+        let payload: Vec<u8> = postcard::to_allocvec(self).map_err(|error| SaveError::Encode {
             message: error.to_string(),
-        })
+        })?;
+        let mut bytes: Vec<u8> = Vec::with_capacity(SAVE_MAGIC.len() + payload.len());
+        bytes.extend_from_slice(SAVE_MAGIC);
+        bytes.extend_from_slice(&payload);
+        Ok(bytes)
     }
 
-    /// 从 JSON 字符串解码；结构或内容无效时返回 `SaveError::Decode`。
-    pub fn from_json(json: &str) -> Result<Self, SaveError> {
-        serde_json::from_str(json).map_err(|error: serde_json::Error| SaveError::Decode {
+    /// 解码正式 `.nsave`；未知 magic/schema 在反序列化前即被拒绝。
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
+        let payload: &[u8] = bytes
+            .strip_prefix(SAVE_MAGIC)
+            .ok_or_else(|| SaveError::Decode {
+                message: String::from("存档 magic 或 schema version 不受支持"),
+            })?;
+        postcard::from_bytes(payload).map_err(|error| SaveError::Decode {
             message: error.to_string(),
         })
     }
@@ -133,17 +142,8 @@ impl SaveDocument {
         self.validate_game(game)?;
         self.validate_story(story)?;
         let variables: BTreeMap<String, crate::expression::value::Value> = self.state.decode()?;
-        let state_checkpoint: StateCheckpoint = state.checkpoint();
-        let story_snapshot: StorySnapshot<'hir, 'source> = story.snapshot();
-
+        self.restore_story(story)?;
         state.restore(StateSnapshot::from_variables(variables));
-        if let Err(error) = self.restore_story(story) {
-            state.restore_checkpoint(state_checkpoint);
-            story
-                .restore(story_snapshot)
-                .expect("刚捕获的同一 Story 快照必须可恢复");
-            return Err(error);
-        }
         Ok(())
     }
 
@@ -182,24 +182,17 @@ impl SaveDocument {
 
     /// 用存档历史重建 Story 时间线，并把游标移回存档时的位置。
     fn restore_story(&self, story: &mut Story<'_, '_>) -> Result<(), SaveError> {
-        let _removed: usize = story.reset();
-        for entry in &self.story.history {
-            story
-                .goto(entry.passage.as_str())
-                .map_err(|error| SaveError::Restore {
-                    message: error.to_string(),
-                })?;
-            story.record_navigation(entry.had_navigation);
-        }
-        if let Some(position) = self.story.position {
-            let steps_back: usize = self.story.history.len() - position - 1;
-            for _ in 0..steps_back {
-                story.back().map_err(|error| SaveError::Restore {
-                    message: error.to_string(),
-                })?;
-            }
-        }
-        Ok(())
+        story
+            .replace_timeline(
+                self.story
+                    .history
+                    .iter()
+                    .map(|entry: &SaveStoryEntry| (entry.passage.as_str(), entry.had_navigation)),
+                self.story.position,
+            )
+            .map_err(|error| SaveError::Restore {
+                message: error.to_string(),
+            })
     }
 }
 
@@ -232,8 +225,8 @@ impl fmt::Display for SaveError {
             Self::GameMismatch { expected, actual } => {
                 write!(formatter, "存档属于 {expected}，当前游戏是 {actual}")
             }
-            Self::Encode { message } => write!(formatter, "存档 JSON 编码失败：{message}"),
-            Self::Decode { message } => write!(formatter, "存档 JSON 解码失败：{message}"),
+            Self::Encode { message } => write!(formatter, "存档二进制编码失败：{message}"),
+            Self::Decode { message } => write!(formatter, "存档二进制解码失败：{message}"),
             Self::Restore { message } => write!(formatter, "存档恢复失败：{message}"),
         }
     }

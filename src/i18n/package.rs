@@ -1,6 +1,6 @@
 //! Binding 解包后交给 Core 的 `.nlang` 内存文件清单。
 
-use std::{collections::BTreeMap, fmt, str};
+use std::{collections::BTreeMap, fmt, str, sync::Arc};
 
 use crate::GameIdentity;
 
@@ -178,6 +178,21 @@ impl NlangPackageInput {
             str::from_utf8(translation_bytes).map_err(|_| NlangPackageError::InvalidUtf8 {
                 path: String::from(TRANSLATIONS_PATH),
             })?;
+        let mut message_blocks: Vec<&str> = Vec::new();
+        if !translation_nmsg.trim().is_empty() {
+            message_blocks.push(translation_nmsg.trim_end_matches('\n'));
+        }
+        for (path, bytes) in &files {
+            if !path.starts_with("messages/") || !path.ends_with(".nmsg") {
+                continue;
+            }
+            let input: &str = str::from_utf8(bytes)
+                .map_err(|_| NlangPackageError::InvalidUtf8 { path: path.clone() })?;
+            if !input.trim().is_empty() {
+                message_blocks.push(input.trim_end_matches('\n'));
+            }
+        }
+        let translation_nmsg: String = message_blocks.join("\n\n");
         let dictionary_json: &str =
             str::from_utf8(dictionary_bytes).map_err(|_| NlangPackageError::InvalidUtf8 {
                 path: String::from(DICTIONARY_PATH),
@@ -192,16 +207,17 @@ impl NlangPackageInput {
                 }
             })?;
         let translation: I18nTemplate =
-            message::decode(manifest.locale(), translation_nmsg, dictionary)
+            message::decode(manifest.locale(), &translation_nmsg, dictionary)
                 .map_err(NlangPackageError::Translation)?;
         let manifest: NlangValidatedManifest = manifest
             .validate_install(file_locale, game)
             .map_err(NlangPackageError::Install)?;
 
+        files.retain(|path: &String, _bytes: &mut Vec<u8>| path.starts_with("resources/"));
         Ok(NlangValidatedPackage {
             manifest,
-            translation,
-            files,
+            translation: Arc::new(translation),
+            files: Arc::new(files),
         })
     }
 }
@@ -210,8 +226,8 @@ impl NlangPackageInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NlangValidatedPackage {
     manifest: NlangValidatedManifest,
-    translation: I18nTemplate,
-    files: BTreeMap<String, Vec<u8>>,
+    translation: Arc<I18nTemplate>,
+    files: Arc<BTreeMap<String, Vec<u8>>>,
 }
 
 impl NlangValidatedPackage {
@@ -223,6 +239,11 @@ impl NlangValidatedPackage {
     /// 包内携带的译文模板。
     pub fn translation(&self) -> &I18nTemplate {
         &self.translation
+    }
+
+    /// 共享译文所有权，供 Runtime 选择语言时避免深复制消息表。
+    pub(crate) fn shared_translation(&self) -> Arc<I18nTemplate> {
+        Arc::clone(&self.translation)
     }
 
     /// 按路径读取包内任意原始文件。
@@ -273,6 +294,7 @@ fn is_normalized_package_path(path: &str) -> bool {
 /// 只允许三个固定文件与 `resources/*.nres`。
 fn is_allowed_package_path(path: &str) -> bool {
     matches!(path, MANIFEST_PATH | TRANSLATIONS_PATH | DICTIONARY_PATH)
+        || (path.starts_with("messages/") && path.ends_with(".nmsg"))
         || (path.starts_with("resources/") && path.ends_with(".nres"))
 }
 

@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[test]
-fn save_document_json_matches_the_current_schema() {
+fn save_document_binary_has_a_versioned_header_and_round_trips() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),
@@ -28,7 +28,7 @@ fn save_document_json_matches_the_current_schema() {
     let state: State = State::new();
     let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
 
-    let encoded: String = SaveDocument::capture(&game, &state, &story)
+    let encoded: Vec<u8> = SaveDocument::capture(&game, &state, &story)
         .expect("空运行状态应可捕获")
         .with_reactions(vec![ReactionRuntimeState {
             id: String::from("quest.once"),
@@ -36,16 +36,42 @@ fn save_document_json_matches_the_current_schema() {
             triggered: 1,
             destroyed: true,
         }])
-        .to_json()
+        .to_bytes()
         .expect("存档应可编码");
-    let decoded: SaveDocument = SaveDocument::from_json(&encoded).expect("存档应可解码");
+    assert_eq!(&encoded[..8], b"NRSAVE\0\x01");
+    let decoded: SaveDocument = SaveDocument::from_bytes(&encoded).expect("存档应可解码");
     assert_eq!(decoded.reactions()[0].id, "quest.once");
+    assert_eq!(decoded.to_bytes().expect("应可再次编码"), encoded);
+}
 
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&decoded.to_json().expect("应可再次编码"))
-            .expect("再次编码结果应是 JSON"),
-        serde_json::from_str::<serde_json::Value>(&encoded).expect("首次编码结果应是 JSON")
+#[test]
+fn save_binary_scales_without_a_json_text_buffer() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("测试 Source 应可读取");
+    let compiled: HirStory<'_> = test_story(&source);
+    let story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = State::new();
+    for index in 0..10_000 {
+        let _previous: Option<Value> = state.variables_set(
+            format!("value-{index}").as_str(),
+            Value::Number(index as f64),
+        );
+    }
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
+
+    let bytes: Vec<u8> = SaveDocument::capture(&game, &state, &story)
+        .and_then(|document: SaveDocument| document.to_bytes())
+        .expect("大型持久状态应直接编码为二进制");
+    let decoded: SaveDocument = SaveDocument::from_bytes(&bytes).expect("大型存档应可解码");
+
+    assert!(
+        bytes.len() < 250_000,
+        "数值型大型存档不应承担 JSON 标签与缩进成本"
     );
+    assert!(decoded.reactions().is_empty());
 }
 
 #[test]
@@ -133,7 +159,7 @@ fn save_controller_rejects_empty_target_after_before_hooks() {
 }
 
 #[test]
-fn save_json_round_trip_restores_variables_aliases_and_story_cursor() {
+fn save_binary_round_trip_restores_variables_aliases_and_story_cursor() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),
@@ -162,8 +188,8 @@ fn save_json_round_trip_restores_variables_aliases_and_story_cursor() {
     let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
 
     let save: SaveDocument = SaveDocument::capture(&game, &state, &story).expect("应可捕获存档");
-    let json: String = save.to_json().expect("存档应可编码为 JSON");
-    let decoded: SaveDocument = SaveDocument::from_json(json.as_str()).expect("JSON 应可解码");
+    let bytes: Vec<u8> = save.to_bytes().expect("存档应可编码");
+    let decoded: SaveDocument = SaveDocument::from_bytes(&bytes).expect("二进制存档应可解码");
 
     let _changed = state.variables_set("left", Value::string("changed"));
     let _extra = state.variables_set("extra", Value::Boolean(true));
@@ -272,8 +298,8 @@ fn save_value_graph_preserves_cycles_without_recursive_serialization() {
     let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
 
     let save: SaveDocument = SaveDocument::capture(&game, &state, &story).expect("循环图应可捕获");
-    let json: String = save.to_json().expect("循环图不应递归展开");
-    let decoded: SaveDocument = SaveDocument::from_json(json.as_str()).expect("JSON 应有效");
+    let bytes: Vec<u8> = save.to_bytes().expect("循环图不应递归展开");
+    let decoded: SaveDocument = SaveDocument::from_bytes(&bytes).expect("二进制存档应有效");
     decoded
         .restore(&game, &mut state, &mut story)
         .expect("循环图应可恢复");
@@ -288,7 +314,7 @@ fn save_value_graph_preserves_cycles_without_recursive_serialization() {
 }
 
 #[test]
-fn save_rejects_a_dangling_value_reference_before_runtime_mutation() {
+fn save_rejects_a_damaged_binary_document_before_runtime_mutation() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),
@@ -299,23 +325,14 @@ fn save_rejects_a_dangling_value_reference_before_runtime_mutation() {
     story.goto("Start").expect("Start 应可导航");
     let mut state: State = State::new();
     let _items = state.variables_set("items", Value::array(vec![Value::Number(1.0)]));
-    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
-    let save: SaveDocument = SaveDocument::capture(&game, &state, &story).expect("应可捕获存档");
-    let mut json: serde_json::Value =
-        serde_json::from_str(save.to_json().expect("应可编码").as_str()).expect("JSON 应有效");
-    json["state"]["roots"]["items"]["value"] = serde_json::Value::from(999_u64);
-    let damaged: SaveDocument =
-        SaveDocument::from_json(json.to_string().as_str()).expect("结构仍是合法 Save JSON");
-
     let _changed = state.variables_set("items", Value::string("active"));
-    let error: SaveError = damaged
-        .restore(&game, &mut state, &mut story)
-        .expect_err("悬空引用不得恢复");
+    let error: SaveError =
+        SaveDocument::from_bytes(b"NRSAVE\0\x01\xff").expect_err("损坏 payload 不得解码");
 
-    assert!(matches!(error, SaveError::InvalidValueGraph { .. }));
+    assert!(matches!(error, SaveError::Decode { .. }));
     assert_eq!(state.variables_get("items"), Some(&Value::string("active")));
     assert_eq!(story.current().map(|passage| passage.name), Some("Start"));
-    assert_eq!(error.diagnostic().code, "save.invalid_value_graph");
+    assert_eq!(error.diagnostic().code, "save.decode");
 }
 
 fn test_story<'source>(source: &'source Source) -> HirStory<'source> {

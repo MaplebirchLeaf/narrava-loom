@@ -285,7 +285,7 @@ pub enum PendingOperation {
         direction: SaveOperation,
         target: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        document: Option<String>,
+        document: Option<Vec<u8>>,
     },
     /// Host 完成语言包装载或平台确认后恢复；Runtime 再原子提交语言。
     SelectLanguage { operation: u64, locale: String },
@@ -309,7 +309,7 @@ pub enum PendingResult {
     /// 操作成功；Save import 使用 document 交回读取内容。
     Save {
         #[serde(skip_serializing_if = "Option::is_none")]
-        document: Option<String>,
+        document: Option<Vec<u8>>,
     },
     /// 语言平台操作成功。
     SelectLanguage,

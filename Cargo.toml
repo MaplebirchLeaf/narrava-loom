@@ -10,6 +10,7 @@ resolver = "3" # Rust 2024 的依赖解析器
 [dependencies]
 semver = "1" # 语义化版本处理
 regex = "1" # Reaction Passage selector 的作者正则表达式
+postcard = { version = "1.1.3", features = ["alloc"] } # 版本化 .nsave 二进制 payload
 
 serde = { version = "1", features = ["derive", "rc"] } # 序列化/反序列化
 serde_json = "1" # JSON 解析

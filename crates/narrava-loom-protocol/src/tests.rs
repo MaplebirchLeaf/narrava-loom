@@ -156,7 +156,7 @@ fn runtime_protocol_discriminators_match_the_canonical_contract() {
                 operation: 2,
                 direction: SaveOperation::Export,
                 target: String::new(),
-                document: Some(String::new()),
+                document: Some(Vec::new()),
             }),
             discriminator(&PendingOperation::SelectLanguage {
                 operation: 3,

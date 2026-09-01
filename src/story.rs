@@ -1,6 +1,10 @@
 //! Story 的 Passage 查询与导航状态。
 
-use std::{collections::VecDeque, error::Error, fmt};
+use std::{
+    collections::{HashMap, VecDeque},
+    error::Error,
+    fmt,
+};
 
 use crate::{
     hir::{HirPassage, HirStory},
@@ -72,6 +76,7 @@ impl Error for StorySnapshotError {}
 /// 借用当前有效 HIR，并单独保存已经确认的导航状态。
 pub struct Story<'hir, 'source> {
     compiled: &'hir HirStory<'source>,
+    passage_index: HashMap<&'source str, &'hir HirPassage<'source>>,
     history: Vec<StoryHistoryEntry<'hir, 'source>>,
     position: Option<usize>,
     next_history_id: u64,
@@ -80,8 +85,14 @@ pub struct Story<'hir, 'source> {
 impl<'hir, 'source> Story<'hir, 'source> {
     /// 装载可用 Passage；装载本身不代表已经进入起始 Passage。
     pub fn new(compiled: &'hir HirStory<'source>) -> Self {
+        let passage_index: HashMap<&'source str, &'hir HirPassage<'source>> = compiled
+            .passages
+            .iter()
+            .map(|passage: &'hir HirPassage<'source>| (passage.name, passage))
+            .collect();
         Self {
             compiled,
+            passage_index,
             history: Vec::new(),
             position: None,
             next_history_id: 1,
@@ -95,7 +106,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
 
     /// 按区分大小写的 PassageName 精确查询；不触发任何导航，也不建立历史记录。
     pub fn get(&self, name: &str) -> Option<&'hir HirPassage<'source>> {
-        self.compiled.passage(name)
+        self.passage_index.get(name).copied()
     }
 
     /// 按精确 Tag 返回源码顺序中的 Passage，不为 Tag 预设游戏含义。
@@ -153,6 +164,39 @@ impl<'hir, 'source> Story<'hir, 'source> {
             position: self.position,
             next_history_id: self.next_history_id,
         }
+    }
+
+    /// 校验并一次性替换外部持久化时间线；失败前不修改活动 Story。
+    pub(crate) fn replace_timeline<'entry>(
+        &mut self,
+        entries: impl IntoIterator<Item = (&'entry str, bool)>,
+        position: Option<usize>,
+    ) -> Result<(), StoryNavigationError> {
+        let mut history: Vec<StoryHistoryEntry<'hir, 'source>> = Vec::new();
+        let mut next_history_id: u64 = self.next_history_id;
+        for (name, had_navigation) in entries {
+            let passage: &'hir HirPassage<'source> = self
+                .passage_index
+                .get(name)
+                .copied()
+                .ok_or_else(|| StoryNavigationError::MissingPassage(name.to_owned()))?;
+            if name == special::STORY_INIT_PASSAGE {
+                return Err(StoryNavigationError::SpecialPassage(name.to_owned()));
+            }
+            let id: StoryHistoryId = StoryHistoryId(next_history_id);
+            next_history_id = next_history_id
+                .checked_add(1)
+                .ok_or(StoryNavigationError::HistoryIdExhausted)?;
+            history.push(StoryHistoryEntry {
+                id,
+                passage,
+                had_navigation,
+            });
+        }
+        self.history = history;
+        self.position = position;
+        self.next_history_id = next_history_id;
+        Ok(())
     }
 
     /// 为 Host 辅助区域复制当前时间线；副本导航不会进入真实历史。
@@ -218,8 +262,9 @@ impl<'hir, 'source> Story<'hir, 'source> {
         name: &str,
     ) -> Result<StoryNavigationRequest<'hir, 'source>, StoryNavigationError> {
         let passage: &HirPassage<'source> = self
-            .compiled
-            .passage(name)
+            .passage_index
+            .get(name)
+            .copied()
             .ok_or_else(|| StoryNavigationError::MissingPassage(name.to_owned()))?;
         if name == special::STORY_INIT_PASSAGE {
             return Err(StoryNavigationError::SpecialPassage(name.to_owned()));

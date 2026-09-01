@@ -18,7 +18,6 @@ pub(super) struct SaveValueGraph {
 
 /// 单个可保存值的标签化序列化形态。
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 enum SaveValue {
     Undefined,
     Null,
@@ -31,7 +30,6 @@ enum SaveValue {
 
 /// 共享 Array/Object 节点在序列化形态中的内容。
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 enum SaveNode {
     Array(Vec<SaveValue>),
     Object(Vec<(String, SaveValue)>),
@@ -53,7 +51,9 @@ struct Encoder {
 
 impl SaveValueGraph {
     /// 把 `$variables` 根表编码为可序列化图；遇到不可保存值返回 `UnsupportedValue`。
-    pub(super) fn encode(roots: &BTreeMap<String, Value>) -> Result<Self, SaveError> {
+    pub(super) fn encode<'value>(
+        roots: impl IntoIterator<Item = (&'value str, &'value Value)>,
+    ) -> Result<Self, SaveError> {
         let mut encoder: Encoder = Encoder {
             next_id: 1,
             identities: HashMap::new(),
@@ -62,7 +62,7 @@ impl SaveValueGraph {
         let mut encoded: BTreeMap<String, SaveValue> = BTreeMap::new();
         for (name, value) in roots {
             let path: String = format!("$variables.{name}");
-            encoded.insert(name.clone(), encoder.encode_value(value, path.as_str())?);
+            encoded.insert(name.to_owned(), encoder.encode_value(value, path.as_str())?);
         }
         Ok(Self {
             roots: encoded,
@@ -147,14 +147,15 @@ impl Encoder {
             return Ok(SaveValue::Array(*id));
         }
         let id: u64 = self.allocate(identity)?;
-        let items: Vec<Value> = array.snapshot();
-        let values: Result<Vec<SaveValue>, SaveError> = items
-            .iter()
-            .enumerate()
-            .map(|(index, value): (usize, &Value)| {
-                self.encode_value(value, format!("{path}[{index}]").as_str())
-            })
-            .collect();
+        let values: Result<Vec<SaveValue>, SaveError> = array.with_ref(|items: &[Value]| {
+            items
+                .iter()
+                .enumerate()
+                .map(|(index, value): (usize, &Value)| {
+                    self.encode_value(value, format!("{path}[{index}]").as_str())
+                })
+                .collect()
+        });
         self.nodes.insert(id, SaveNode::Array(values?));
         Ok(SaveValue::Array(id))
     }
@@ -166,16 +167,18 @@ impl Encoder {
             return Ok(SaveValue::Object(*id));
         }
         let id: u64 = self.allocate(identity)?;
-        let properties: Vec<(String, Value)> = object.snapshot();
-        let values: Result<Vec<(String, SaveValue)>, SaveError> = properties
-            .iter()
-            .map(|(name, value): &(String, Value)| {
-                Ok((
-                    name.clone(),
-                    self.encode_value(value, format!("{path}.{name}").as_str())?,
-                ))
-            })
-            .collect();
+        let values: Result<Vec<(String, SaveValue)>, SaveError> =
+            object.with_ref(|properties: &[(String, Value)]| {
+                properties
+                    .iter()
+                    .map(|(name, value): &(String, Value)| {
+                        Ok((
+                            name.clone(),
+                            self.encode_value(value, format!("{path}.{name}").as_str())?,
+                        ))
+                    })
+                    .collect()
+            });
         self.nodes.insert(id, SaveNode::Object(values?));
         Ok(SaveValue::Object(id))
     }

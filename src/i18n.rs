@@ -1,7 +1,9 @@
 //! 从叙事 HIR 提取宿主无关的可翻译文本目录。
 
 use std::{
+    cell::RefCell,
     collections::BTreeMap,
+    collections::HashMap,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -135,11 +137,13 @@ impl I18nMessage {
 }
 
 /// 编译产物携带的默认语言文本目录。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct I18nCatalog {
     #[serde(skip, default = "I18nCatalogIdentity::next")]
     identity: I18nCatalogIdentity,
     messages: Vec<I18nMessage>,
+    #[serde(skip)]
+    message_index: RefCell<Option<HashMap<u64, usize>>>,
 }
 
 impl Default for I18nCatalog {
@@ -147,6 +151,7 @@ impl Default for I18nCatalog {
         Self {
             identity: I18nCatalogIdentity::next(),
             messages: Vec::new(),
+            message_index: RefCell::new(None),
         }
     }
 }
@@ -169,12 +174,42 @@ impl I18nCatalog {
         Self {
             identity: I18nCatalogIdentity::next(),
             messages,
+            message_index: RefCell::new(None),
         }
     }
 
     /// 按收集顺序返回全部默认语言消息。
     pub fn messages(&self) -> &[I18nMessage] {
         &self.messages
+    }
+
+    /// 以无字符串副本的稳定 hash 索引查找消息；极小概率碰撞回退精确扫描。
+    pub(crate) fn message(&self, id: &str) -> Option<&I18nMessage> {
+        let key: u64 = message_key(id);
+        if self.message_index.borrow().is_none() {
+            let index: HashMap<u64, usize> = self
+                .messages
+                .iter()
+                .enumerate()
+                .map(|(index, message): (usize, &I18nMessage)| {
+                    (message_key(message.id().as_str()), index)
+                })
+                .collect();
+            *self.message_index.borrow_mut() = Some(index);
+        }
+        let candidate: Option<usize> = self
+            .message_index
+            .borrow()
+            .as_ref()
+            .and_then(|index: &HashMap<u64, usize>| index.get(&key).copied());
+        candidate
+            .and_then(|index: usize| self.messages.get(index))
+            .filter(|message: &&I18nMessage| message.id().as_str() == id)
+            .or_else(|| {
+                self.messages
+                    .iter()
+                    .find(|message: &&I18nMessage| message.id().as_str() == id)
+            })
     }
 
     /// 建立可导出为 NMSG 与动态字典 JSON 的译者模板。
@@ -256,6 +291,24 @@ impl I18nCatalog {
     ) -> Result<I18nResolvedText, I18nResolveError> {
         resolution::resolve_default(self, id, values)
     }
+}
+
+impl PartialEq for I18nCatalog {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity == other.identity && self.messages == other.messages
+    }
+}
+
+impl Eq for I18nCatalog {}
+
+/// FNV-1a 64：只作进程内索引，碰撞仍由完整消息 ID 验证。
+fn message_key(id: &str) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in id.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
 
 /// Core 内部统一使用的翻译数据，不对应单个磁盘文件。

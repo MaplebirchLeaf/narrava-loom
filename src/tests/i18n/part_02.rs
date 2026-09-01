@@ -250,6 +250,16 @@ fn nlang_package_validates_required_files_without_zip_or_filesystem_access() {
 
     assert_eq!(validated.manifest().manifest().locale(), "zh-CN");
     assert_eq!(validated.translation().language(), "zh-CN");
+    assert!(
+        Arc::ptr_eq(
+            &validated.shared_translation(),
+            &validated.clone().shared_translation()
+        ),
+        "语言包 clone 必须共享大规模译文表"
+    );
+    assert_eq!(validated.file("manifest.json"), None);
+    assert_eq!(validated.file("translations.nmsg"), None);
+    assert_eq!(validated.file("dictionary.json"), None);
     assert_eq!(
         validated.file("resources/banner.nres"),
         Some(&[1_u8, 2, 3][..])
@@ -281,6 +291,32 @@ fn nlang_package_loads_dictionary_json_into_the_translation() {
             (String::from("Potion"), String::from("药水")),
         ]))
     );
+}
+
+#[test]
+fn nlang_package_merges_multiple_message_files_without_retaining_source_bytes() {
+    let package: NlangPackageInput = NlangPackageInput::new(vec![
+        NlangPackageEntry::new("manifest.json", valid_nlang_manifest_json().into_bytes()),
+        NlangPackageEntry::new("translations.nmsg", Vec::new()),
+        NlangPackageEntry::new(
+            "messages/prologue.nmsg",
+            b":: prologue\n[source]\nHello\n[translation]\nNi hao\n".to_vec(),
+        ),
+        NlangPackageEntry::new(
+            "messages/forest.nmsg",
+            b":: forest\n[source]\nForest\n[translation]\nSen lin\n".to_vec(),
+        ),
+        NlangPackageEntry::new("dictionary.json", br#"{}"#.to_vec()),
+    ]);
+    let game: GameIdentity = GameIdentity::new("example.forest", "0.1.5").expect("游戏身份应有效");
+
+    let validated: NlangValidatedPackage = package
+        .validate("zh-CN", &game)
+        .expect("一个语言应允许多个消息文件");
+
+    assert_eq!(validated.translation().passages().len(), 2);
+    assert_eq!(validated.file("messages/prologue.nmsg"), None);
+    assert_eq!(validated.file("messages/forest.nmsg"), None);
 }
 
 #[test]

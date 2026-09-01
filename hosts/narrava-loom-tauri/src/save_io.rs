@@ -17,8 +17,8 @@ pub(crate) fn process_save_io(
     game_path: &Path,
     operation: SaveOperation,
     target: &str,
-    document: Option<String>,
-) -> Result<Option<String>, HostErrorDto> {
+    document: Option<Vec<u8>>,
+) -> Result<Option<Vec<u8>>, HostErrorDto> {
     let file_name = save_file_name(target)?;
     let save_directory = game_path.join("save");
     let path = save_directory.join(file_name);
@@ -26,10 +26,10 @@ pub(crate) fn process_save_io(
         match operation {
             SaveOperation::Export => {
                 fs::create_dir_all(&save_directory).map_err(|error| error.to_string())?;
-                let document = document
+                let document: &[u8] = document
                     .as_deref()
                     .ok_or_else(|| String::from("Save export 缺少存档内容"))?;
-                write_atomically(&path, document.as_bytes()).map_err(|error| error.to_string())
+                write_atomically(&path, document).map_err(|error| error.to_string())
             }
             SaveOperation::Import => Ok(()),
         }
@@ -79,7 +79,7 @@ fn replace_file(temporary: &Path, path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn read_limited(path: &Path) -> std::io::Result<String> {
+fn read_limited(path: &Path) -> std::io::Result<Vec<u8>> {
     let file: File = File::open(path)?;
     let length: u64 = file.metadata()?.len();
     if length > MAX_SAVE_BYTES {
@@ -96,8 +96,7 @@ fn read_limited(path: &Path) -> std::io::Result<String> {
             "存档超过 16 MiB 上限",
         ));
     }
-    String::from_utf8(bytes)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+    Ok(bytes)
 }
 
 /// 校验并规范化存档目标为 `<target>.nsave` 文件名（禁止路径逃逸）。

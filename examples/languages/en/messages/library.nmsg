@@ -1,0 +1,5 @@
+:: p7:Library:body.0
+[source]
+书架上写着：{value_1}
+[translation]
+The bookshelf reads: {value_1}

@@ -29,9 +29,3 @@ You found
 欢迎，{$hero}。这是 Narrava Loom 综合示例。
 [translation]
 Welcome, {$hero}. This is the Narrava Loom grand tour.
-
-:: p7:Library:body.0
-[source]
-书架上写着：{value_1}
-[translation]
-The bookshelf reads: {value_1}

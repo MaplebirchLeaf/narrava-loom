@@ -171,7 +171,7 @@ impl I18nLanguageChain {
                 return Err(I18nLanguageChainError::DuplicateLocale { locale });
             }
             let translation: I18nValidatedTemplate =
-                catalog.validate(package.translation().clone()).map_err(
+                super::validation::validate_shared(catalog, package.shared_translation()).map_err(
                     |errors: Vec<I18nValidationError>| I18nLanguageChainError::InvalidTranslation {
                         locale: locale.clone(),
                         errors,

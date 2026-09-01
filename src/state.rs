@@ -54,11 +54,6 @@ impl StateSnapshot {
         Self { variables }
     }
 
-    /// 借用内部 `$variables` 表；仅 crate 内部使用。
-    pub(crate) fn variables(&self) -> &BTreeMap<String, Value> {
-        &self.variables
-    }
-
     /// 读取快照中的 `$name` 持久变量值。
     pub fn variables_get(&self, name: &str) -> Option<&Value> {
         self.variables.get(name)
@@ -181,6 +176,13 @@ impl State {
     /// 按名称遍历持久游戏变量表。
     pub fn variables_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
         sorted_entries(&self.variables).into_iter()
+    }
+
+    /// 存档编码器直接借用持久变量，避免先建立一份完整 StateSnapshot。
+    pub(crate) fn persistent_variables(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.variables
+            .iter()
+            .map(|(name, value): (&String, &Value)| (name.as_str(), value))
     }
 
     /// 写入 `$name`，并返回被替换的旧值。

@@ -95,6 +95,11 @@ impl ArrayValue {
         self.reference.identity()
     }
 
+    /// 存档等 Core 内部边界在借用期间读取元素，避免先克隆整个集合。
+    pub(crate) fn with_ref<R>(&self, read: impl FnOnce(&[Value]) -> R) -> R {
+        self.reference.with(|values: &Vec<Value>| read(values))
+    }
+
     /// 受控只读访问共享元素。
     pub(super) fn with<R>(&self, read: impl FnOnce(&Vec<Value>) -> R) -> R {
         self.reference.with(read)
@@ -203,6 +208,12 @@ impl ObjectValue {
     /// 内部身份指针，用于存档去重等内部判断。
     pub(crate) fn identity(&self) -> usize {
         self.reference.identity()
+    }
+
+    /// 存档等 Core 内部边界在借用期间读取属性，避免先克隆整个集合。
+    pub(crate) fn with_ref<R>(&self, read: impl FnOnce(&[(String, Value)]) -> R) -> R {
+        self.reference
+            .with(|properties: &Vec<(String, Value)>| read(properties))
     }
 
     /// 受控只读访问共享属性。

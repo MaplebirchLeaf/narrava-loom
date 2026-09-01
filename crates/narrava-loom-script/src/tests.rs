@@ -984,7 +984,7 @@ mod runtime_session_state_machine {
             state: &State,
             _story: &Story<'hir, 'source>,
             _reactions: &[narrava_loom_core::reaction::ReactionRuntimeState],
-        ) -> Result<Option<String>, HostErrorDto> {
+        ) -> Result<Option<Vec<u8>>, HostErrorDto> {
             if operation == SaveOperation::Export {
                 self.observed
                     .borrow_mut()
@@ -997,7 +997,7 @@ mod runtime_session_state_machine {
             &mut self,
             operation: SaveOperation,
             _target: &str,
-            _document: Option<String>,
+            _document: Option<Vec<u8>>,
             state: &mut State,
             _story: &mut Story<'hir, 'source>,
         ) -> Result<Option<Vec<narrava_loom_core::reaction::ReactionRuntimeState>>, HostErrorDto>
@@ -1089,7 +1089,7 @@ mod runtime_session_state_machine {
             _state: &State,
             _story: &Story<'hir, 'source>,
             _reactions: &[narrava_loom_core::reaction::ReactionRuntimeState],
-        ) -> Result<Option<String>, HostErrorDto> {
+        ) -> Result<Option<Vec<u8>>, HostErrorDto> {
             self.0
                 .0
                 .borrow_mut()
@@ -1101,7 +1101,7 @@ mod runtime_session_state_machine {
             &mut self,
             _operation: SaveOperation,
             _target: &str,
-            _document: Option<String>,
+            _document: Option<Vec<u8>>,
             _state: &mut State,
             _story: &mut Story<'hir, 'source>,
         ) -> Result<Option<Vec<narrava_loom_core::reaction::ReactionRuntimeState>>, HostErrorDto>
@@ -1439,7 +1439,7 @@ mod runtime_session_state_machine {
             .execute(RuntimeCommand::Resume {
                 operation: pending_id(pending),
                 result: Some(narrava_loom_protocol::PendingResult::Save {
-                    document: Some(String::from("{}")),
+                    document: Some(Vec::new()),
                 }),
             })
             .unwrap_err();

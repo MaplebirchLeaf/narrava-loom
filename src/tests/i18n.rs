@@ -1,6 +1,6 @@
 //! I18n 文本目录的稳定身份与来源测试。
 
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use crate::{
     GameIdentity,
@@ -23,3 +23,11 @@ use crate::{
 // include 保持原模块命名、私有辅助项可见性和测试发现路径不变。
 include!("i18n/part_01.rs");
 include!("i18n/part_02.rs");
+
+#[test]
+fn i18n_runtime_index_does_not_duplicate_message_id_strings() {
+    let source: &str = include_str!("../i18n.rs");
+
+    assert!(source.contains("message_index: RefCell<Option<HashMap<u64, usize>>>"));
+    assert!(!source.contains("message_index: HashMap<String"));
+}

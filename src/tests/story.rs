@@ -14,6 +14,43 @@ use crate::{
 };
 
 #[test]
+fn story_lookup_index_borrows_compiled_passage_names() {
+    let source: &str = include_str!("../story.rs");
+
+    assert!(source.contains("passage_index: HashMap<&'source str"));
+    assert!(!source.contains("passage_index: HashMap<String"));
+}
+
+#[test]
+fn story_lookup_resolves_the_last_of_one_hundred_thousand_passages() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("测试 Source 应可读取");
+    let names: Vec<String> = (0..100_000)
+        .map(|index: usize| format!("passage-{index}"))
+        .collect();
+    let passages: Vec<HirPassage<'_>> = names
+        .iter()
+        .map(|name: &String| HirPassage {
+            source: &source.path,
+            name,
+            tags: Vec::new(),
+            body: Vec::new(),
+        })
+        .collect();
+    let compiled: HirStory<'_> = HirStory { passages };
+    let story: Story<'_, '_> = Story::new(&compiled);
+
+    assert_eq!(
+        story.get("passage-99999").map(|passage| passage.name),
+        Some("passage-99999")
+    );
+    assert!(story.get("passage-100000").is_none());
+}
+
+#[test]
 fn special_passage_names_have_one_shared_definition() {
     use crate::story::special::{
         BAR_PASSAGE, BAR_STOWED_PASSAGE, FOOTER_PASSAGE, HEADER_PASSAGE, START_PASSAGE,

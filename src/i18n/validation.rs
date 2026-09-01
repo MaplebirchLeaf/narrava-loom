@@ -1,6 +1,9 @@
 //! 外部译文进入 Core 前的确定性校验。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use super::{
     I18nCatalog, I18nCatalogIdentity, I18nMessage, I18nTemplate, I18nTemplateMessage,
@@ -41,7 +44,7 @@ pub enum I18nValidationError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct I18nValidatedTemplate {
     catalog: I18nCatalogIdentity,
-    template: I18nTemplate,
+    template: Arc<I18nTemplate>,
 }
 
 impl I18nValidatedTemplate {
@@ -62,7 +65,7 @@ impl I18nValidatedTemplate {
 
     /// 消耗校验结果，取回模板本体。
     pub fn into_template(self) -> I18nTemplate {
-        self.template
+        Arc::unwrap_or_clone(self.template)
     }
 
     /// 译文是否由该目录构建校验；仅 crate 内部使用。
@@ -75,6 +78,14 @@ impl I18nValidatedTemplate {
 pub(super) fn validate(
     catalog: &I18nCatalog,
     template: I18nTemplate,
+) -> Result<I18nValidatedTemplate, Vec<I18nValidationError>> {
+    validate_shared(catalog, Arc::new(template))
+}
+
+/// 校验共享模板；语言包选择借此避免复制大规模消息表。
+pub(super) fn validate_shared(
+    catalog: &I18nCatalog,
+    template: Arc<I18nTemplate>,
 ) -> Result<I18nValidatedTemplate, Vec<I18nValidationError>> {
     let mut errors: Vec<I18nValidationError> = Vec::new();
     if !is_language_tag_well_formed(template.language()) {

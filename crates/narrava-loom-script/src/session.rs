@@ -103,7 +103,7 @@ pub struct RuntimeSession<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDisp
     scheduled: Option<ScriptPending>,
     waiting: Option<Waiting<'hir, 'source>>,
     presented: Option<Rc<HostUpdate>>,
-    language: Option<I18nRuntimeLanguage>,
+    language: Option<Rc<I18nRuntimeLanguage>>,
     sequence: u64,
     platform: Box<dyn RuntimePlatform<'hir, 'source> + 'hir>,
     notices: Vec<HostErrorDto>,
@@ -304,7 +304,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         }
         let params: Value = Value::Null;
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
-        let language: Option<I18nRuntimeLanguage> = self.language.clone();
+        let language: Option<Rc<I18nRuntimeLanguage>> = self.language.clone();
         let result = HostApi::start_mir_with_reaction(
             &mut self.pending,
             &mut self.state,
@@ -314,7 +314,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 params: &params,
                 identity,
                 limits: limits(),
-                language: language.as_ref(),
+                language: language.as_deref(),
             },
             |_passage, _state, _requests, _limits| {
                 Ok::<BodyExecution, Diagnostic>(BodyExecution::default())
@@ -355,14 +355,14 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             .map_err(|error| HostErrorDto::new("runtime_session.interaction", error.to_string()))?;
         let params: Value = Value::Null;
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
-        let language: Option<I18nRuntimeLanguage> = self.language.clone();
+        let language: Option<Rc<I18nRuntimeLanguage>> = self.language.clone();
         let request = HostMirAdvanceRequest {
             presented: previous.as_ref(),
             input: HostInput::activate(id.clone()),
             params: &params,
             identity,
             limits: limits(),
-            language: language.as_ref(),
+            language: language.as_deref(),
         };
         let result = if self.interactions.has(&id) {
             let mut next_interactions: MacroInteractions<'hir, 'source> = MacroInteractions::new();
@@ -476,7 +476,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 params: &params,
                 identity,
                 limits: limits(),
-                language: language.as_ref(),
+                language: language.as_deref(),
             },
             |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
             |passage, state, requests| {
@@ -610,7 +610,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     params: &params,
                     identity,
                     limits: limits(),
-                    language: language.as_ref(),
+                    language: language.as_deref(),
                 },
                 |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
                 |passage, state, requests| {
@@ -843,7 +843,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             let mut pending = HostPendingExecutions::new();
             let params: Value = Value::Null;
             let identity: RuntimeExecutionIdentity = self.identity(SPECIAL_STORY_ID);
-            let language: Option<I18nRuntimeLanguage> = self.language.clone();
+            let language: Option<Rc<I18nRuntimeLanguage>> = self.language.clone();
             let result = HostApi::render_special_mir(
                 &mut pending,
                 &mut view_state,
@@ -854,7 +854,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     params: &params,
                     identity,
                     limits: limits(),
-                    language: language.as_ref(),
+                    language: language.as_deref(),
                 },
                 |_phase, _context, _state| Ok::<(), Diagnostic>(()),
                 |invocation, state, requests, scopes| {

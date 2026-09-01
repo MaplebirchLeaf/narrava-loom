@@ -75,9 +75,7 @@ fn resolve_with_dictionary_values(
         return Err(I18nResolveError::DifferentCatalog);
     }
     let source = catalog
-        .messages()
-        .iter()
-        .find(|message| message.id().as_str() == id)
+        .message(id)
         .ok_or_else(|| I18nResolveError::UnknownMessage { id: id.to_owned() })?;
     let translated: Option<&I18nTemplateMessage> = translation
         .passages()
@@ -118,9 +116,7 @@ pub(super) fn resolve_default(
     values: &BTreeMap<String, String>,
 ) -> Result<I18nResolvedText, I18nResolveError> {
     let source = catalog
-        .messages()
-        .iter()
-        .find(|message| message.id().as_str() == id)
+        .message(id)
         .ok_or_else(|| I18nResolveError::UnknownMessage { id: id.to_owned() })?;
     let text: String = render(id, source.text(), values, None, &BTreeMap::new(), None)?;
     Ok(I18nResolvedText {

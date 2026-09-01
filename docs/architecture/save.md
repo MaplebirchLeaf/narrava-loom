@@ -2,7 +2,7 @@
 
 > 状态：Core 文档、Host 请求与生命周期边界已实现
 >
-> 更新日期：2026-08-22
+> 更新日期：2026-09-01
 
 ## 边界
 
@@ -20,18 +20,20 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 
 `global` 与 `setup` 属于启动环境，由配置、StoryInit 和 scripts 重新建立。`temporary` 与 Macro Local 只服务当前执行范围，加载后清空。
 
-## 文档结构
+## 二进制文档结构
 
-`SaveDocument` 使用 JSON 作为首个可检查的交换格式，根层为 `game`、`state`、`story`，以及可省略的 `reactions`。旧文档没有 `reactions` 时按空集合读取。当前没有 `format_version`：引擎尚未发布，也没有旧格式迁移需求；出现首个不兼容发布格式时再建立明确版本边界。
+`.nsave` 是正式二进制协议，不是 Rust 内存布局、JSON 或 ZIP。文件以 `NRSAVE\0` magic 和单字节
+schema version 开始，当前版本为 `1`；payload 使用确定性的 tagged value、varint 长度、节点 ID 和
+长度前缀数据。未知 magic/version 在解析 payload 前直接拒绝，不提供未发布 JSON 草案的兼容分支。
 
-`.nsave` 是该文档的游戏侧文件后缀，当前内容就是 UTF-8 JSON，而不是 ZIP。
-Core 只编码和解码文档；具体 Host 决定存放位置。综合示例在内存中展示捕获、JSON 编码与恢复，不把固定存档文件作为源码真值。
+Core 通过 `SaveDocument::to_bytes()`／`from_bytes()` 编解码，Host 只读写 `Vec<u8>`。导出不再建立
+pretty JSON `String`，导入也不再同时保留文件 bytes、UTF-8 String 与解析文档。
 
 游戏身份使用精确 `id + version`。当前不提供隐式迁移，不允许另一游戏或另一版本直接恢复。未来迁移必须是独立、显式的输入转换，不进入正常 `restore()`。
 
 ## Value 图
 
-Array 与 Object 不递归嵌入 JSON，而是使用单调节点 ID 建立图：
+Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图：
 
 - 多个 `$variables` 指向同一集合时，恢复后仍共享同一身份；
 - Array/Object 循环引用不会无限递归；
@@ -51,10 +53,14 @@ Array 与 Object 不递归嵌入 JSON，而是使用单调节点 ID 建立图：
 1. 校验精确游戏身份；
 2. 校验 Story history 与当前 HIR；
 3. 完整解码 Value 图；
-4. 捕获活动 State/Story 检查点；
-5. 替换 `$variables`、清空 `_temporary` 并重建 Story；
+4. 在临时所有权中建立完整的新 `$variables` 与 Story 时间线；
+5. 校验全部通过后一次性替换 `$variables`、清空 `_temporary` 并提交 Story；
 6. RuntimeSession 根据当前启动脚本已注册的 ID 恢复 Reaction 状态；
-7. 任一步失败时同时回滚 State、Story 与 Reaction。
+7. RuntimeSession 只保留一份 State/Story/Reaction 回滚检查点，后续 Script 同步失败时统一恢复。
+
+捕获直接借用活动 `$variables` 进行单趟 ValueGraph 编码，不先建立完整 `StateSnapshot`；读取共享
+Array/Object 时也不先克隆整个集合。Story history 在运行期保存 Passage 引用，只有可移植存档边界
+写入访问过的 PassageName，因此 Save 大小取决于实际 history，而不是 Story 总 Passage 数。
 
 这条入口只恢复稳定领域状态，不自动执行 Passage 生命周期或渲染。Host 后续应明确决定加载完成后从当前 Passage 的哪个生命周期阶段重新进入 Engine。
 
@@ -99,7 +105,7 @@ Binding 必须把全局 `Save` 对象连接到同一个 Rust `SaveController`。
 当前 Rust API：
 
 - `SaveDocument::capture()`；
-- `to_json()` / `from_json()`；
+- `to_bytes()` / `from_bytes()`；
 - `restore()`；
 - `SaveError::diagnostic()`；
 - `SaveController::export()` / `import()` / `take()` / `complete()`；
