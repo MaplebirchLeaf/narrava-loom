@@ -168,6 +168,7 @@ pub(super) fn continue_navigation_transaction<'hir, 'source, LifecycleError>(
             )));
         }
     };
+    story.record_state_snapshot(confirmed.id(), state.snapshot());
     let mut requests: StoryRuntimeRequests<'_, 'hir, 'source> =
         StoryRuntimeRequests::from_pending(story, requests)
             .unwrap_or_else(|_| panic!("同一事务确认导航后必须能重新附着 Story 请求"));

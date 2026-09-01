@@ -243,7 +243,6 @@ fn compiler_owns_macro(name: &str) -> bool {
             | "run"
             | "include"
             | "goto"
-            | "visits"
             | "print"
             | "silently"
             | "return"

@@ -346,6 +346,16 @@ impl HostApi {
                 pending: None,
             })
         })?;
+        let target_state = story.state_snapshot(current.id()).ok_or_else(|| {
+            Box::new(HostDriveError {
+                diagnostic: host_error(
+                    "story.history.state_unavailable",
+                    "历史项缺少进入 Passage 前的持久 State 快照",
+                ),
+                pending: None,
+            })
+        })?;
+        state.restore_snapshot(target_state);
         let boundary = Engine::begin_mir_chain_from_entry(
             state,
             story,

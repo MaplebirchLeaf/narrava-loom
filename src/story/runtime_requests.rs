@@ -94,6 +94,7 @@ impl<'hir, 'source> StoryHistoryEntry<'hir, 'source> {
 pub struct StorySnapshot<'hir, 'source> {
     pub(super) compiled: &'hir HirStory<'source>,
     pub(super) history: Vec<StoryHistoryEntry<'hir, 'source>>,
+    pub(super) state_history: HashMap<StoryHistoryId, Rc<StateSnapshot>>,
     pub(super) position: Option<usize>,
     pub(super) next_history_id: u64,
 }
@@ -194,10 +195,6 @@ impl<'story, 'hir, 'source> MacroStoryAccess for StoryRuntimeRequests<'story, 'h
 
     fn has(&self, name: &str) -> bool {
         self.story.has(name)
-    }
-
-    fn visits(&self, name: &str) -> usize {
-        self.story.visits(name)
     }
 
     fn include(&mut self, name: &str) -> Result<(), Self::Error> {

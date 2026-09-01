@@ -54,6 +54,13 @@ impl StateSnapshot {
         Self { variables }
     }
 
+    /// 存档编码器借用历史快照中的持久变量。
+    pub(crate) fn persistent_variables(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.variables
+            .iter()
+            .map(|(name, value): (&String, &Value)| (name.as_str(), value))
+    }
+
     /// 读取快照中的 `$name` 持久变量值。
     pub fn variables_get(&self, name: &str) -> Option<&Value> {
         self.variables.get(name)
@@ -67,6 +74,16 @@ impl StateSnapshot {
     /// 快照中的持久变量条目数。
     pub fn variables_len(&self) -> usize {
         self.variables.len()
+    }
+
+    /// 为历史重放建立与快照和值别名图隔离的 `$variables` 副本。
+    fn detached_variables(&self) -> BTreeMap<String, Value> {
+        let names: Vec<String> = self.variables.keys().cloned().collect();
+        let values: Vec<Value> = self.variables.values().cloned().collect();
+        names
+            .into_iter()
+            .zip(Value::detached_clone_many(&values))
+            .collect()
     }
 
     /// 读取不带 `$` 的持久变量属性路径；不存在的段统一返回 `Undefined`。
@@ -251,6 +268,12 @@ impl State {
     /// `global` 与 `setup` 由当前启动环境管理，因此保持不变。
     pub fn restore(&mut self, snapshot: StateSnapshot) {
         self.variables = snapshot.variables.into_iter().collect();
+        let _removed: usize = self.temporary_clear();
+    }
+
+    /// 从可复用的历史快照恢复 `$variables`；快照自身保持不可变且不与活动值图共享。
+    pub fn restore_snapshot(&mut self, snapshot: &StateSnapshot) {
+        self.variables = snapshot.detached_variables().into_iter().collect();
         let _removed: usize = self.temporary_clear();
     }
 

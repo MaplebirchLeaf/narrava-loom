@@ -71,10 +71,6 @@ impl MacroStoryAccess for EngineRuntimeStory {
         false
     }
 
-    fn visits(&self, _name: &str) -> usize {
-        0
-    }
-
     fn include(&mut self, _name: &str) -> Result<(), Self::Error> {
         Err("本测试不执行 include")
     }

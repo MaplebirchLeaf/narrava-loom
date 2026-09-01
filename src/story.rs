@@ -4,11 +4,13 @@ use std::{
     collections::{HashMap, VecDeque},
     error::Error,
     fmt,
+    rc::Rc,
 };
 
 use crate::{
     hir::{HirPassage, HirStory},
     macro_runtime::MacroStoryAccess,
+    state::StateSnapshot,
 };
 
 mod runtime_requests;
@@ -78,6 +80,7 @@ pub struct Story<'hir, 'source> {
     compiled: &'hir HirStory<'source>,
     passage_index: HashMap<&'source str, &'hir HirPassage<'source>>,
     history: Vec<StoryHistoryEntry<'hir, 'source>>,
+    state_history: HashMap<StoryHistoryId, Rc<StateSnapshot>>,
     position: Option<usize>,
     next_history_id: u64,
 }
@@ -94,6 +97,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
             compiled,
             passage_index,
             history: Vec::new(),
+            state_history: HashMap::new(),
             position: None,
             next_history_id: 1,
         }
@@ -145,6 +149,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
     pub fn reset(&mut self) -> usize {
         let removed: usize = self.history.len();
         self.history.clear();
+        self.state_history.clear();
         self.position = None;
         removed
     }
@@ -161,6 +166,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
         StorySnapshot {
             compiled: self.compiled,
             history: self.history.clone(),
+            state_history: self.state_history.clone(),
             position: self.position,
             next_history_id: self.next_history_id,
         }
@@ -194,6 +200,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
             });
         }
         self.history = history;
+        self.state_history.clear();
         self.position = position;
         self.next_history_id = next_history_id;
         Ok(())
@@ -216,6 +223,7 @@ impl<'hir, 'source> Story<'hir, 'source> {
             return Err(StorySnapshotError::DifferentStory);
         }
         self.history = snapshot.history;
+        self.state_history = snapshot.state_history;
         self.position = snapshot.position;
         self.next_history_id = self.next_history_id.max(snapshot.next_history_id);
         Ok(())
@@ -239,14 +247,22 @@ impl<'hir, 'source> Story<'hir, 'source> {
 
     /// 按区分大小写的 PassageName 统计已经确认的访问记录。
     pub fn visits(&self, name: &str) -> usize {
-        let active_history: &[StoryHistoryEntry<'hir, 'source>] = self
-            .position
-            .map_or(&[], |position: usize| &self.history[..=position]);
-        let visits: usize = active_history
+        let visits: usize = self
+            .history
             .iter()
             .filter(|entry| entry.passage.name == name)
             .count();
         visits
+    }
+
+    /// 记录进入指定历史项前的持久 State；事务回滚通过 StorySnapshot 一并恢复关联。
+    pub(crate) fn record_state_snapshot(&mut self, id: StoryHistoryId, state: StateSnapshot) {
+        self.state_history.insert(id, Rc::new(state));
+    }
+
+    /// 读取进入历史项前的持久 State 快照。
+    pub(crate) fn state_snapshot(&self, id: StoryHistoryId) -> Option<&StateSnapshot> {
+        self.state_history.get(&id).map(Rc::as_ref)
     }
 
     /// 确认一次导航；只有存在的目标才会同时更新 current 与 history。
@@ -292,6 +308,12 @@ impl<'hir, 'source> Story<'hir, 'source> {
             .ok_or(StoryNavigationError::HistoryIdExhausted)?;
         let retained: usize = self.position.map_or(0, |position: usize| position + 1);
         self.history.truncate(retained);
+        let retained_ids: std::collections::HashSet<StoryHistoryId> =
+            self.history.iter().map(StoryHistoryEntry::id).collect();
+        self.state_history
+            .retain(|id: &StoryHistoryId, _state: &mut Rc<StateSnapshot>| {
+                retained_ids.contains(id)
+            });
         self.history.push(StoryHistoryEntry {
             id,
             passage: request.passage,

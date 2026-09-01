@@ -38,7 +38,7 @@ fn save_document_binary_has_a_versioned_header_and_round_trips() {
         }])
         .to_bytes()
         .expect("存档应可编码");
-    assert_eq!(&encoded[..8], b"NRSAVE\0\x01");
+    assert_eq!(&encoded[..8], b"NRSAVE\0\x02");
     let decoded: SaveDocument = SaveDocument::from_bytes(&encoded).expect("存档应可解码");
     assert_eq!(decoded.reactions()[0].id, "quest.once");
     assert_eq!(decoded.to_bytes().expect("应可再次编码"), encoded);
@@ -185,6 +185,7 @@ fn save_binary_round_trip_restores_variables_aliases_and_story_cursor() {
     let _right = state.variables_set("right", Value::Array(shared));
     let _temporary = state.temporary_set("selection", Value::string("End"));
     let _global = state.global_set("runtimeApi", Value::Boolean(true));
+    record_missing_history_states(&mut story, &state);
     let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
 
     let save: SaveDocument = SaveDocument::capture(&game, &state, &story).expect("应可捕获存档");
@@ -230,6 +231,42 @@ fn save_binary_round_trip_restores_variables_aliases_and_story_cursor() {
 }
 
 #[test]
+fn save_round_trip_preserves_persistent_state_for_each_history_position() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("测试 Source 应可读取");
+    let compiled: HirStory<'_> = test_story(&source);
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = State::new();
+
+    let start_id = story.goto("Start").expect("Start 应可导航").id();
+    story.record_state_snapshot(start_id, state.snapshot());
+    let _first = state.variables_set("visits", Value::Number(1.0));
+    let map_id = story.goto("Map").expect("Map 应可导航").id();
+    story.record_state_snapshot(map_id, state.snapshot());
+    let _second = state.variables_set("visits", Value::Number(2.0));
+    let end_id = story.goto("End").expect("End 应可导航").id();
+    story.record_state_snapshot(end_id, state.snapshot());
+
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
+    let bytes: Vec<u8> = SaveDocument::capture(&game, &state, &story)
+        .and_then(|document: SaveDocument| document.to_bytes())
+        .expect("历史 State 应可保存");
+    let save: SaveDocument = SaveDocument::from_bytes(&bytes).expect("历史 State 应可解码");
+
+    let _changed = state.variables_set("visits", Value::Number(9.0));
+    save.restore(&game, &mut state, &mut story)
+        .expect("历史 State 应可恢复");
+    let map_id = story.back().expect("应可回到 Map").id();
+    let map_state = story.state_snapshot(map_id).expect("Map 应保留进入前状态");
+    state.restore_snapshot(map_state);
+
+    assert_eq!(state.variables_get("visits"), Some(&Value::Number(1.0)));
+}
+
+#[test]
 fn save_rejects_script_callable_anywhere_in_variables() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
@@ -265,6 +302,7 @@ fn save_restore_rejects_another_game_without_mutating_runtime() {
     story.goto("Start").expect("Start 应可导航");
     let mut state: State = State::new();
     let _score = state.variables_set("score", Value::Number(1.0));
+    record_missing_history_states(&mut story, &state);
     let saved_game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
     let active_game: GameIdentity = GameIdentity::new("another.game", "1.2.3").expect("身份应有效");
     let save: SaveDocument =
@@ -295,6 +333,7 @@ fn save_value_graph_preserves_cycles_without_recursive_serialization() {
     cycle.with_mut(|items: &mut Vec<Value>| items.push(Value::Array(cycle.clone())));
     let mut state: State = State::new();
     let _cycle = state.variables_set("cycle", Value::Array(cycle));
+    record_missing_history_states(&mut story, &state);
     let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").expect("身份应有效");
 
     let save: SaveDocument = SaveDocument::capture(&game, &state, &story).expect("循环图应可捕获");
@@ -327,7 +366,7 @@ fn save_rejects_a_damaged_binary_document_before_runtime_mutation() {
     let _items = state.variables_set("items", Value::array(vec![Value::Number(1.0)]));
     let _changed = state.variables_set("items", Value::string("active"));
     let error: SaveError =
-        SaveDocument::from_bytes(b"NRSAVE\0\x01\xff").expect_err("损坏 payload 不得解码");
+        SaveDocument::from_bytes(b"NRSAVE\0\x02\xff").expect_err("损坏 payload 不得解码");
 
     assert!(matches!(error, SaveError::Decode { .. }));
     assert_eq!(state.variables_get("items"), Some(&Value::string("active")));
@@ -351,5 +390,14 @@ fn passage<'source>(source: &'source Source, name: &'source str) -> HirPassage<'
         name,
         tags: Vec::new(),
         body: Vec::new(),
+    }
+}
+
+fn record_missing_history_states(story: &mut Story<'_, '_>, state: &State) {
+    let ids: Vec<_> = story.history().iter().map(|entry| entry.id()).collect();
+    for id in ids {
+        if story.state_snapshot(id).is_none() {
+            story.record_state_snapshot(id, state.snapshot());
+        }
     }
 }

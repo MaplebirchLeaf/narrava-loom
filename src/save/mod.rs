@@ -22,7 +22,7 @@ use crate::{
 
 use value::SaveValueGraph;
 
-const SAVE_MAGIC: &[u8; 8] = b"NRSAVE\0\x01";
+const SAVE_MAGIC: &[u8; 8] = b"NRSAVE\0\x02";
 
 /// 一份不包含平台对象、脚本函数或临时执行状态的存档。
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,6 +53,7 @@ struct SaveStory {
 struct SaveStoryEntry {
     passage: String,
     had_navigation: bool,
+    state: SaveValueGraph,
 }
 
 /// Save 捕获、JSON 边界或恢复阶段的稳定失败原因。
@@ -79,11 +80,23 @@ impl SaveDocument {
         let history: Vec<SaveStoryEntry> = story
             .history()
             .iter()
-            .map(|entry: &StoryHistoryEntry<'_, '_>| SaveStoryEntry {
-                passage: entry.passage().name.to_owned(),
-                had_navigation: entry.had_navigation(),
+            .map(|entry: &StoryHistoryEntry<'_, '_>| {
+                let snapshot: &StateSnapshot =
+                    story
+                        .state_snapshot(entry.id())
+                        .ok_or_else(|| SaveError::InvalidStory {
+                            message: format!(
+                                "历史项 {:?} 缺少进入 Passage 前的持久 State 快照",
+                                entry.id()
+                            ),
+                        })?;
+                Ok(SaveStoryEntry {
+                    passage: entry.passage().name.to_owned(),
+                    had_navigation: entry.had_navigation(),
+                    state: SaveValueGraph::encode(snapshot.persistent_variables())?,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<SaveStoryEntry>, SaveError>>()?;
         Ok(Self {
             game: SaveGame {
                 id: game.id().to_owned(),
@@ -142,7 +155,13 @@ impl SaveDocument {
         self.validate_game(game)?;
         self.validate_story(story)?;
         let variables: BTreeMap<String, crate::expression::value::Value> = self.state.decode()?;
-        self.restore_story(story)?;
+        let history_states: Vec<StateSnapshot> = self
+            .story
+            .history
+            .iter()
+            .map(|entry: &SaveStoryEntry| entry.state.decode().map(StateSnapshot::from_variables))
+            .collect::<Result<Vec<StateSnapshot>, SaveError>>()?;
+        self.restore_story(story, history_states)?;
         state.restore(StateSnapshot::from_variables(variables));
         Ok(())
     }
@@ -181,7 +200,11 @@ impl SaveDocument {
     }
 
     /// 用存档历史重建 Story 时间线，并把游标移回存档时的位置。
-    fn restore_story(&self, story: &mut Story<'_, '_>) -> Result<(), SaveError> {
+    fn restore_story(
+        &self,
+        story: &mut Story<'_, '_>,
+        history_states: Vec<StateSnapshot>,
+    ) -> Result<(), SaveError> {
         story
             .replace_timeline(
                 self.story
@@ -192,7 +215,12 @@ impl SaveDocument {
             )
             .map_err(|error| SaveError::Restore {
                 message: error.to_string(),
-            })
+            })?;
+        let history_ids: Vec<_> = story.history().iter().map(StoryHistoryEntry::id).collect();
+        for (id, state) in history_ids.into_iter().zip(history_states) {
+            story.record_state_snapshot(id, state);
+        }
+        Ok(())
     }
 }
 

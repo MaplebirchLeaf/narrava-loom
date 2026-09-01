@@ -225,45 +225,6 @@ fn visits_counts_confirmed_history_with_case_sensitive_names() {
 }
 
 #[test]
-fn visits_excludes_entries_after_the_history_cursor() {
-    let source: Source = Source::load(
-        Path::new("src/tests/fixtures/game"),
-        Path::new("story/main.twee"),
-    )
-    .expect("示例 Source 应可读取");
-    let compiled: HirStory<'_> = HirStory {
-        passages: vec![
-            HirPassage {
-                source: &source.path,
-                name: "Hall",
-                tags: Vec::new(),
-                body: Vec::new(),
-            },
-            HirPassage {
-                source: &source.path,
-                name: "Room",
-                tags: Vec::new(),
-                body: Vec::new(),
-            },
-        ],
-    };
-    let mut story: Story<'_, '_> = Story::new(&compiled);
-    for _visit in 0..4 {
-        story.goto("Hall").expect("Hall 应可导航");
-        story.goto("Room").expect("Room 应可导航");
-    }
-    story.goto("Hall").expect("第五次 Hall 应可导航");
-
-    assert_eq!(story.visits("Hall"), 5);
-    story.back().expect("第五次 Hall 应可回退到 Room");
-    story.back().expect("Room 应可回退到第四次 Hall");
-
-    assert_eq!(story.current().map(|passage| passage.name), Some("Hall"));
-    assert_eq!(story.visits("Hall"), 4);
-    assert_eq!(story.history().len(), 9, "前进分支仍应保留");
-}
-
-#[test]
 fn back_moves_the_history_cursor_without_deleting_forward_entries() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),

@@ -30,7 +30,6 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `print` | `<<print expression [color] [style...]>>` 或 `<<print expression {color, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、color、delay 与结构性标题的 StyledText |
 | `include` | `<<include "Passage">>` | 在当前位置执行另一 Passage，不发生导航 |
 | `goto` | `<<goto "Passage">>` | 请求导航并停止当前 Passage |
-| `visits` | `<<visits "Passage">>` | 输出当前 Story 游标以内对该 Passage 的访问次数；回退不会统计前进分支 |
 | `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
 | `button` | `<<button [[文本\|Passage]]>>...<</button>>` | 与 link 共享事务语义，但由 Host 呈现为按钮 |
 | `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Surface key |

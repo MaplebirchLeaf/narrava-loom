@@ -21,6 +21,7 @@ impl Engine {
         let entry: StoryHistoryEntry<'hir, 'source> = *story
             .goto(name)
             .map_err(EngineNavigationError::Navigation)?;
+        story.record_state_snapshot(entry.id(), state.snapshot());
         let _removed_temporary: usize = state.temporary_clear();
 
         match execute(entry.passage(), state) {
@@ -57,6 +58,7 @@ impl Engine {
         let entered: StoryHistoryEntry<'hir, 'source> = *story
             .goto(name)
             .map_err(EngineNavigationError::Navigation)?;
+        story.record_state_snapshot(entered.id(), state.snapshot());
         let _removed_temporary: usize = state.temporary_clear();
         // Adapter 只在正文执行期间借用 Story；离开代码块后 Engine 才能确认请求。
         let (execution, pending, include_count): (
@@ -106,11 +108,15 @@ impl Engine {
                 output: execution.output,
             }),
             (BodyControl::StopPassage, Some(request)) => match story.confirm_navigation(request) {
-                Ok(entry) => Ok(EngineRequestedNavigation {
-                    entered,
-                    requested: Some(*entry),
-                    output: execution.output,
-                }),
+                Ok(entry) => {
+                    let requested: StoryHistoryEntry<'hir, 'source> = *entry;
+                    story.record_state_snapshot(requested.id(), state.snapshot());
+                    Ok(EngineRequestedNavigation {
+                        entered,
+                        requested: Some(requested),
+                        output: execution.output,
+                    })
+                }
                 Err(error) => Err(Self::rollback(
                     state,
                     story,
@@ -342,6 +348,7 @@ impl Engine {
                         story.confirm_navigation(request).copied();
                     match confirmed {
                         Ok(entry) => {
+                            story.record_state_snapshot(entry.id(), state.snapshot());
                             current = entry;
                             entries.push(entry);
                         }

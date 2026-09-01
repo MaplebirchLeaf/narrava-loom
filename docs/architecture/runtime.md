@@ -140,15 +140,14 @@ Widget 调用建立独立 `@args` 帧；嵌套 Widget 各自隔离。`exit` 在�
 
 ## Story
 
-Story 拥有编译后的 Passage 查询、当前位置、history、导航分支和导航请求，不直接修改 State，也不执行 Macro。
+Story 拥有编译后的 Passage 查询、当前位置、history、导航分支、导航请求，以及各历史项进入前的不可变 `$variables` 快照。它不直接修改活动 State，也不执行 Macro；Engine 在确认导航时捕获快照，Host 历史命令在重放前恢复快照。
 
 - PassageName 和 Tag 查询区分大小写；
 - `request_goto()` 只验证并建立请求；
 - `confirm_navigation()` 才提交 history；
-- `back()`／`forward()` 移动 history 游标，不创建新记录；
+- `back()`／`forward()` 移动 history 游标，不创建新记录；Host 随后恢复目标项状态并重放 Passage；
 - 回退后 goto 会截断旧前进分支并建立新分支；
 - history 项使用不会复用的 `StoryHistoryId`；
-- `visits()` 从当前有效时间线计算，不维护第二份计数；
 - `reset()` 清空时间线，但不触碰 State。
 
 精确名称 `StoryInit` 是特殊初始化 Passage，不能通过普通 goto 进入。`[widget]` Passage 只提供 Widget Definitions，不产生正文输出。其他 Tag 是作者数据；Core 只提供精确查询，不写死 `town`、`indoor` 等游戏语义。
@@ -237,7 +236,7 @@ Core Script 契约已闭合：源码分流、加载契约、批量 State 导入�
 - I18n 从稳定文本 ID 解析当前语言文本，并回退到 `default_locale` 原文；
 - ModLoader 管理模组启停、排序、依赖和有效构建事务；
 - ModUtils 是模组可用的受控工具集合；
-- Save 保存可持久化 State、Story 时间线及游戏兼容元数据；
+- Save 保存当前持久 State、Story 时间线、逐历史项 `$variables` 及游戏兼容元数据；
 - Event 发布已发生的结构化事实，不保存领域状态。
 
 ### Resource 契约
@@ -248,7 +247,7 @@ Core 只拥有 Resource 的逻辑路径、字节、媒体类型、完整性和�
 
 Event 使用稳定序号、名称和拥有型 `Value` 载荷。`emit` 先保存事实，再投递给当时存在且匹配的订阅；`subscribe` 返回进程内稳定 ID；`take` 一次性取走待处理事件；`unsubscribe` 释放订阅及队列；`clear` 清空历史与队列但不重置序号。ScriptCallable 等不可拥有平台函数的数据不得作为跨边界事件载荷。Tauri Host 把五阶段 Passage 生命周期发布为保留事件 `passage:init/start/render/display/end`，统一载荷为 Passage 名和 tags，作者不能伪造保留名。
 
-I18n 已完成文本目录、NMSG／字典 JSON、`.nlang` 导入导出、fallback、Runtime 替换和 Diagnostic。Save 可捕获 `$variables` 与 Story 时间线、编码 JSON 并原子恢复。模组合成尚未实现，不计入 Core 完成度。详细边界见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md) 与 [/docs/architecture/save.md](/docs/architecture/save.md)。
+I18n 已完成文本目录、NMSG／字典 JSON、`.nlang` 导入导出、fallback、Runtime 替换和 Diagnostic。Save 可捕获当前及历史 `$variables` 与 Story 时间线，编码版本化二进制文档并原子恢复。模组合成尚未实现，不计入 Core 完成度。详细边界见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md) 与 [/docs/architecture/save.md](/docs/architecture/save.md)。
 
 有效构建顺序固定为先 I18n、后 `.nmod`：模组清单和依赖可以预先验证，但模组内容修改只作用于当前语言已经修正后的候选内容。
 

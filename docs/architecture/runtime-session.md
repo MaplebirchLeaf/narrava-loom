@@ -59,6 +59,8 @@ operation mismatch 不丢失 continuation、cancel、再次 pending 以及特殊
 
 每份 Ready 更新携带 `can_back`／`can_forward`。Tauri 据此启用侧栏历史按钮，TUI 使用
 `back`／`forward`（简写 `b`／`f`）；Host 不用浏览器或终端自己的历史代替 Story。
+历史命令会恢复目标记录进入前的 `$variables`，清空 `_temporary`，再通过同一 Engine 路径重放
+目标 Passage；`global`、`setup` 与脚本运行环境不随 Story 游标回退。
 
 ## 挂起模型
 

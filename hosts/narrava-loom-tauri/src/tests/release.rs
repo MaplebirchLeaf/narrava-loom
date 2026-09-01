@@ -112,6 +112,74 @@ fn host_delay_keeps_worker_queries_responsive() {
     fs::remove_dir_all(root_path).unwrap();
 }
 
+#[test]
+fn history_back_restores_persistent_state_before_replaying_the_target() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = format!("target/test-projects/state-history-{}", std::process::id());
+    let root_path = Path::new(&root);
+    fs::create_dir_all(root_path.join("contents/story")).unwrap();
+    fs::copy(
+        repository.join("examples/config.toml"),
+        root_path.join("config.toml"),
+    )
+    .unwrap();
+    fs::write(
+        root_path.join("contents/story/main.twee"),
+        r#":: Start
+<<set $visits to 1>><<link [[大厅|Hall]]>><</link>>
+
+:: Hall
+<<set $visits to $visits + 1>>第 <<print $visits>> 次<br><<link [[房间|Room]]>><</link>>
+
+:: Room
+房间<br><<link [[大厅|Hall]]>><</link>>"#,
+    )
+    .unwrap();
+
+    let host = TauriHost::spawn(&root).unwrap();
+    let mut update = block_on(host.start()).unwrap();
+    for target in ["Hall", "Room", "Hall", "Room", "Hall", "Room", "Hall"] {
+        let interaction = update
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation {
+                    id, target: actual, ..
+                } if actual == target => Some(id),
+                _ => None,
+            })
+            .expect("当前页面应提供下一步导航");
+        update = block_on(host.activate(interaction)).unwrap();
+    }
+    assert!(
+        update
+            .nodes
+            .iter()
+            .any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("第 5 次"))),
+        "第五次大厅输出不正确：{:?}",
+        update.nodes
+    );
+
+    let _room = block_on(host.history(true)).expect("应回退到房间");
+    let hall = block_on(host.history(true)).expect("应回退到第四次大厅");
+    assert!(
+        hall.nodes
+            .iter()
+            .any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("第 4 次")))
+    );
+
+    let _room = block_on(host.history(false)).expect("应前进到房间");
+    let hall = block_on(host.history(false)).expect("应前进到第五次大厅");
+    assert!(
+        hall.nodes
+            .iter()
+            .any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("第 5 次")))
+    );
+
+    drop(host);
+    fs::remove_dir_all(root_path).unwrap();
+}
+
 /// 示例项目经 Host 全流程后，语义节点（region/image/component/replace/表单）到达 DTO。
 #[test]
 fn example_surface_builder_reaches_tauri_semantic_dtos() {
@@ -375,14 +443,6 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     let history_hall = block_on(host.history(true)).expect("历史后退应重放大厅");
     assert_eq!(history_hall.current, "Hall");
     assert!(history_hall.can_forward);
-    assert!(history_hall.nodes.iter().any(|node| matches!(
-        node,
-        HostNodeDto::Text { text, .. } if text.contains("Hall visit #")
-    )));
-    assert!(history_hall.nodes.iter().any(|node| matches!(
-        node,
-        HostNodeDto::Text { text, .. } if text == "1"
-    )));
     let state_gallery = block_on(host.history(false)).expect("历史前进应重放状态代理页");
     assert_eq!(state_gallery.current, "StateGallery");
     let return_to_hall = state_gallery

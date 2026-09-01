@@ -182,6 +182,7 @@ impl Engine {
         let current = *story.goto(name).map_err(|error| {
             EngineMirBeginError::Preparation(EngineNavigationError::Navigation(error))
         })?;
+        story.record_state_snapshot(current.id(), state.snapshot());
         Self::begin_mir_chain_from_entry(
             state,
             story,

@@ -13,6 +13,7 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 | `State.variables`（`$name`） | `State.global` |
 | Story 完整导航时间线 | `State.setup` |
 | Story 当前游标 | `State.temporary`（`_name`） |
+| 各历史项进入前的 `$variables` | `State.global`／`State.setup` 的历史版本 |
 | 每次 Passage 是否产生作者导航 | Macro `@locals`、`@args` |
 | Reaction 启用、次数与销毁状态 | Reaction Definition 与 `cond` 函数 |
 | 精确游戏 ID 与版本 | Function、Macro Handler、Promise |
@@ -23,7 +24,7 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 ## 二进制文档结构
 
 `.nsave` 是正式二进制协议，不是 Rust 内存布局、JSON 或 ZIP。文件以 `NRSAVE\0` magic 和单字节
-schema version 开始，当前版本为 `1`；payload 使用确定性的 tagged value、varint 长度、节点 ID 和
+schema version 开始，当前版本为 `2`；payload 使用确定性的 tagged value、varint 长度、节点 ID 和
 长度前缀数据。未知 magic/version 在解析 payload 前直接拒绝，不提供未发布 JSON 草案的兼容分支。
 
 Core 通过 `SaveDocument::to_bytes()`／`from_bytes()` 编解码，Host 只读写 `Vec<u8>`。导出不再建立
@@ -46,21 +47,21 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 
 ## Story 与恢复事务
 
-时间线按顺序保存 PassageName、导航标记与当前游标，不保存进程内 `StoryHistoryId`。加载时使用当前有效 HIR 逐项验证并重建时间线，因此 PassageName 仍区分大小写，`StoryInit` 不得进入历史。
+时间线按顺序保存 PassageName、导航标记、当前游标，以及进入每个历史项前的 `$variables` 图；不保存进程内 `StoryHistoryId`。加载时使用当前有效 HIR 逐项验证并重建时间线和状态关联，因此 PassageName 仍区分大小写，`StoryInit` 不得进入历史。Host 执行 back／forward 时先恢复目标项的进入前状态，再重放该 Passage；页面上的变量修改因此与原导航一致。
 
 恢复顺序固定为：
 
 1. 校验精确游戏身份；
 2. 校验 Story history 与当前 HIR；
-3. 完整解码 Value 图；
-4. 在临时所有权中建立完整的新 `$variables` 与 Story 时间线；
+3. 完整解码当前及逐历史项的 Value 图；
+4. 在临时所有权中建立完整的新 `$variables`、Story 时间线与历史状态关联；
 5. 校验全部通过后一次性替换 `$variables`、清空 `_temporary` 并提交 Story；
 6. RuntimeSession 根据当前启动脚本已注册的 ID 恢复 Reaction 状态；
 7. RuntimeSession 只保留一份 State/Story/Reaction 回滚检查点，后续 Script 同步失败时统一恢复。
 
-捕获直接借用活动 `$variables` 进行单趟 ValueGraph 编码，不先建立完整 `StateSnapshot`；读取共享
-Array/Object 时也不先克隆整个集合。Story history 在运行期保存 Passage 引用，只有可移植存档边界
-写入访问过的 PassageName，因此 Save 大小取决于实际 history，而不是 Story 总 Passage 数。
+捕获直接借用活动 `$variables` 和已经隔离的历史快照进行 ValueGraph 编码。Story history 在运行期
+保存 Passage 引用及进入前的持久状态，只有可移植存档边界写入 PassageName；因此 Save 大小取决于
+实际 history 与其 `$variables`，而不是 Story 总 Passage 数。
 
 这条入口只恢复稳定领域状态，不自动执行 Passage 生命周期或渲染。Host 后续应明确决定加载完成后从当前 Passage 的哪个生命周期阶段重新进入 Engine。
 
