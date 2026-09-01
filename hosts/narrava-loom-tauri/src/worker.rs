@@ -10,7 +10,6 @@ use std::{
         Arc,
         mpsc::{Receiver, Sender},
     },
-    time::{Duration, Instant},
 };
 
 use narrava_loom_core::{
@@ -18,61 +17,25 @@ use narrava_loom_core::{
     mir::MirStory, nar::ValidatedNarPackage, resource::ResourceCatalog, state::State, twee,
 };
 
-use narrava_loom_protocol::{
-    PendingOperation, RuntimeCommand, RuntimeSessionId, RuntimeUpdate, SaveOperation,
-};
+use narrava_loom_protocol::{RuntimeCommand, RuntimeSessionId, RuntimeUpdate};
 use narrava_loom_script::{RuntimeServices, RuntimeSessionDriver};
 
-use crate::{
-    HostErrorDto, HostLogDto, HostUpdateDto, package::load_language_packages,
-    save_io::process_save_io,
-};
+use crate::{HostErrorDto, HostLogDto, package::load_language_packages};
 
-pub(crate) type WorkerResult = Result<HostUpdateDto, HostErrorDto>;
+pub(crate) type WorkerResult = Result<RuntimeUpdate, HostErrorDto>;
 pub(crate) type WorkerReply = Sender<WorkerResult>;
 pub(crate) type WorkerResponse = Receiver<WorkerResult>;
-pub(crate) type InputResult = Result<(), HostErrorDto>;
-pub(crate) type CommandResult = Result<(), HostErrorDto>;
 
 pub(crate) enum WorkerRequest {
-    /// 启动游戏并渲染起始 Passage。
-    Start(WorkerReply),
-    History {
-        backward: bool,
+    /// 执行一个同步 Runtime step；Pending 原样返回 Host facade。
+    Execute {
+        command: RuntimeCommand,
         reply: WorkerReply,
-    },
-    /// 按交互身份推进一次导航。
-    Activate {
-        interaction: String,
-        reply: WorkerReply,
-    },
-    /// 把输入控件值写回 State 并落盘。
-    Input {
-        interaction: String,
-        value: serde_json::Value,
-        reply: Sender<InputResult>,
-    },
-    /// 执行一次存档操作（export/import）。
-    Save {
-        operation: String,
-        target: String,
-        reply: Sender<CommandResult>,
     },
     /// 拉取当前日志快照。
     Logs(Sender<Vec<HostLogDto>>),
     /// 拉取可用语言列表。
     Languages(Sender<Vec<String>>),
-    /// 切换运行时语言（下一次渲染生效）。
-    SelectLanguage {
-        locale: String,
-        reply: Sender<CommandResult>,
-    },
-}
-
-struct DelayedReply {
-    deadline: Instant,
-    operation: u64,
-    reply: WorkerReply,
 }
 
 pub(crate) fn run_worker(
@@ -204,122 +167,15 @@ pub(crate) fn run_worker(
         message: String::from("Runtime Worker 已就绪"),
     }];
 
-    let mut delayed: Option<DelayedReply> = None;
     loop {
-        let request = match delayed.as_ref() {
-            Some(waiting) => {
-                let remaining: Duration =
-                    waiting.deadline.saturating_duration_since(Instant::now());
-                match requests.recv_timeout(remaining) {
-                    Ok(request) => request,
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        let waiting = delayed.take().expect("超时必须对应活动 Delay");
-                        let result = drive_command(
-                            &mut runtime,
-                            Path::new(&game_path),
-                            RuntimeCommand::Resume {
-                                operation: waiting.operation,
-                                result: None,
-                            },
-                        );
-                        finish_ready_command(result, waiting.reply, &mut delayed);
-                        continue;
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                }
-            }
-            None => match requests.recv() {
-                Ok(request) => request,
-                Err(_) => break,
-            },
+        let request = match requests.recv() {
+            Ok(request) => request,
+            Err(_) => break,
         };
-        if delayed.is_some() {
-            match request {
-                WorkerRequest::Logs(reply) => {
-                    let _sent = reply.send(logs.clone());
-                }
-                WorkerRequest::Languages(reply) => {
-                    let _sent = reply.send(available_languages.clone());
-                }
-                request => reject_while_delayed(request),
-            }
-            continue;
-        }
         match request {
-            WorkerRequest::Start(reply) => {
-                let result =
-                    drive_command(&mut runtime, Path::new(&game_path), RuntimeCommand::Start);
+            WorkerRequest::Execute { command, reply } => {
+                let result: WorkerResult = runtime.execute(command);
                 append_runtime_notices(&mut runtime, &mut logs);
-                finish_ready_command(result, reply, &mut delayed);
-            }
-            WorkerRequest::History { backward, reply } => {
-                let command = if backward {
-                    RuntimeCommand::Back
-                } else {
-                    RuntimeCommand::Forward
-                };
-                let result = drive_command(&mut runtime, Path::new(&game_path), command);
-                append_runtime_notices(&mut runtime, &mut logs);
-                finish_ready_command(result, reply, &mut delayed);
-            }
-            WorkerRequest::Activate { interaction, reply } => {
-                let result = drive_command(
-                    &mut runtime,
-                    Path::new(&game_path),
-                    RuntimeCommand::Activate { interaction },
-                );
-                append_runtime_notices(&mut runtime, &mut logs);
-                finish_ready_command(result, reply, &mut delayed);
-            }
-            WorkerRequest::Input {
-                interaction,
-                value,
-                reply,
-            } => {
-                let result: InputResult = drive_command(
-                    &mut runtime,
-                    Path::new(&game_path),
-                    RuntimeCommand::Input { interaction, value },
-                )
-                .map(|_| ());
-                append_runtime_notices(&mut runtime, &mut logs);
-                let _sent = reply.send(result);
-            }
-            WorkerRequest::Save {
-                operation,
-                target,
-                reply,
-            } => {
-                let operation_kind = match operation.as_str() {
-                    "export" => Ok(SaveOperation::Export),
-                    "import" => Ok(SaveOperation::Import),
-                    _ => Err(HostErrorDto::new(
-                        "tauri_host.save_operation",
-                        format!("未知 Save 操作：{operation}"),
-                    )),
-                };
-                let result = operation_kind.and_then(|operation| {
-                    drive_command(
-                        &mut runtime,
-                        Path::new(&game_path),
-                        RuntimeCommand::Save {
-                            operation,
-                            target: target.clone(),
-                        },
-                    )
-                    .map(|_| ())
-                });
-                let level = if result.is_ok() { "info" } else { "error" };
-                logs.push(HostLogDto {
-                    level: String::from(level),
-                    message: match &result {
-                        Ok(()) => format!("Save.{operation}({target}) 已完成"),
-                        Err(error) => format!("{}：{}", error.code, error.message),
-                    },
-                });
-                if logs.len() > 200 {
-                    logs.remove(0);
-                }
                 let _sent = reply.send(result);
             }
             WorkerRequest::Logs(reply) => {
@@ -327,23 +183,6 @@ pub(crate) fn run_worker(
             }
             WorkerRequest::Languages(reply) => {
                 let _sent = reply.send(available_languages.clone());
-            }
-            WorkerRequest::SelectLanguage { locale, reply } => {
-                let result: CommandResult = drive_command(
-                    &mut runtime,
-                    Path::new(&game_path),
-                    RuntimeCommand::SelectLanguage {
-                        locale: locale.clone(),
-                    },
-                )
-                .map(|_| ());
-                if result.is_ok() {
-                    logs.push(HostLogDto {
-                        level: String::from("info"),
-                        message: format!("语言已切换为 {locale}；下一次渲染生效"),
-                    });
-                }
-                let _sent = reply.send(result);
             }
         }
     }
@@ -359,120 +198,10 @@ fn append_runtime_notices(runtime: &mut RuntimeSessionDriver<'_>, logs: &mut Vec
     }
 }
 
-fn drive_command(
-    runtime: &mut RuntimeSessionDriver<'_>,
-    game_path: &Path,
-    mut command: RuntimeCommand,
-) -> Result<RuntimeUpdate, HostErrorDto> {
-    loop {
-        match runtime.execute(command)? {
-            update @ RuntimeUpdate::Pending {
-                operation: PendingOperation::Delay { .. },
-            } => return Ok(update),
-            RuntimeUpdate::Pending {
-                operation:
-                    PendingOperation::Save {
-                        operation,
-                        direction,
-                        target,
-                        document,
-                    },
-            } => {
-                let result = match process_save_io(game_path, direction, &target, document) {
-                    Ok(document) => narrava_loom_protocol::PendingResult::Save { document },
-                    Err(error) => narrava_loom_protocol::PendingResult::Failed { error },
-                };
-                command = RuntimeCommand::Resume {
-                    operation,
-                    result: Some(result),
-                };
-            }
-            RuntimeUpdate::Pending {
-                operation: PendingOperation::SelectLanguage { operation, .. },
-            } => {
-                command = RuntimeCommand::Resume {
-                    operation,
-                    result: Some(narrava_loom_protocol::PendingResult::SelectLanguage),
-                };
-            }
-            update => return Ok(update),
-        }
-    }
-}
-
-fn finish_ready_command(
-    result: Result<RuntimeUpdate, HostErrorDto>,
-    reply: WorkerReply,
-    delayed: &mut Option<DelayedReply>,
-) {
-    match result {
-        Ok(RuntimeUpdate::Pending {
-            operation:
-                PendingOperation::Delay {
-                    operation,
-                    milliseconds,
-                },
-        }) => {
-            *delayed = Some(DelayedReply {
-                deadline: Instant::now() + Duration::from_millis(milliseconds),
-                operation,
-                reply,
-            });
-        }
-        result => {
-            let _sent = reply.send(ready_update(result));
-        }
-    }
-}
-
-fn reject_while_delayed(request: WorkerRequest) {
-    let error = HostErrorDto::new(
-        "runtime_session.busy",
-        "Runtime 正在等待 PendingOperation 完成",
-    );
-    match request {
-        WorkerRequest::Start(reply)
-        | WorkerRequest::History { reply, .. }
-        | WorkerRequest::Activate { reply, .. } => {
-            let _sent = reply.send(Err(error));
-        }
-        WorkerRequest::Input { reply, .. }
-        | WorkerRequest::Save { reply, .. }
-        | WorkerRequest::SelectLanguage { reply, .. } => {
-            let _sent = reply.send(Err(error));
-        }
-        WorkerRequest::Logs(_) | WorkerRequest::Languages(_) => unreachable!(),
-    }
-}
-
-fn ready_update(result: Result<RuntimeUpdate, HostErrorDto>) -> WorkerResult {
-    match result? {
-        RuntimeUpdate::Ready { update } => Ok(update),
-        RuntimeUpdate::Applied => Err(HostErrorDto::new(
-            "tauri_host.update_expected",
-            "Runtime 命令没有产生可展示更新",
-        )),
-        RuntimeUpdate::Pending { .. } => Err(HostErrorDto::new(
-            "tauri_host.pending_update",
-            "Runtime 返回了未处理的 PendingOperation",
-        )),
-    }
-}
-
 pub(crate) fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message: String) {
     for request in requests {
         let reply: WorkerReply = match request {
-            WorkerRequest::Start(reply)
-            | WorkerRequest::History { reply, .. }
-            | WorkerRequest::Activate { reply, .. } => reply,
-            WorkerRequest::Input { reply, .. } => {
-                let _sent = reply.send(Err(HostErrorDto::new(code, message.clone())));
-                continue;
-            }
-            WorkerRequest::Save { reply, .. } | WorkerRequest::SelectLanguage { reply, .. } => {
-                let _sent = reply.send(Err(HostErrorDto::new(code, message.clone())));
-                continue;
-            }
+            WorkerRequest::Execute { reply, .. } => reply,
             WorkerRequest::Logs(reply) => {
                 let _sent = reply.send(vec![HostLogDto {
                     level: String::from("error"),

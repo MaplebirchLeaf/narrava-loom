@@ -26,10 +26,11 @@ pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
 pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
 pub use narrava_loom_protocol::{
     ContainerFlowDto, ContainerPresentationDto, HostErrorDto, HostNodeDto, HostReplaceTargetDto,
-    HostUpdateDto,
+    HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeUpdate, SaveOperation,
 };
 
 use package::{load_release_package, load_tauri_config};
+use save_io::process_save_io;
 
 /// Host 管理面板展示的一条有界日志（只含级别与可显示消息）。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -40,11 +41,12 @@ pub struct HostLogDto {
     pub message: String,
 }
 
-/// Worker 线程收到的请求；除日志/语言查询外都通过一次性 channel 回传结果。
+/// 异步 Host facade；Runtime 状态固定由专用 Worker 串行持有。
 pub struct TauriHost {
     requests: Sender<WorkerRequest>,
     assets: Arc<HostAssetsDto>,
     resources: Arc<ResourceCatalog>,
+    game_path: Arc<PathBuf>,
     developer: bool,
 }
 
@@ -80,6 +82,7 @@ impl TauriHost {
         assets.title = title;
         let assets = Arc::new(assets);
         let game_path: String = game_path.to_owned();
+        let host_game_path: Arc<PathBuf> = Arc::new(PathBuf::from(&game_path));
         let worker_resources: Arc<ResourceCatalog> = Arc::clone(&resources);
         thread::Builder::new()
             .name(String::from("narrava-runtime"))
@@ -91,51 +94,45 @@ impl TauriHost {
             requests: sender,
             assets,
             resources,
+            game_path: host_game_path,
             developer,
         })
     }
 
     /// 启动游戏并返回起始 Passage 的语义更新。
-    pub fn start(&self) -> Result<HostUpdateDto, HostErrorDto> {
-        let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::Start(reply))
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
+    pub async fn start(&self) -> Result<HostUpdateDto, HostErrorDto> {
+        ready_update(self.execute(RuntimeCommand::Start).await)
     }
 
     /// 按交互身份推进（导航/按钮/返回等），返回渲染后的语义更新。
-    pub fn activate(&self, interaction: &str) -> Result<HostUpdateDto, HostErrorDto> {
-        let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::Activate {
+    pub async fn activate(&self, interaction: &str) -> Result<HostUpdateDto, HostErrorDto> {
+        ready_update(
+            self.execute(RuntimeCommand::Activate {
                 interaction: interaction.to_owned(),
-                reply,
             })
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
+            .await,
+        )
     }
 
     /// 沿 Story 历史向前或向后移动。
-    pub fn history(&self, backward: bool) -> Result<HostUpdateDto, HostErrorDto> {
-        let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::History { backward, reply })
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
+    pub async fn history(&self, backward: bool) -> Result<HostUpdateDto, HostErrorDto> {
+        let command: RuntimeCommand = if backward {
+            RuntimeCommand::Back
+        } else {
+            RuntimeCommand::Forward
+        };
+        ready_update(self.execute(command).await)
     }
 
-    /// 把输入控件的新值写回 Worker State 并落盘。
-    pub fn input(&self, interaction: String, value: serde_json::Value) -> InputResult {
-        let (reply, result) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::Input {
-                interaction,
-                value,
-                reply,
-            })
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
+    /// 把输入控件的新值写回 Worker State。
+    pub async fn input(
+        &self,
+        interaction: String,
+        value: serde_json::Value,
+    ) -> Result<(), HostErrorDto> {
+        self.execute(RuntimeCommand::Input { interaction, value })
+            .await
+            .map(|_| ())
     }
 
     /// 返回 Host 启动资产（标题、样式表、Resource 元数据）。
@@ -144,43 +141,97 @@ impl TauriHost {
     }
 
     /// 执行存档操作（`export`/`import`）。
-    pub fn save(&self, operation: String, target: String) -> CommandResult {
-        let (reply, result) = mpsc::channel();
-        self.requests
-            .send(WorkerRequest::Save {
-                operation,
-                target,
-                reply,
-            })
-            .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
+    pub async fn save(&self, operation: String, target: String) -> Result<(), HostErrorDto> {
+        let operation: SaveOperation = match operation.as_str() {
+            "export" => SaveOperation::Export,
+            "import" => SaveOperation::Import,
+            _ => {
+                return Err(HostErrorDto::new(
+                    "tauri_host.save_operation",
+                    format!("未知 Save 操作：{operation}"),
+                ));
+            }
+        };
+        self.execute(RuntimeCommand::Save { operation, target })
+            .await
+            .map(|_| ())
     }
 
     /// 拉取 Worker 当前日志快照。
-    pub fn logs(&self) -> Result<Vec<HostLogDto>, HostErrorDto> {
+    pub async fn logs(&self) -> Result<Vec<HostLogDto>, HostErrorDto> {
         let (reply, result) = mpsc::channel();
         self.requests
             .send(WorkerRequest::Logs(reply))
             .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())
+        receive_worker(result).await
     }
 
     /// 拉取可用语言 locale 列表。
-    pub fn languages(&self) -> Result<Vec<String>, HostErrorDto> {
+    pub async fn languages(&self) -> Result<Vec<String>, HostErrorDto> {
         let (reply, result) = mpsc::channel();
         self.requests
             .send(WorkerRequest::Languages(reply))
             .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())
+        receive_worker(result).await
     }
 
     /// 切换运行时语言（下一次渲染生效）。
-    pub fn select_language(&self, locale: String) -> CommandResult {
-        let (reply, result) = mpsc::channel();
+    pub async fn select_language(&self, locale: String) -> Result<(), HostErrorDto> {
+        self.execute(RuntimeCommand::SelectLanguage { locale })
+            .await
+            .map(|_| ())
+    }
+
+    async fn execute(&self, mut command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        loop {
+            let update: RuntimeUpdate = self.execute_step(command).await?;
+            let RuntimeUpdate::Pending { operation } = update else {
+                return Ok(update);
+            };
+            command = self.process_pending_operation(operation).await;
+        }
+    }
+
+    async fn execute_step(&self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        let (reply, result): (WorkerReply, WorkerResponse) = mpsc::channel();
         self.requests
-            .send(WorkerRequest::SelectLanguage { locale, reply })
+            .send(WorkerRequest::Execute { command, reply })
             .map_err(|_| worker_stopped())?;
-        result.recv().map_err(|_| worker_stopped())?
+        receive_worker(result).await?
+    }
+
+    async fn process_pending_operation(&self, operation: PendingOperation) -> RuntimeCommand {
+        let operation_id: u64 = operation.id();
+        let result: Option<PendingResult> = match operation {
+            PendingOperation::Delay { milliseconds, .. } => {
+                tokio::time::sleep(std::time::Duration::from_millis(milliseconds)).await;
+                None
+            }
+            PendingOperation::Save {
+                direction,
+                target,
+                document,
+                ..
+            } => {
+                let game_path: Arc<PathBuf> = Arc::clone(&self.game_path);
+                let completed = tokio::task::spawn_blocking(move || {
+                    process_save_io(&game_path, direction, &target, document)
+                })
+                .await;
+                Some(match completed {
+                    Ok(Ok(document)) => PendingResult::Save { document },
+                    Ok(Err(error)) => PendingResult::Failed { error },
+                    Err(error) => PendingResult::Failed {
+                        error: HostErrorDto::new("tauri_host.save_task", error.to_string()),
+                    },
+                })
+            }
+            PendingOperation::SelectLanguage { .. } => Some(PendingResult::SelectLanguage),
+        };
+        RuntimeCommand::Resume {
+            operation: operation_id,
+            result,
+        }
     }
 
     /// 当前是否启用开发者模式。
@@ -313,10 +364,30 @@ fn build_main_window(
 pub mod commands;
 mod worker;
 
-use worker::{
-    CommandResult, InputResult, WorkerReply, WorkerRequest, WorkerResponse, run_worker,
-    worker_stopped,
-};
+use worker::{WorkerReply, WorkerRequest, WorkerResponse, run_worker, worker_stopped};
+
+async fn receive_worker<T: Send + 'static>(receiver: Receiver<T>) -> Result<T, HostErrorDto> {
+    tokio::task::spawn_blocking(move || receiver.recv())
+        .await
+        .map_err(|error| HostErrorDto::new("tauri_host.worker_join", error.to_string()))?
+        .map_err(|_| worker_stopped())
+}
+
+fn ready_update(
+    result: Result<RuntimeUpdate, HostErrorDto>,
+) -> Result<HostUpdateDto, HostErrorDto> {
+    match result? {
+        RuntimeUpdate::Ready { update } => Ok(update),
+        RuntimeUpdate::Applied => Err(HostErrorDto::new(
+            "tauri_host.update_expected",
+            "Runtime 命令没有产生可展示更新",
+        )),
+        RuntimeUpdate::Pending { .. } => Err(HostErrorDto::new(
+            "tauri_host.pending_update",
+            "Host facade 返回了未处理的 PendingOperation",
+        )),
+    }
+}
 
 #[cfg(test)]
 mod tests;

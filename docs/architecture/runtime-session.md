@@ -30,6 +30,11 @@ RuntimeCommand → RuntimeSession → RuntimeUpdate | PendingOperation
 `HostPendingExecutions`。Host 按 `PendingOperation` 完成 delay、Save 文件 IO 或语言平台确认，
 再用同一 operation ID 和拥有型 `PendingResult` 恢复 Runtime。
 
+Tauri 以异步 facade 落实这条边界：专用 Worker 只运行单个同步 Session step，不在 Worker 内等待
+timer 或执行文件 IO；facade 完成平台操作后再发送 `resume`。因此 Runtime 状态仍严格串行，WebView
+IPC 与日志、语言等只读 Host 查询不会被 Delay 或 Save IO 占住。TUI 本身是同步终端循环，但同样只
+通过 `PendingOperation` 完成平台动作，不把等待能力写进 RuntimeSession。
+
 ## 当前命令
 
 - `start`：启动当前单局 Session；首帧产生后再次启动会被拒绝；

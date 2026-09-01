@@ -1,6 +1,6 @@
 //! Tauri Host 的发行级集成测试（原内联于 lib.rs，按源码规范收拢）。
 
-use std::{fs, path::Path, sync::Arc, thread, time::Duration};
+use std::{fs, future::Future, path::Path, sync::Arc, thread, time::Duration};
 
 use narrava_loom_core::{
     ProjectConfig, SourceList, nar::NarPackage, package_zip, resource::ResourceCatalog,
@@ -9,12 +9,31 @@ use narrava_loom_core::{
 use crate::save_io::save_file_name;
 use crate::{HostNodeDto, HostUpdateDto, TauriHost};
 
+fn block_on<F: Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("测试异步 Runtime 应可建立")
+        .block_on(future)
+}
+
 /// 发行 Worker 必须执行 `game.nar` 中已经验证的 Bytecode，而不是只校验后重新编译源码。
 #[test]
 fn release_worker_uses_the_validated_package_bytecode() {
     let worker: &str = include_str!("../worker.rs");
 
     assert!(worker.contains("package.bytecode().clone()"));
+}
+
+#[test]
+fn runtime_worker_returns_every_pending_operation_to_the_host_facade() {
+    let worker: &str = include_str!("../worker.rs");
+    let host: &str = include_str!("../lib.rs");
+
+    assert!(!worker.contains("process_save_io"));
+    assert!(!worker.contains("recv_timeout"));
+    assert!(host.contains("process_pending_operation"));
+    assert!(host.contains("RuntimeCommand::Resume"));
 }
 
 /// 脚本宏 `Host.delay` 会挂起 Engine 事务，计时到期后恢复并继续渲染。
@@ -42,7 +61,7 @@ fn host_delay_suspends_and_resumes_the_engine_transaction() {
         .unwrap();
 
     let host = TauriHost::spawn(&root).unwrap();
-    let update = host.start().expect("Tauri Host 应恢复异步事务");
+    let update = block_on(host.start()).expect("Tauri Host 应恢复异步事务");
     assert_eq!(update.current, "Start");
     assert!(
         update
@@ -82,9 +101,9 @@ fn host_delay_keeps_worker_queries_responsive() {
 
     let host = Arc::new(TauriHost::spawn(&root).unwrap());
     let start_host = Arc::clone(&host);
-    let start = thread::spawn(move || start_host.start());
+    let start = thread::spawn(move || block_on(start_host.start()));
     thread::sleep(Duration::from_millis(30));
-    let logs = host.logs().expect("Delay 期间日志查询仍应响应");
+    let logs = block_on(host.logs()).expect("Delay 期间日志查询仍应响应");
     assert!(!logs.is_empty());
     assert!(!start.is_finished(), "日志查询不应等待 Delay 完成");
     assert_eq!(start.join().unwrap().unwrap().current, "Start");
@@ -124,7 +143,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         fs::copy(repository.join("examples").join(file), root_path.join(file)).unwrap();
     }
     let host = TauriHost::spawn(&root).unwrap();
-    let start = host.start().unwrap();
+    let start = block_on(host.start()).unwrap();
     let hall_id = start
         .nodes
         .iter()
@@ -133,7 +152,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
             _ => None,
         })
         .unwrap();
-    let hall = host.activate(hall_id).unwrap();
+    let hall = block_on(host.activate(hall_id)).unwrap();
     assert!(hall.can_back);
     assert!(!hall.can_forward);
     let gallery_id = hall
@@ -145,7 +164,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         })
         .unwrap();
 
-    let gallery = host.activate(gallery_id).unwrap();
+    let gallery = block_on(host.activate(gallery_id)).unwrap();
 
     assert!(
         gallery
@@ -162,8 +181,8 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         HostNodeDto::Component { capability, .. } if capability == "future-card"
     )));
 
-    let hall = host
-        .activate(
+    let hall = block_on(
+        host.activate(
             gallery
                 .nodes
                 .iter()
@@ -172,10 +191,11 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
                     _ => None,
                 })
                 .expect("Gallery 应能返回大厅"),
-        )
-        .unwrap();
-    let forms = host
-        .activate(
+        ),
+    )
+    .unwrap();
+    let forms = block_on(
+        host.activate(
             hall.nodes
                 .iter()
                 .find_map(|node| match node {
@@ -185,8 +205,9 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
                     _ => None,
                 })
                 .expect("大厅应提供表单验收入口"),
-        )
-        .unwrap();
+        ),
+    )
+    .unwrap();
     let checkbox_id: String = forms
         .nodes
         .iter()
@@ -195,7 +216,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
             _ => None,
         })
         .expect("表单页应产生未选中的 checkbox");
-    host.input(checkbox_id, serde_json::Value::Bool(true))
+    block_on(host.input(checkbox_id, serde_json::Value::Bool(true)))
         .expect("checkbox 值应写回 Worker State");
     let radio_controls: Vec<(String, String)> = forms
         .nodes
@@ -215,10 +236,10 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         radio_controls[0].1, radio_controls[1].1,
         "绑定同一 receiver 的 radiobutton 应共享互斥组"
     );
-    host.input(
+    block_on(host.input(
         radio_controls[1].0.clone(),
         serde_json::Value::String(String::from("explore")),
-    )
+    ))
     .expect("radiobutton 值应写回 Worker State");
 
     let button_id: String = forms
@@ -229,9 +250,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
             _ => None,
         })
         .expect("表单页应产生语义 button");
-    let hall = host
-        .activate(button_id.as_str())
-        .expect("button 应执行正文后导航");
+    let hall = block_on(host.activate(button_id.as_str())).expect("button 应执行正文后导航");
     assert_eq!(hall.current, "Hall");
 
     let replace_id: String = hall
@@ -244,9 +263,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
             _ => None,
         })
         .expect("大厅应提供 replace 验收入口");
-    let replace_gallery = host
-        .activate(replace_id.as_str())
-        .expect("replace 页面应执行");
+    let replace_gallery = block_on(host.activate(replace_id.as_str())).expect("replace 页面应执行");
     assert!(replace_gallery.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::Container { key, presentation, flow, .. }
@@ -318,12 +335,13 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     }
     let host = TauriHost::spawn(&root).unwrap();
     assert!(
-        host.languages().unwrap().contains(&String::from("en")),
+        block_on(host.languages())
+            .unwrap()
+            .contains(&String::from("en")),
         "开发目录中的解包语言应作为可导入语言加载"
     );
-    host.select_language(String::from("en"))
-        .expect("示例解包语言应能被实际选择");
-    let start = host.start().unwrap();
+    block_on(host.select_language(String::from("en"))).expect("示例解包语言应能被实际选择");
+    let start = block_on(host.start()).unwrap();
     assert!(start.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::Text { text, .. } if text.contains("Welcome")
@@ -336,7 +354,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .unwrap();
-    let hall = host.activate(hall_id).unwrap();
+    let hall = block_on(host.activate(hall_id)).unwrap();
 
     // 脚本状态代理页必须能在真实 Runtime continuation 中读写 V/T/setup，并返回大厅。
     let state_gallery_id = hall
@@ -347,15 +365,15 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("大厅应提供脚本状态代理入口");
-    let state_gallery = host.activate(state_gallery_id).unwrap();
+    let state_gallery = block_on(host.activate(state_gallery_id)).unwrap();
     assert!(state_gallery.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::Text { text, .. } if text.contains("脚本检查 1 次")
     )));
-    let history_hall = host.history(true).expect("历史后退应重放大厅");
+    let history_hall = block_on(host.history(true)).expect("历史后退应重放大厅");
     assert_eq!(history_hall.current, "Hall");
     assert!(history_hall.can_forward);
-    let state_gallery = host.history(false).expect("历史前进应重放状态代理页");
+    let state_gallery = block_on(host.history(false)).expect("历史前进应重放状态代理页");
     assert_eq!(state_gallery.current, "StateGallery");
     let return_to_hall = state_gallery
         .nodes
@@ -365,7 +383,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("状态代理页应可返回大厅");
-    let hall = host.activate(return_to_hall).unwrap();
+    let hall = block_on(host.activate(return_to_hall)).unwrap();
 
     // 作者能力演示页：存档/读档/日志/语言，随后返回大厅
     let author_tools_id = hall
@@ -378,7 +396,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("大厅应提供作者能力演示入口");
-    let author_tools = host.activate(author_tools_id).unwrap();
+    let author_tools = block_on(host.activate(author_tools_id)).unwrap();
     assert!(author_tools.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::Text { text, .. } if text.contains("已请求导出存档")
@@ -401,7 +419,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         })
         .collect();
     assert_eq!(buttons.len(), 2, "作者能力演示页应有读档与幽灵槽两个按钮");
-    let hall = host.activate(buttons[0].as_str()).unwrap();
+    let hall = block_on(host.activate(buttons[0].as_str())).unwrap();
     assert_eq!(hall.current, "Hall");
     // 再次进入，点击“读取不存在的槽位”：save 失败只记日志，导航与 presented 不受影响
     let author_tools_again = hall
@@ -414,9 +432,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("大厅应再次提供作者能力演示入口");
-    let author_tools = host.activate(author_tools_again).unwrap();
-    let hall = host
-        .activate(
+    let author_tools = block_on(host.activate(author_tools_again)).unwrap();
+    let hall = block_on(
+        host.activate(
             author_tools
                 .nodes
                 .iter()
@@ -426,8 +444,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
                 })
                 .nth(1)
                 .expect("作者能力演示页应提供读取不存在槽位的按钮"),
-        )
-        .expect("save 失败不应阻塞导航");
+        ),
+    )
+    .expect("save 失败不应阻塞导航");
     assert_eq!(hall.current, "Hall");
 
     // Twee 内 Surface：print Macro 的 color/style 组合与对象形式
@@ -439,7 +458,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("大厅应提供 print 演示入口");
-    let text_gallery = host.activate(text_gallery_id).unwrap();
+    let text_gallery = block_on(host.activate(text_gallery_id)).unwrap();
     assert!(text_gallery.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::StyledText { text, color, styles, .. }
@@ -472,7 +491,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("TextGallery 应能返回大厅");
-    let hall = host.activate(back_to_hall.as_str()).unwrap();
+    let hall = block_on(host.activate(back_to_hall.as_str())).unwrap();
     let dialog_gallery_id = hall
         .nodes
         .iter()
@@ -481,7 +500,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("大厅应提供弹窗演示入口");
-    let dialog_gallery = host.activate(dialog_gallery_id).unwrap();
+    let dialog_gallery = block_on(host.activate(dialog_gallery_id)).unwrap();
     fn collect_styled<'a>(nodes: &'a [HostNodeDto], out: &mut Vec<&'a HostNodeDto>) {
         for node in nodes {
             if matches!(node, HostNodeDto::StyledText { .. }) {
@@ -526,8 +545,8 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         node,
         HostNodeDto::StyledText { text, .. } if text.contains("第二页")
     )));
-    let hall = host
-        .activate(
+    let hall = block_on(
+        host.activate(
             dialog_gallery
                 .nodes
                 .iter()
@@ -536,8 +555,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
                     _ => None,
                 })
                 .expect("DialogGallery 应能返回大厅"),
-        )
-        .unwrap();
+        ),
+    )
+    .unwrap();
 
     // 控制流范本：switch / for / while 的真实运行时输出（返回大厅后进入）
     let macro_gallery_id = hall
@@ -548,7 +568,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
             _ => None,
         })
         .expect("大厅应提供控制流范本入口");
-    let macro_gallery = host.activate(macro_gallery_id).unwrap();
+    let macro_gallery = block_on(host.activate(macro_gallery_id)).unwrap();
     let rendered: String = macro_gallery
         .nodes
         .iter()
@@ -622,7 +642,7 @@ fn packaged_game_starts_without_development_sources() {
     fs::write(root_path.join("game.nar"), nar_bytes).unwrap();
 
     let host = TauriHost::spawn(&root).unwrap();
-    let update: HostUpdateDto = host.start().unwrap();
+    let update: HostUpdateDto = block_on(host.start()).unwrap();
     assert_eq!(update.current, "Start");
     assert!(
         update.nodes.iter().any(|node| matches!(
