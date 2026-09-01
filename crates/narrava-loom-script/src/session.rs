@@ -250,6 +250,13 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 }
             }
         }
+        if processes_script_save && !matches!(update, RuntimeUpdate::Pending { .. }) {
+            match self.process_script_language(update.clone()) {
+                Ok(Some(pending)) => return Ok(pending),
+                Ok(None) => {}
+                Err(error) => self.notices.push(error),
+            }
+        }
         Ok(update)
     }
 

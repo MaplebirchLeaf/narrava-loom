@@ -266,6 +266,20 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             .map(Some)
     }
 
+    pub(super) fn process_script_language(
+        &mut self,
+        after: RuntimeUpdate,
+    ) -> Result<Option<RuntimeUpdate>, HostErrorDto> {
+        let Some(locale) = self
+            .script
+            .take_language()
+            .map_err(|error| HostErrorDto::new(&error.code, error.message))?
+        else {
+            return Ok(None);
+        };
+        self.begin_language(locale, after).map(Some)
+    }
+
     pub(super) fn resume_platform(
         &mut self,
         waiting: PlatformWaiting,

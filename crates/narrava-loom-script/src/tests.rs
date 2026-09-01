@@ -176,6 +176,29 @@ fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
 }
 
 #[test]
+fn i18n_select_queues_a_host_language_request() {
+    let mut context = Context::default();
+    let bootstrap = bootstrap_source();
+    context
+        .eval(Source::from_bytes(&bootstrap))
+        .expect("绑定启动脚本应可执行");
+    let result = context
+        .eval(Source::from_bytes(
+            r#"I18n.select("en"); JSON.stringify(__narrava.takeLanguage())"#,
+        ))
+        .expect("I18n.select 应建立语言请求");
+    let json = result
+        .to_string(&mut context)
+        .expect("语言请求应为字符串")
+        .to_std_string_escaped();
+
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&json).expect("语言请求应为 JSON"),
+        serde_json::json!({ "locale": "en" })
+    );
+}
+
+#[test]
 fn reaction_api_registers_native_rules_without_a_javascript_registry_mirror() {
     let root = std::path::PathBuf::from(format!(
         "target/test-projects/narrava-loom-reaction-api-{}",
@@ -965,6 +988,7 @@ mod runtime_session_state_machine {
     struct FakeAdapter {
         calls: RefCell<VecDeque<u64>>,
         resumes: RefCell<VecDeque<ResumeStep>>,
+        language: RefCell<Option<String>>,
     }
 
     #[derive(Clone, Default)]
@@ -1123,6 +1147,15 @@ mod runtime_session_state_machine {
             Rc::new(Self {
                 calls: RefCell::new(calls.into_iter().collect()),
                 resumes: RefCell::new(resumes.into()),
+                language: RefCell::new(None),
+            })
+        }
+
+        fn with_language(locale: &str) -> Rc<Self> {
+            Rc::new(Self {
+                calls: RefCell::new(VecDeque::new()),
+                resumes: RefCell::new(VecDeque::new()),
+                language: RefCell::new(Some(locale.to_owned())),
             })
         }
 
@@ -1182,6 +1215,10 @@ mod runtime_session_state_machine {
 
         fn take_save(&self) -> Result<Option<(String, String)>, ScriptError> {
             Ok(None)
+        }
+
+        fn take_language(&self) -> Result<Option<String>, ScriptError> {
+            Ok(self.language.borrow_mut().take())
         }
 
         fn complete_save(
@@ -1383,6 +1420,45 @@ mod runtime_session_state_machine {
                 String::from("language:en")
             ]
         );
+    }
+
+    #[test]
+    fn script_language_request_uses_the_same_runtime_platform_path() {
+        let root = runtime_fixture();
+        std::fs::write(
+            root.join("contents/story/runtime.twee"),
+            ":: Start\nMain ready.\n",
+        )
+        .unwrap();
+        let sources = SourceList::discover(&root).expect("RuntimeSession fixture should load");
+        let ast = twee::Story::build(&sources.items).expect("fixture Twee should compile");
+        let hir = HirStory::lower(&ast).expect("fixture should lower to HIR");
+        let mir = MirStory::lower(&hir).expect("fixture should lower to MIR");
+        let lir = LirProgram::lower(&mir).expect("fixture should lower to LIR");
+        let bytecode = BytecodeProgram::compile(&lir);
+        let calls = PlatformCalls::default();
+        let mut runtime = RuntimeSession::with_platform(
+            &hir,
+            &bytecode,
+            FakeAdapter::with_language("en"),
+            State::new(),
+            Box::new(FakePlatform(calls.clone())),
+        );
+
+        let pending = runtime.execute(RuntimeCommand::Start).unwrap();
+        let operation = pending_id(pending);
+        let resumed = runtime
+            .execute(RuntimeCommand::Resume {
+                operation,
+                result: Some(narrava_loom_protocol::PendingResult::SelectLanguage),
+            })
+            .unwrap();
+        assert!(matches!(
+            resumed,
+            RuntimeUpdate::Ready { update } if update.current == "Start"
+        ));
+        assert_eq!(*calls.0.borrow(), [String::from("language:en")]);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

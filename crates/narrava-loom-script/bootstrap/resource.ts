@@ -19,6 +19,11 @@ export default function resources(): void {
     get locale() {
       return runtimeConfiguration.locale
     },
+    select: (locale: string) => {
+      if (scriptGlobals.__narrava !== undefined) {
+        scriptGlobals.__narrava.language = { locale: String(locale) }
+      }
+    },
     export: () => runtimeConfiguration.i18nExport,
   })
 }

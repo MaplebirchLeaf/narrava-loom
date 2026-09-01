@@ -16,6 +16,7 @@
 - Story 建立借用 Passage 名称的运行时索引，I18n 包、翻译模板和会话语言改用共享所有权，并在验证后释放无需常驻的源文件字节。
 - I18n 支持将 `translations.nmsg` 与 `messages/*.nmsg` 合并为同一消息表，消息查找使用延迟哈希索引；示例语言包同步展示了拆分方式。
 - Story 回退与前进会先恢复目标历史项对应的 `$variables`，再重放 Passage；`.nsave` 同步保存各历史位置的持久状态，不再用额外访问次数 Macro 模拟回溯。
+- 作者脚本可用 `I18n.select(locale)` 请求 Host 切换运行语言，并复用原生 Runtime pending 与语言包校验路径。
 
 ## 0.5.1 - 2026-08-31
 

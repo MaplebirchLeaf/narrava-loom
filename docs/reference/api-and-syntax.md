@@ -194,7 +194,7 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 
 - `Resource.paths()`、`has(path)`、`pick(candidates)`、`info(path)`、`read(path)`、
   `text(path)`
-- `I18n.defaultLocale`、`I18n.locale`、`I18n.export()`
+- `I18n.defaultLocale`、`I18n.locale`、`I18n.select(locale)`、`I18n.export()`
 
 ### `Surface`
 

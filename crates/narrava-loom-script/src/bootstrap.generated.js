@@ -323,6 +323,11 @@
       get locale() {
         return runtimeConfiguration.locale;
       },
+      select: (locale) => {
+        if (scriptGlobals.__narrava !== undefined) {
+          scriptGlobals.__narrava.language = { locale: String(locale) };
+        }
+      },
       export: () => runtimeConfiguration.i18nExport
     });
   }
@@ -411,6 +416,11 @@
       takeSave() {
         const request = this.save;
         this.save = null;
+        return request;
+      },
+      takeLanguage() {
+        const request = this.language;
+        this.language = null;
         return request;
       },
       hasMacro: (name) => macroDefinitions.has(name),

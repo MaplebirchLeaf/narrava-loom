@@ -354,6 +354,30 @@ impl EcmaBinding {
         Ok(Some((operation.to_owned(), target.to_owned())))
     }
 
+    /// 取出脚本登记的语言切换请求；无请求时返回 `None`。
+    pub fn take_language(&self) -> Result<Option<String>, ScriptError> {
+        let mut runtime = self.runtime.borrow_mut();
+        let value = runtime
+            .context
+            .eval(Source::from_bytes(
+                "JSON.stringify(__narrava.takeLanguage())",
+            ))
+            .map_err(|error| script_error("script.language_request", error))?;
+        if value.is_undefined() {
+            return Ok(None);
+        }
+        let json = js_string(&value, &mut runtime.context)?;
+        let request: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|error| ScriptError::new("script.language_request", error.to_string()))?;
+        if request.is_null() {
+            return Ok(None);
+        }
+        let locale = request["locale"]
+            .as_str()
+            .ok_or_else(|| ScriptError::new("script.language_request", "I18n locale 无效"))?;
+        Ok(Some(locale.to_owned()))
+    }
+
     /// 把存档结果回传给脚本的 `Save.after` 钩子。
     pub fn complete_save(
         &self,

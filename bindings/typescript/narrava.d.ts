@@ -472,10 +472,12 @@ declare global {
   }
   const Save: NarravaSave
 
-  /** 只读本地化信息：当前 locale 与翻译模板导出。 */
+  /** 本地化信息、语言切换请求与翻译模板导出。 */
   interface NarravaI18n {
     readonly defaultLocale: string
     readonly locale: string
+    /** 请求 Host 切换运行语言；成功后 locale 与后续渲染同步更新。 */
+    select(locale: string): void
     /** Return the complete translator template as formatted JSON. */
     export(): string
   }

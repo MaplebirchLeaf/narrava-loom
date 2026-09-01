@@ -46,6 +46,11 @@ export default function runtime(contract: BootstrapContract): void {
       this.save = null
       return request
     },
+    takeLanguage() {
+      const request = this.language
+      this.language = null
+      return request
+    },
     hasMacro: (name) => macroDefinitions.has(name),
     invokeMacro: (name, call) => macroDefinitions.get(name)!.handler(call),
     takeHostOperation: claimHostOperation,

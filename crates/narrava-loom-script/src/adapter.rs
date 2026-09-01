@@ -57,6 +57,9 @@ pub trait ScriptAdapter {
         payload: &serde_json::Value,
     ) -> Result<u64, ScriptError>;
     fn take_save(&self) -> Result<Option<(String, String)>, ScriptError>;
+    fn take_language(&self) -> Result<Option<String>, ScriptError> {
+        Ok(None)
+    }
     fn complete_save(
         &self,
         operation: &str,
@@ -126,6 +129,9 @@ impl ScriptAdapter for EcmaBinding {
     }
     fn take_save(&self) -> Result<Option<(String, String)>, ScriptError> {
         self.take_save()
+    }
+    fn take_language(&self) -> Result<Option<String>, ScriptError> {
+        self.take_language()
     }
     fn complete_save(
         &self,
