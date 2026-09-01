@@ -239,8 +239,10 @@ impl<'hir, 'source> Story<'hir, 'source> {
 
     /// 按区分大小写的 PassageName 统计已经确认的访问记录。
     pub fn visits(&self, name: &str) -> usize {
-        let visits: usize = self
-            .history
+        let active_history: &[StoryHistoryEntry<'hir, 'source>] = self
+            .position
+            .map_or(&[], |position: usize| &self.history[..=position]);
+        let visits: usize = active_history
             .iter()
             .filter(|entry| entry.passage.name == name)
             .count();

@@ -1,16 +1,24 @@
-:: p4:Hall:body.1
+:: p4:Hall:body.0
 [source]
-你已第 {$visits} 次来到大厅。
+你已第
 [translation]
-This is your visit number {$visits} to the hall.
+Hall visit #
 
-:: p4:Hall:body.6.branch.0.0
+:: p4:Hall:body.2
 [source]
+次来到大厅。
+[translation]
+.
+
+:: p4:Hall:body.4
+[source]
+
 门后的机关已经启动。
 [translation]
+
 The mechanism behind the door is already active.
 
-:: p4:Hall:body.6.branch.0.2
+:: p4:Hall:body.7
 [source]
 
 你发现了
@@ -18,13 +26,13 @@ The mechanism behind the door is already active.
 
 You found
 
-:: p4:Hall:body.6.branch.0.5
+:: p4:Hall:body.10
 [source]
 。
 [translation]
 .
 
-:: p5:Start:body.2
+:: p5:Start:body.1
 [source]
 欢迎，{$hero}。这是 Narrava Loom 综合示例。
 [translation]

@@ -9,17 +9,13 @@
 
 :: Start
 <<set $hero to "Author">>
-<<set $visits to 1>>
 欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。<br>
 <<link [[进入大厅|Hall]]>><</link>>
 
 :: Hall [hub]
-<<set $visits to $visits + 1>>
-你已第 <<print $visits>> 次来到大厅。<br>
-<<if $visits > 1>>
+你已第<<visits "Hall">>次来到大厅。<br>
 门后的机关已经启动。<br>
 你发现了<<print " 发光的钥匙" 32 "strong">>。<br>
-<</if>>
 <<link [[查看藏书室|Library]]>><</link>><br>
 <<link [[查看语义渲染|SurfaceGallery]]>><</link>><br>
 <<link [[查看弹窗与按钮|DialogGallery]]>><</link>><br>

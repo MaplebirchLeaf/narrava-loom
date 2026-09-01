@@ -17,6 +17,7 @@ const BUILTIN_MACRO_KINDS = Object.freeze({
   goto: "inline",
   if: "container",
   include: "inline",
+  visits: "inline",
   link: "container",
   print: "inline",
   return: "inline",

@@ -154,6 +154,10 @@ impl MacroStoryAccess for LogicStoryContext {
         matches!(name, "Start" | "End")
     }
 
+    fn visits(&self, _name: &str) -> usize {
+        0
+    }
+
     fn include(&mut self, name: &str) -> Result<(), Self::Error> {
         self.included.push(name.to_owned());
         Ok(())

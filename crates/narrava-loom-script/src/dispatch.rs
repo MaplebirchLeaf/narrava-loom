@@ -18,9 +18,9 @@ use narrava_loom_core::{
     hir::{HirBodyKind, HirBodyNode, HirMacro, HirMacroArguments, HirStory, OwnedHirMacro},
     macro_runtime::{
         MacroDefinition, MacroDefinitions, MacroInteractions, MacroLocalScopes, MacroLogicContext,
-        MacroResumeOutcome, MacroSuspension, RuntimeMacroHandler, button_with_body, checkbox,
-        link_with_body, parse_argument_list, prepare_argument_values, print, radiobutton, replace,
-        slot, textbox,
+        MacroResumeOutcome, MacroStoryAccess, MacroSuspension, RuntimeMacroHandler,
+        button_with_body, checkbox, link_with_body, parse_argument_list, prepare_argument_values,
+        print, radiobutton, replace, slot, textbox,
     },
     runtime::{BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeMacroExecution},
     semantic::SemanticOutput,
@@ -90,6 +90,49 @@ pub fn dispatch_macro<'hir, 'source>(
             });
         }
     };
+    if call.name == "visits" {
+        let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
+            error: format!("visits 参数无效：{error:?}"),
+            scopes: scopes.clone(),
+        })?;
+        let arguments: Vec<Value> = {
+            let mut context: MacroLogicContext<'_, StoryRuntimeRequests<'_, 'hir, 'source>> =
+                MacroLogicContext::new(state, requests, &mut scopes);
+            prepare_argument_values(&parsed, |expression| {
+                evaluate_with_mut(expression, &mut context)
+            })
+            .map_err(|error| EngineMirMacroCallbackFailure {
+                error: format!("visits 参数无法求值：{error:?}"),
+                scopes: scopes.clone(),
+            })?
+        };
+        let [Value::String(name)] = arguments.as_slice() else {
+            return Err(EngineMirMacroCallbackFailure {
+                error: String::from("visits 必须接收一个 Passage 名称文字"),
+                scopes,
+            });
+        };
+        let name: String =
+            name.to_unicode_string()
+                .ok_or_else(|| EngineMirMacroCallbackFailure {
+                    error: String::from("visits Passage 名称必须是有效 Unicode"),
+                    scopes: scopes.clone(),
+                })?;
+        let count: usize = requests.visits(name.as_str());
+        let execution: BodyExecution = print(&[Value::Number(count as f64)]).map_err(|error| {
+            EngineMirMacroCallbackFailure {
+                error: error.to_string(),
+                scopes: scopes.clone(),
+            }
+        })?;
+        return Ok(MacroResumeOutcome::Complete {
+            output: RuntimeMacroExecution {
+                execution,
+                includes_entered: 0,
+            },
+            scopes,
+        });
+    }
     if call.name == "print" {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
             error: format!("print 参数无效：{error:?}"),

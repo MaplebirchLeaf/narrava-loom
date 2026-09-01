@@ -196,6 +196,10 @@ impl<'story, 'hir, 'source> MacroStoryAccess for StoryRuntimeRequests<'story, 'h
         self.story.has(name)
     }
 
+    fn visits(&self, name: &str) -> usize {
+        self.story.visits(name)
+    }
+
     fn include(&mut self, name: &str) -> Result<(), Self::Error> {
         let passage: &'hir HirPassage<'source> = self.story.get(name).ok_or_else(|| {
             StoryRuntimeRequestError::Navigation(StoryNavigationError::MissingPassage(

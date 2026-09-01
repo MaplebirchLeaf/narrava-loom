@@ -375,6 +375,14 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     let history_hall = block_on(host.history(true)).expect("历史后退应重放大厅");
     assert_eq!(history_hall.current, "Hall");
     assert!(history_hall.can_forward);
+    assert!(history_hall.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Text { text, .. } if text.contains("Hall visit #")
+    )));
+    assert!(history_hall.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Text { text, .. } if text == "1"
+    )));
     let state_gallery = block_on(host.history(false)).expect("历史前进应重放状态代理页");
     assert_eq!(state_gallery.current, "StateGallery");
     let return_to_hall = state_gallery

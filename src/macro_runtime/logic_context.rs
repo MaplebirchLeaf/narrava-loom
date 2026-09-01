@@ -19,6 +19,8 @@ pub trait MacroStoryAccess {
 
     /// 判断指定名称的 Passage 是否存在。
     fn has(&self, name: &str) -> bool;
+    /// 统计当前 Story 游标以内的 Passage 访问次数。
+    fn visits(&self, name: &str) -> usize;
     /// 请求在当前执行位置包含目标 Passage 正文。
     fn include(&mut self, name: &str) -> Result<(), Self::Error>;
     /// 请求导航到目标 Passage 并停止当前正文。

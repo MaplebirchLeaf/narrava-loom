@@ -71,7 +71,15 @@ assert.equal(expressionApi("string.startsWith").kind, "string")
 assert.equal(expressionApi("clone").signature, "clone<T>(value: T): T")
 
 const known = knownNames([...first.definitions, ...scripts])
-for (const name of ["if", "link", "widget", "crossFileCard", "scriptCard", "updatedCard"]) {
+for (const name of [
+  "if",
+  "link",
+  "visits",
+  "widget",
+  "crossFileCard",
+  "scriptCard",
+  "updatedCard",
+]) {
   assert.ok(known.has(name), `${name} should be known`)
 }
 assert.equal(known.has("missing"), false)
