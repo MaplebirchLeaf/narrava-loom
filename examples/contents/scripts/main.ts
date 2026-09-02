@@ -104,49 +104,6 @@ Reaction.add({
   tags: ["example", "navigation"],
 })
 
-// 存档、读档、日志与语言都是 Worker ECMAScript 全局（Save/Logger/I18n），
-// .twee 表达式由 Core 求值，不能直接调用它们。游戏作者把这些能力封装成
-// 普通函数并经 State.global 暴露后，就能在 .twee 里用 <<run/print 函数(...)>> 调用。
-
-/** 请求 Host 把存档导出到指定槽位，并返回提示文本。 */
-function saveGame(slot = "manual-1"): string {
-  Save.export(slot)
-  return `已请求导出存档：${slot}`
-}
-
-/** 请求 Host 从指定槽位导入存档，并返回提示文本。 */
-function loadGame(slot = "manual-1"): string {
-  Save.import(slot)
-  return `已请求读取存档：${slot}`
-}
-
-/** 向 Logger 写一条 info 日志。 */
-function logStory(message: string, target = "story"): void {
-  Logger.info(target, message)
-}
-
-/** 向 Logger 写一条 warn 日志。 */
-function logWarnStory(message: string, target = "story"): void {
-  Logger.warn(target, message)
-}
-
-/** 读取当前 locale。 */
-function currentLocale(): string {
-  return I18n.locale
-}
-
-/** 读取默认 locale。 */
-function defaultLocale(): string {
-  return I18n.defaultLocale
-}
-
-/** 导出译者模板，并把完整 JSON 留在 Host 日志中供开发阶段复制。 */
-function exportI18nTemplate(): string {
-  const template = I18n.export()
-  Logger.info("i18n.export", template)
-  return `I18n 模板已导出（${template.length} 字符）`
-}
-
 // 内联宏：输出一个装饰字符，演示最简宏定义。
 Macro.add("sparkle", {
   body: "inline",
@@ -297,18 +254,12 @@ Macro.add("dialogDemo", {
 const readyEvents = Event.subscribe({ name: "game:ready" })
 Event.emit("game:ready", { locale: I18n.locale, resources: Resource.paths().length })
 Logger.info("example.script", `综合示例脚本已加载：${I18n.locale}`)
+
 State.global.extend({
   scriptedGreeting,
   inspectState,
   resourceSummary,
   returnToHall,
-  saveGame,
-  loadGame,
-  logStory,
-  logWarnStory,
-  currentLocale,
-  defaultLocale,
-  exportI18nTemplate,
   emitQuestCompleted,
   emitReactionGoto,
   raiseReputation,

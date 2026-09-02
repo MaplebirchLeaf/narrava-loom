@@ -17,6 +17,20 @@ fn block_on<F: Future>(future: F) -> F::Output {
         .block_on(future)
 }
 
+fn copy_tree(source: &Path, target: &Path) {
+    fs::create_dir_all(target).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_tree(&source_path, &target_path);
+        } else {
+            fs::copy(source_path, target_path).unwrap();
+        }
+    }
+}
+
 /// 发行 Worker 必须执行 `game.nar` 中已经验证的 Bytecode，而不是只校验后重新编译源码。
 #[test]
 fn release_worker_uses_the_validated_package_bytecode() {
@@ -192,24 +206,20 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
     if root_path.exists() {
         fs::remove_dir_all(root_path).unwrap();
     }
-    for directory in [
-        "contents/scripts",
-        "contents/story",
-        "resources/data",
-        "resources/images",
-    ] {
-        fs::create_dir_all(root_path.join(directory)).unwrap();
-    }
-    for file in [
-        "config.toml",
-        "contents/scripts/main.ts",
-        "contents/story/main.twee",
-        "contents/story/widgets.twee",
-        "resources/data/guide.txt",
-        "resources/images/loom.svg",
-    ] {
-        fs::copy(repository.join("examples").join(file), root_path.join(file)).unwrap();
-    }
+    fs::create_dir_all(root_path).unwrap();
+    fs::copy(
+        repository.join("examples/config.toml"),
+        root_path.join("config.toml"),
+    )
+    .unwrap();
+    copy_tree(
+        &repository.join("examples/contents"),
+        &root_path.join("contents"),
+    );
+    copy_tree(
+        &repository.join("examples/resources"),
+        &root_path.join("resources"),
+    );
     let host = TauriHost::spawn(&root).unwrap();
     let start = block_on(host.start()).unwrap();
     let hall_id = start
@@ -378,30 +388,17 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     if root_path.exists() {
         fs::remove_dir_all(root_path).unwrap();
     }
-    for directory in [
-        "contents/scripts",
-        "contents/story",
-        "languages/en",
-        "languages/en/messages",
-        "resources/data",
-        "resources/images",
-        "save",
-    ] {
-        fs::create_dir_all(root_path.join(directory)).unwrap();
-    }
-    for file in [
-        "config.toml",
-        "contents/scripts/main.ts",
-        "contents/story/main.twee",
-        "contents/story/widgets.twee",
-        "languages/en/dictionary.json",
-        "languages/en/manifest.json",
-        "languages/en/messages/library.nmsg",
-        "languages/en/translations.nmsg",
-        "resources/data/guide.txt",
-        "resources/images/loom.svg",
-    ] {
-        fs::copy(repository.join("examples").join(file), root_path.join(file)).unwrap();
+    fs::create_dir_all(root_path.join("save")).unwrap();
+    fs::copy(
+        repository.join("examples/config.toml"),
+        root_path.join("config.toml"),
+    )
+    .unwrap();
+    for directory in ["contents", "languages", "resources"] {
+        copy_tree(
+            &repository.join("examples").join(directory),
+            &root_path.join(directory),
+        );
     }
     let host = TauriHost::spawn(&root).unwrap();
     assert!(
@@ -478,6 +475,35 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     assert!(author_tools.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::Text { text, .. } if text.contains("I18n 模板已导出")
+    )));
+    assert_eq!(
+        &fs::read(root_path.join("save/manual-1.nsave")).expect("示例应实际导出存档")[..8],
+        b"NRSAVE\0\x02"
+    );
+    let language_buttons: Vec<String> = author_tools
+        .nodes
+        .iter()
+        .filter_map(|node| match node {
+            HostNodeDto::Button { id, target, .. } if target == "AuthorToolsGallery" => {
+                Some(id.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(language_buttons.len(), 2, "示例应提供两种语言切换动作");
+    let before_default_render = block_on(host.activate(language_buttons[1].as_str())).unwrap();
+    let english_button = before_default_render
+        .nodes
+        .iter()
+        .find_map(|node| match node {
+            HostNodeDto::Button { id, target, .. } if target == "AuthorToolsGallery" => Some(id),
+            _ => None,
+        })
+        .expect("重绘后应继续提供 English 切换动作");
+    let author_tools = block_on(host.activate(english_button)).unwrap();
+    assert!(author_tools.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Text { text, .. } if text.contains("当前生效：zh-CN")
     )));
     // 两个返回大厅的按钮：正文执行 loadGame 后导航，存档槽位来自本次进入时的导出
     let buttons: Vec<String> = author_tools
@@ -680,28 +706,20 @@ fn packaged_game_starts_without_development_sources() {
     let project = format!("target/test-projects/package-source-{}", std::process::id());
     let project_path = Path::new(&project);
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    fs::create_dir_all(project_path.join("contents")).unwrap();
-    fs::create_dir_all(project_path.join("resources/data")).unwrap();
+    fs::create_dir_all(project_path).unwrap();
     fs::copy(
         repository.join("examples/config.toml"),
         project_path.join("config.toml"),
     )
     .unwrap();
-    fs::copy(
-        repository.join("examples/contents/story/main.twee"),
-        project_path.join("contents/main.twee"),
-    )
-    .unwrap();
-    fs::copy(
-        repository.join("examples/contents/scripts/main.ts"),
-        project_path.join("contents/main.ts"),
-    )
-    .unwrap();
-    fs::copy(
-        repository.join("examples/resources/data/guide.txt"),
-        project_path.join("resources/data/guide.txt"),
-    )
-    .unwrap();
+    copy_tree(
+        &repository.join("examples/contents"),
+        &project_path.join("contents"),
+    );
+    copy_tree(
+        &repository.join("examples/resources"),
+        &project_path.join("resources"),
+    );
     let config_text = fs::read_to_string(project_path.join("config.toml")).unwrap();
     let config = ProjectConfig::load(&project).unwrap();
     let sources = SourceList::discover(&project).unwrap();

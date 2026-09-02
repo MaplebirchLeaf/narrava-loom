@@ -1,0 +1,55 @@
+:: AuthorToolsGallery [reference]
+存档：脚本函数经 State.global 暴露后可在 Twee 中调用，请求进入 Host 队列。<br>
+<<print saveGame("manual-1")>><br>
+导出槽位会写入 save/manual-1.nsave。<br>
+<<button [[读取存档并返回|Hall]]>><<run loadGame("manual-1")>><</button>>
+<<button [[读取不存在的槽位（失败不阻塞）|Hall]]>><<run loadGame("ghost-slot")>><</button>>
+
+<br>日志：只写入 Host 控制台，不进入 Passage 输出。<br>
+<<run logStory("玩家打开了作者能力演示页")>>
+<<run logWarnStory("这是 warn 级别示例")>>
+
+<br>语言：切换请求复用 Runtime 的 Host pending 路径。<br>
+默认语言：<<print defaultLocale()>>，当前生效：<<print currentLocale()>>。<br>
+<<button [[切换到 English|AuthorToolsGallery]]>><<run switchLanguage("en")>><</button>>
+<<button [[切换到默认语言|AuthorToolsGallery]]>><<run switchLanguage(defaultLocale())>><</button>><br>
+切换成功后从下一次渲染开始使用新语言。<br>
+<<print exportI18nTemplate()>><br>
+完整译者模板写入 i18n.export 日志；开发目录直接导入 languages/en/，发行构建打包为 languages/en.nlang。<br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: StateGallery [reference]
+V/T/setup 在 scripts 中对应 Twee 的 $/_/setup，并直接代理活动 Rust State。<br>
+<<print inspectState()>><br>
+持久计数：<<print $scriptChecks>>；临时标记：<<print _lastTool>>；启动配置：<<print setup.build>>。<br>
+<<link [[再次执行|StateGallery]]>><</link>><br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: ReactionGallery [reference reaction]
+<<set $reputation to $reputation ?? 40>>
+Reaction 在 Runtime 安全点统一处理 Event、持久 State 变化与 Passage lifecycle；三类规则都可按当前 Passage 筛选。<br>
+规则次数和 once/limit 状态会随 Save 导出、导入；Reaction 自身不会让 Host 执行脚本逻辑。<br>
+<<slot "reaction-result">>Event Reaction 尚未触发。<</slot>><br>
+<<button [[触发任务完成 Event|ReactionGallery]]>><<run emitQuestCompleted()>><</button>><br>
+<<button [[把声望从 40 提升到 50|ReactionStateResult]]>><<run raiseReputation()>><</button>><br>
+<<link [[验证 lifecycle exit|ReactionExitDemo]]>><</link>><br>
+<<button [[由 Reaction 导航|ReactionGallery]]>><<run emitReactionGoto()>><</button>><br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: ReactionStateResult [reference reaction]
+State Reaction 的 include 未声明 replace，因此把 fragment 追加到当前输出；该 once 规则成功后会销毁。<br>
+<<link [[返回 Reaction 示例|ReactionGallery]]>><</link>>
+
+:: ReactionReputationNotice
+声望首次达到 50：State Reaction 已执行。<br>
+
+:: ReactionExitDemo [reference reaction]
+这段正文不应显示；lifecycle Reaction 的 exit 会在正文执行前截断它。<br>
+
+:: ReactionLockdown
+lifecycle Reaction 已在 Passage Start 与正文之间执行，并用 exit 截断原正文。<br>
+请使用 Host 的后退操作返回 Reaction 示例；被 include 的 fragment 不创建导航。<br>
+
+:: ReactionGotoTarget [reference reaction]
+Event Reaction 已通过统一 Engine 事务导航到这里，并写入 Story history。<br>
+<<link [[返回 Reaction 示例|ReactionGallery]]>><</link>>

@@ -17,6 +17,7 @@
 - I18n 支持将 `translations.nmsg` 与 `messages/*.nmsg` 合并为同一消息表，消息查找使用延迟哈希索引；示例语言包同步展示了拆分方式。
 - Story 回退与前进会先恢复目标历史项对应的 `$variables`，再重放 Passage；`.nsave` 同步保存各历史位置的持久状态，不再用额外访问次数 Macro 模拟回溯。
 - 作者脚本可用 `I18n.select(locale)` 请求 Host 切换运行语言，并复用原生 Runtime pending 与语言包校验路径。
+- 综合示例拆分作者工具源码，增加游戏内语言切换、实际 Tauri 存档读写与 I18n 模板日志导出，并改为运行时生成 schema 2 示例存档。
 
 ## 0.5.1 - 2026-08-31
 

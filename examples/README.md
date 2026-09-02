@@ -19,12 +19,14 @@ examples/
 ├── contents/
 │   ├── story/main.twee       # 可游玩的总览与功能验收页
 │   ├── story/widgets.twee    # 跨文件 Widget 示例
-│   └── scripts/main.ts       # V/T/setup、Save、I18n、Resource 与 Surface
+│   ├── story/z-author-tools.twee # Save、I18n、State 与 Reaction 页面
+│   ├── scripts/main.ts       # V/T/setup、Reaction、Resource 与 Surface
+│   └── scripts/z-author-tools.ts # Save、Logger、I18n 与语言切换封装
 ├── resources/
 │   ├── data/guide.txt
 │   └── images/loom.svg
 ├── languages/en/             # 开发态语言包输入
-└── save/                     # 可导入的示例存档
+└── save/                     # Tauri 首次导出时创建 schema 2 存档
 ```
 
 Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<br>`，或由脚本 Surface 使用
@@ -39,7 +41,7 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 - `FormGallery`：checkbox、radiobutton、textbox 与 State 写回；
 - `ReplaceGallery`：透明 plain slot、有间距的显式 `row` 相邻 panel、后续正文换行、Region 与稳定 key 替换；
 - `StateGallery`：scripts 的 `V/T/setup` 与 Twee `$/_/setup` 共享状态；
-- `AuthorToolsGallery`：Save 导出/导入、Logger 与 I18n 导出；
+- `AuthorToolsGallery`：Tauri Save 导出/导入、Logger、I18n 模板导出与语言切换；
 - `ReactionGallery`：Event、State、lifecycle、replace、include、goto、once/limit 与 Save 状态；
 - `TextGallery`：`print` 的 64 色阶、8 种语义字形、heading 和 delay；
 - `MacroGallery`：switch、for、while、break/continue、unset 与 include。
@@ -48,8 +50,14 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 后退一次后前进才会启用。TUI 对应命令为 `b` 和 `f`，使用 `s` 在 `Bar` 与
 `BarStowed` 两套互斥侧栏内容之间切换。
 
-`scripts/main.ts` 中的函数通过 `State.global.extend()` 暴露给 Twee；日常状态访问使用 `V.name`、
-`T.name` 和 `setup.name`。`State.*` 留给动态键、旧值返回与批量导入。
+各脚本文件在自己的末尾通过 `State.global.extend()` 暴露函数给 Twee；日常状态访问使用 `V.name`、
+`T.name` 和 `setup.name`。`State.*` 留给动态键、旧值返回与批量导入。作者工具页调用
+`I18n.select(locale)`，由 Runtime 和 Host 完成语言包校验；`I18n.export()` 的完整模板写入
+`i18n.export` 日志。
+
+Tauri Host 会把 `Save.export("manual-1")` 写到 `save/manual-1.nsave`，随后同页按钮可以实际读回。
+TUI 目前没有文件存档 IO，因此会显示稳定的 `runtime_session.save_unsupported` 提示；这不影响语言、
+日志与 I18n 模板演示。
 
 `Bar` 和 `BarStowed` 的内容同样由游戏的 Passage 与脚本 Macro 提供，Host 不会注入存档、语言、
 日志或模组管理界面。示例在 `[host.tauri]` 中启用了 `developer = true`，因此桌面开发窗口可用
