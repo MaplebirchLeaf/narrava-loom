@@ -46,7 +46,7 @@ Twee Source
 - HIR 使用 `HirIf` 保存有序条件分支和可选 fallback；子句不作为可独立分派的 Runtime Macro。
 - HIR 拒绝孤立子句、重复 `else` 及 `else` 后继续出现的子句。
 - HIR 使用专用 `HirFor` 区分 `in`、`of`、`range`，并递归保留循环正文。
-- `for` 目标首轮只接受普通全局名称或 `$`、`_`、`@` 变量，不接受成员、索引或其他可写表达式。
+- `for` 目标只接受普通全局名称或 `$`、`_`、`@` 变量，不接受成员、索引或其他可写表达式。
 - `in`、`of` 的集合以及 `range` 的起点、终点、可选步长均解析为 Expression AST，并分别保留宿主 Source Span。
 - `to`、`step` 只在参数顶层作为分隔关键字；字符串、数组、对象、分组或调用内部的同名文本不会被误切分。
 - HIR 使用专用 `HirWhile` 保存条件 AST 与循环正文，并使用独立 `Break`、`Continue` 节点。
@@ -76,8 +76,8 @@ Twee Source
 - 当前编译期 Story 拒绝跨 Source 的重复名称。
 - 当前 `twee::Story::passage()` 按区分大小写的名称查找入口。
 - 起始 Passage 固定为 `Start`，由引擎内部约定，通过编译期 Story 查询确认入口存在。
-- 最小 MIR 已建立 `MirStory`、编译内 `MirPassageId`、`MirBody`、顺序指令和明确 `Halt`；当前降低 Text、两种 Print、基础分支与循环，以及 set、run、unset、include、goto 动作，其他 HIR 节点返回 `MirLowerError`，不会被静默跳过。`MirStory` 同时拥有同源 I18n 目录，可翻译输出片段保留消息 ID 与 placeholder 身份。
-- LIR 已建立 VM 的可执行程序边界：`LirProgram::lower()` 为 Passage 建立区分大小写的索引，拒绝重名，并在运行前验证所有跳转地址。Engine、Host 与 VM 不再直接接收 `MirStory`。
+- MIR 使用 `MirStory`、编译内 `MirPassageId`、`MirBody`、顺序指令和明确 `Halt`；降低 Text、Print、分支、循环与动作 Macro，不支持的 HIR 节点返回 `MirLowerError`。`MirStory` 同时持有同源 I18n 目录。
+- `LirProgram::lower()` 为 Passage 建立区分大小写的索引，拒绝重名，并在运行前验证所有跳转地址。Engine、Host 与 VM 不直接接收 `MirStory`。
 - Bytecode 已固定 `NRVA` 魔数、格式版本、Opcode、Passage 入口表和字符串／Expression／Macro／I18n 常量目录；VM 只接受 `BytecodeProgram` 或 `BytecodeMacroBody`。
 - VM 将同一 I18n 消息的连续输出片段合并为一个执行单元，所有 placeholder 先求值，再产生一个宿主无关 Text；结构配对不依赖 Source Span 唯一性。
 - `if` 的每个条件降低为 `JumpIfFalse`，真分支结束使用 `Jump` 越过后续分支与 fallback；所有目标均使用 `MirInstructionPointer`，不把裸下标混入公开指令语义。

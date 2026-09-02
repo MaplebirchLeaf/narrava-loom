@@ -50,7 +50,7 @@ impl<StoryError> LogicNodeError<StoryError> {
     }
 }
 
-/// 执行当前阶段已经接入的单个逻辑 HIR 节点。
+/// 执行单个已支持的逻辑 HIR 节点。
 pub fn execute_logic_node<Story>(
     node: &HirBodyNode<'_>,
     context: &mut MacroLogicContext<'_, Story>,
@@ -337,7 +337,7 @@ where
     }
 }
 
-/// 顺序执行只包含当前阶段逻辑节点的 HIR 正文。
+/// 顺序执行只包含已支持逻辑节点的 HIR 正文。
 pub fn execute_logic_body<Story>(
     body: &[HirBodyNode<'_>],
     context: &mut MacroLogicContext<'_, Story>,

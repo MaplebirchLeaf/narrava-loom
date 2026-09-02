@@ -114,7 +114,7 @@ impl PartialEq for SurfaceValue {
 
 impl Eq for SurfaceValue {}
 
-/// 当前已实现的最小语义节点；后续类型只按稳定跨宿主语义扩展。
+/// Script builder 与 Protocol 共享的最小语义节点集。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SurfaceNode {
     Text(TextValue),

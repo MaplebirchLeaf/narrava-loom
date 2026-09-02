@@ -26,7 +26,7 @@ Narrava Loom/
 
 ## 存放规则
 
-- Core 公共语义、编译器和运行时放在 `src/`；不得导入 Tauri、DOM、CSS 或 ModLoader 类型。
+- Core 公共语义、编译器和运行时放在 `src/`；不得导入 Tauri、DOM、CSS 或具体 Renderer 类型。
 - 平台实现放在 `hosts/<host>/`，Host 以 `narrava-loom-protocol` 的拥有型命令与更新驱动 Runtime；
   Core 与 Protocol 之间的转换位于 `narrava-loom-script/src/protocol_adapter/`。
 - 游戏作者可直接复制或修改的内容放在 `examples/`；示例不得要求作者编写 Rust。

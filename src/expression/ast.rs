@@ -22,7 +22,7 @@ pub struct Expression<'source> {
     pub span: Span,
 }
 
-/// 首轮对象键只区分裸标识符与字符串。
+/// 对象字面量键：裸标识符或字符串。
 #[derive(Debug, PartialEq, Eq)]
 pub enum ObjectKey<'source> {
     Identifier(&'source str),

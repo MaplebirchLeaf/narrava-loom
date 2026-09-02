@@ -133,7 +133,7 @@ pub(crate) fn evaluate_chain(
     }
 }
 
-/// 首轮成员读取只开放已经确定语义的自身属性与只读方法。
+/// 成员读取只开放具有 Narrava 语义的自身属性与只读方法。
 pub(crate) fn read_member(
     target: Value,
     property: &str,
@@ -146,7 +146,7 @@ pub(crate) fn read_member(
         (Value::Namespace(NativeNamespace::Object), "assign") => Ok(Value::Callable(
             NativeCallable::function(NativeFunction::ObjectAssign),
         )),
-        // Object 点访问首轮只读取字面量建立的自身属性，尚不进入原型表。
+        // Object 点访问只读取自身属性，不查询原型表。
         (Value::Object(properties), property) => properties
             .get(property)
             .ok_or(EvalError::UnknownMember(property_span)),

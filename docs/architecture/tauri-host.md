@@ -38,8 +38,8 @@ Narrava Core Bytecode VM
 
 ## 当前实现
 
-独立 workspace crate 位于 `hosts/narrava-loom-tauri/`，Tauri 依赖不会进入 Core 或
-ModLoader。`TauriHost::spawn(relative_game_path)` 建立专用 Runtime Worker：
+独立 workspace crate 位于 `hosts/narrava-loom-tauri/`，Tauri 依赖不会进入 Core。
+`TauriHost::spawn(relative_game_path)` 建立专用 Runtime Worker：
 
 - Worker 在线程栈中长期拥有 Source、AST、HIR、MIR、LIR 与 Bytecode；RuntimeSession 独占
   State、Story、interaction、continuation 与上一份输出；

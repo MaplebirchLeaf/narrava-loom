@@ -22,7 +22,7 @@ pub(super) fn to_number(value: &Value) -> Option<f64> {
     }
 }
 
-/// 字符串拼接只转换标量；集合转换留给后续受控原型层。
+/// 字符串拼接只转换标量，拒绝集合的隐式字符串化。
 pub(super) fn to_string(value: &Value) -> Option<TextValue> {
     match value {
         Value::Undefined => Some(TextValue::from("undefined")),
@@ -104,7 +104,7 @@ pub(super) fn to_uint32(value: f64) -> u32 {
     value.trunc().rem_euclid(4_294_967_296.0) as u32
 }
 
-/// 解码首轮约定的 JS 风格单字符转义。
+/// 解码 Expression 支持的 JS 风格单字符转义。
 ///
 /// `source` 不含外层引号，因此错误位置需要补回起始引号所占的一字节。
 pub(super) fn decode_string(source: &str, expression_span: Span) -> Result<String, EvalError> {

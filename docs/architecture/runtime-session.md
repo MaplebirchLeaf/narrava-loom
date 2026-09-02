@@ -47,7 +47,7 @@ IPC 与日志、语言等只读 Host 查询不会被 Delay 或 Save IO 占住。
 
 每条成功命令在呈现边界进入一次 Reaction 安全点：Runtime 排空作者 Event、比较命令前后的
 持久 State，顺序执行结构化效果，并把 Reaction `goto` 送回同一 Engine continuation 链。
-State Reaction 的首轮 `before/after` 分别来自命令开始与安全点进入时的快照；它记录提交边界，
+State Reaction 的 `before/after` 分别来自命令开始与安全点进入时的快照；它记录提交边界，
 不保存 setter 级变更日志。效果引发的新变化使用效果前后的快照继续下一轮。
 条件、效果、导航、恢复或 Script 同步失败时，State、Story、Reaction 状态、交互表和上一份
 可展示更新一起回滚；pending 期间检查点由 Session 持有，Host 不参与事务。
@@ -84,5 +84,5 @@ RuntimeSession 的恢复事务内完成。内部 `RuntimeServices` 只准备/应
 
 ## 本阶段不包含
 
-ModLoader、Godot Host、Python/Java Binding、新 Renderer、新 Host capability，以及二维坐标系统
+Godot Host、Python/Java Binding、新 Renderer、新 Host capability，以及二维坐标系统
 均不属于本阶段。

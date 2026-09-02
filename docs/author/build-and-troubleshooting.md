@@ -166,7 +166,7 @@ engine.mir.begin_failed：LIR Passage 启动后继续执行失败，事务已回
 7. 先用 `State.global` 导入一个纯函数。
 8. 再加入 Resource。
 9. 最后加入可选 CSS 和语言包。
-10. 最后用 `:: Bar` 中的 `<<barDemo>>` 入口验证存档、语言和日志；模组能力等待独立 ModLoader。
+10. 最后用 `:: Bar` 中的 `<<barDemo>>` 入口验证存档、语言和日志。
 
 ## 一个可直接复制的最小游戏
 

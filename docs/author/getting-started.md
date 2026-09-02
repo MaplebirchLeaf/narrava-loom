@@ -65,7 +65,6 @@ cargo run --locked -p narrava-loom-tauri -- examples
 - 不必安装 Node.js、npm、Bun 或前端打包器；
 - 不必手工把 TypeScript 编译成 JavaScript；
 - 不必使用 CSS；
-- 不必使用 ModLoader。
 
 `narrava-loom-tauri` 会在 Rust Worker 中用 Oxc 去除 TypeScript 类型，再用 Boa 执行
 ECMAScript。WebView 只负责显示，不执行游戏脚本。

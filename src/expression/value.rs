@@ -238,7 +238,7 @@ impl PartialEq for ObjectValue {
     }
 }
 
-/// Expression 的首轮运行时值。
+/// Expression 的运行时值。
 ///
 /// 数字使用 `f64` 接近 Web 的 `number`；对象属性使用有序列表，保留源码顺序。
 #[derive(Clone, Debug, PartialEq)]

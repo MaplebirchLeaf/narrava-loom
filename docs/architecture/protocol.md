@@ -24,7 +24,7 @@ narrava-loom-protocol ────────┘                    │
               └───────────────────────────────────────→ hosts/*（纯数据命令与更新）
 ```
 
-独立 ModLoader 只依赖 Core 的游戏身份、源码、资源与模组契约，不消费 Surface Protocol。
+模组组合尚未实现，不扩大 Surface Protocol 的当前职责。
 
 Core 内部的 `semantic::SemanticOutput` 继续使用 `TextValue`，保持 Expression、State 与 Save
 共享的 UTF-16 语义。跨 Runtime/Host 边界时，Script Runtime 的 `protocol_adapter` 才把文本转换为
