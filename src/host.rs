@@ -81,6 +81,14 @@ impl HostInput {
     }
 }
 
+/// Host 请求重放 Story 时间线中的哪个位置。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostReplayTarget {
+    Previous,
+    Current,
+    Next,
+}
+
 /// Host 用于路由异步输入的稳定执行令牌。
 ///
 /// 它只复用 Runtime 执行身份，不携带 State、VM frame、平台句柄或局部作用域。

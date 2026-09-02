@@ -351,6 +351,11 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             return Ok(waiting.after);
         }
         outcome?;
+        if matches!(waiting.action, PlatformAction::SelectLanguage { .. })
+            && self.presented.is_some()
+        {
+            return self.replay_current();
+        }
         Ok(waiting.after)
     }
 

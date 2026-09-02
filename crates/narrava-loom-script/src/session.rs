@@ -470,15 +470,30 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 "Story 历史中没有该方向的条目",
             ));
         }
+        self.replay(if backward {
+            narrava_loom_core::host::HostReplayTarget::Previous
+        } else {
+            narrava_loom_core::host::HostReplayTarget::Next
+        })
+    }
+
+    fn replay_current(&mut self) -> Result<RuntimeUpdate, HostErrorDto> {
+        self.replay(narrava_loom_core::host::HostReplayTarget::Current)
+    }
+
+    fn replay(
+        &mut self,
+        target: narrava_loom_core::host::HostReplayTarget,
+    ) -> Result<RuntimeUpdate, HostErrorDto> {
         let params = Value::Null;
         let identity = self.identity(STORY_ID);
         let language = self.language.clone();
-        let result = HostApi::history_mir_with_reaction(
+        let result = HostApi::replay_mir_with_reaction(
             &mut self.pending,
             &mut self.state,
             &mut self.story,
             self.bytecode,
-            backward,
+            target,
             HostMirRequest {
                 params: &params,
                 identity,

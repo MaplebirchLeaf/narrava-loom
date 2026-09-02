@@ -175,7 +175,7 @@ impl TauriHost {
         receive_worker(result).await
     }
 
-    /// 切换运行时语言（下一次渲染生效）。
+    /// 切换运行时语言；若已经进入故事，则立即重绘当前 Passage。
     pub async fn select_language(&self, locale: String) -> Result<(), HostErrorDto> {
         self.execute(RuntimeCommand::SelectLanguage { locale })
             .await

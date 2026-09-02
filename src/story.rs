@@ -45,6 +45,7 @@ impl Error for StoryNavigationError {}
 #[derive(Debug, PartialEq, Eq)]
 pub enum StoryHistoryError {
     NoPrevious,
+    NoCurrent,
     NoNext,
 }
 
@@ -52,6 +53,7 @@ impl fmt::Display for StoryHistoryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoPrevious => formatter.write_str("没有可回退的 Passage"),
+            Self::NoCurrent => formatter.write_str("当前没有可重放的 Passage"),
             Self::NoNext => formatter.write_str("没有可前进的 Passage"),
         }
     }

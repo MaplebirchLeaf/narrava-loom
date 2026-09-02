@@ -98,12 +98,16 @@ impl HostApi {
             EngineMirMacroCallbackFailure<DispatchError>,
         >,
     {
-        Self::history_mir_with_reaction(
+        Self::replay_mir_with_reaction(
             pending,
             state,
             story,
             mir,
-            backward,
+            if backward {
+                HostReplayTarget::Previous
+            } else {
+                HostReplayTarget::Next
+            },
             request,
             lifecycle,
             no_passage_reaction,
@@ -290,9 +294,9 @@ impl HostApi {
         )
     }
 
-    /// 沿 Story 历史游标重新执行上一项或下一项，不制造新的访问记录。
+    /// 重放 Story 的上一项、当前项或下一项，不制造新的访问记录。
     #[allow(clippy::too_many_arguments)]
-    pub fn history_mir_with_reaction<
+    pub fn replay_mir_with_reaction<
         'hir,
         'source,
         Pending,
@@ -305,7 +309,7 @@ impl HostApi {
         state: &mut State,
         story: &mut Story<'hir, 'source>,
         mir: &BytecodeProgram,
-        backward: bool,
+        target: HostReplayTarget,
         request: HostMirRequest<'_>,
         mut lifecycle: Lifecycle,
         mut reaction: Reaction,
@@ -334,12 +338,14 @@ impl HostApi {
     {
         let state_checkpoint = state.checkpoint();
         let story_snapshot = story.snapshot();
-        let current = if backward {
-            story.back()
-        } else {
-            story.forward()
+        let current = match target {
+            HostReplayTarget::Previous => story.back().copied(),
+            HostReplayTarget::Current => story
+                .current_entry()
+                .copied()
+                .ok_or(crate::story::StoryHistoryError::NoCurrent),
+            HostReplayTarget::Next => story.forward().copied(),
         }
-        .copied()
         .map_err(|error| {
             Box::new(HostDriveError {
                 diagnostic: host_error("story.history.unavailable", &error.to_string()),
