@@ -336,6 +336,46 @@ fn forward_reuses_existing_history_without_creating_a_new_visit() {
 }
 
 #[test]
+fn current_refresh_collapses_only_the_latest_adjacent_revisit() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("示例 Source 应可读取");
+    let compiled: HirStory<'_> = HirStory {
+        passages: vec![
+            HirPassage {
+                source: &source.path,
+                name: "Start",
+                tags: Vec::new(),
+                body: Vec::new(),
+            },
+            HirPassage {
+                source: &source.path,
+                name: "Map",
+                tags: Vec::new(),
+                body: Vec::new(),
+            },
+        ],
+    };
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    story.goto("Start").expect("Start 应可导航");
+    story.goto("Start").expect("同名重访应先建立普通历史项");
+
+    story.collapse_current_revisit();
+
+    assert_eq!(story.history().len(), 1);
+    assert_eq!(story.visits("Start"), 1);
+    assert_eq!(story.position(), Some(0));
+    assert!(!story.can_forward());
+
+    story.goto("Map").expect("不同 Passage 应可导航");
+    story.collapse_current_revisit();
+    assert_eq!(story.history().len(), 2, "不同 Passage 不能被刷新折叠");
+    assert_eq!(story.current().map(|passage| passage.name), Some("Map"));
+}
+
+#[test]
 fn goto_after_back_replaces_the_forward_branch_only_after_validation() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),

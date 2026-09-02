@@ -86,6 +86,7 @@ impl HostInput {
 pub enum HostReplayTarget {
     Previous,
     Current,
+    RefreshCurrent,
     Next,
 }
 

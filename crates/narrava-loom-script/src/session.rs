@@ -75,6 +75,7 @@ struct PlatformWaiting {
     after: RuntimeUpdate,
     script_save: bool,
     input_checkpoint: Option<StateCheckpoint>,
+    collapse_refresh_revisit: bool,
 }
 
 struct SpecialWaiting<'hir, 'source> {
@@ -212,7 +213,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 self.begin_save(operation, target, RuntimeUpdate::Applied, false, None)
             }
             RuntimeCommand::SelectLanguage { locale } => {
-                self.begin_language(locale, RuntimeUpdate::Applied)
+                self.begin_language(locale, RuntimeUpdate::Applied, false)
             }
             RuntimeCommand::Resume { operation, result } => self.resume(operation, result),
             RuntimeCommand::Cancel { operation } => self.cancel(operation),
@@ -477,8 +478,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         })
     }
 
-    fn replay_current(&mut self) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.replay(narrava_loom_core::host::HostReplayTarget::Current)
+    fn replay_current(
+        &mut self,
+        collapse_refresh_revisit: bool,
+    ) -> Result<RuntimeUpdate, HostErrorDto> {
+        self.replay(if collapse_refresh_revisit {
+            narrava_loom_core::host::HostReplayTarget::RefreshCurrent
+        } else {
+            narrava_loom_core::host::HostReplayTarget::Current
+        })
     }
 
     fn replay(

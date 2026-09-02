@@ -16,6 +16,8 @@
 切换成功后立即按新语言重绘当前页面，不新增 Story 历史项。<br>
 <<print logI18nTemplate()>><br>
 完整译者模板写入 i18n.export 日志；开发目录直接导入 languages/en/，发行构建打包为 languages/en.nlang。<br>
+<<set $authorToolsViews to ($authorToolsViews ?? 0) + 1>>
+本页进入计数：<<print $authorToolsViews>>；语言重绘不会递增该值。<br>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: StateGallery [reference]

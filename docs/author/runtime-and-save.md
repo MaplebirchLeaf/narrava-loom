@@ -67,9 +67,9 @@ const templateJson = I18n.export()
 模式可用的宽松翻译格式。
 
 `I18n.select(locale)` 把切换请求交给 Host，再由 Runtime 校验语言包并同步 `I18n.locale`；它不会
-在脚本中另建语言状态。故事已经开始时，Runtime 会恢复当前 Passage 的进入前 `$` 快照并立即重放，
-因此切换不会新增历史项，可见文本也不必等到下一次导航才更新。可见的语言选择界面仍由游戏作者
-通过脚本和 Twee 定义。
+在脚本中另建语言状态。故事已经开始时，Runtime 会恢复当前 Passage 的进入前 `$` 快照并立即重放
+完整呈现帧，包括 `Bar` 与 `BarStowed`；同名刷新导航会被折叠，因此不会新增历史项或重复累加
+持久变量。可见的语言选择界面仍由游戏作者通过脚本和 Twee 定义。
 
 详细格式见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md)。
 

@@ -344,6 +344,13 @@ impl HostApi {
                 .current_entry()
                 .copied()
                 .ok_or(crate::story::StoryHistoryError::NoCurrent),
+            HostReplayTarget::RefreshCurrent => {
+                story.collapse_current_revisit();
+                story
+                    .current_entry()
+                    .copied()
+                    .ok_or(crate::story::StoryHistoryError::NoCurrent)
+            }
             HostReplayTarget::Next => story.forward().copied(),
         }
         .map_err(|error| {

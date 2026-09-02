@@ -267,6 +267,24 @@ impl<'hir, 'source> Story<'hir, 'source> {
         self.state_history.get(&id).map(Rc::as_ref)
     }
 
+    /// 折叠时间线末尾紧邻的同名重访，供不应制造导航的当前页面刷新使用。
+    pub(crate) fn collapse_current_revisit(&mut self) {
+        let Some(position) = self.position else {
+            return;
+        };
+        if position == 0 || position + 1 != self.history.len() {
+            return;
+        }
+        let current: StoryHistoryEntry<'hir, 'source> = self.history[position];
+        let previous: StoryHistoryEntry<'hir, 'source> = self.history[position - 1];
+        if current.passage.name != previous.passage.name {
+            return;
+        }
+        self.history.pop();
+        self.state_history.remove(&current.id);
+        self.position = Some(position - 1);
+    }
+
     /// 确认一次导航；只有存在的目标才会同时更新 current 与 history。
     pub fn goto(
         &mut self,

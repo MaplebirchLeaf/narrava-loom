@@ -117,24 +117,49 @@ Macro.add("barDemo", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
-  handler: () =>
-    Surface.fragment(
-      Surface.text("大厅状态", { key: "bar-heading", styles: ["strong"] }),
-      Surface.hardBreak(),
-      Surface.text("天气：小雨 · 17°C", { key: "bar-weather", color: 34 }),
-      Surface.hardBreak(),
-      Surface.text("人物：Author", { key: "bar-character", styles: ["strong"] }),
-      Surface.hardBreak(),
-      Surface.text("状态：轻微疼痛", { key: "bar-condition", color: 34 }),
-      Surface.hardBreak(),
-      Surface.text("提示：藏书室似乎有动静。", { key: "bar-hint", color: 3 }),
-      Surface.hardBreak(),
-      Surface.text("管理界面由游戏脚本和 Twee 自行定义。", {
-        key: "management-hint",
-        color: 3,
+  handler: () => {
+    const english = I18n.locale === "en"
+    return Surface.fragment(
+      Surface.text(english ? "Hall status" : "大厅状态", {
+        key: "bar-heading",
+        styles: ["strong"],
       }),
       Surface.hardBreak(),
-    ),
+      Surface.text(english ? "Weather: light rain · 17°C" : "天气：小雨 · 17°C", {
+        key: "bar-weather",
+        color: 34,
+      }),
+      Surface.hardBreak(),
+      Surface.text(english ? "Character: Author" : "人物：Author", {
+        key: "bar-character",
+        styles: ["strong"],
+      }),
+      Surface.hardBreak(),
+      Surface.text(english ? "Condition: mild pain" : "状态：轻微疼痛", {
+        key: "bar-condition",
+        color: 34,
+      }),
+      Surface.hardBreak(),
+      Surface.text(
+        english ? "Hint: something is stirring in the library." : "提示：藏书室似乎有动静。",
+        {
+          key: "bar-hint",
+          color: 3,
+        },
+      ),
+      Surface.hardBreak(),
+      Surface.text(
+        english
+          ? "The game script and Twee define the management interface."
+          : "管理界面由游戏脚本和 Twee 自行定义。",
+        {
+          key: "management-hint",
+          color: 3,
+        },
+      ),
+      Surface.hardBreak(),
+    )
+  },
 })
 
 // 收拢态侧栏演示：用极短文本填充 BarStowed 特殊 Passage。
@@ -142,12 +167,18 @@ Macro.add("barStowedDemo", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
-  handler: () =>
-    Surface.fragment(
-      Surface.text("雨", { key: "bar-stowed-weather", color: 34 }),
-      Surface.text("痛", { key: "bar-stowed-condition", styles: ["strong"], color: 34 }),
+  handler: () => {
+    const english = I18n.locale === "en"
+    return Surface.fragment(
+      Surface.text(english ? "R" : "雨", { key: "bar-stowed-weather", color: 34 }),
+      Surface.text(english ? "P" : "痛", {
+        key: "bar-stowed-condition",
+        styles: ["strong"],
+        color: 34,
+      }),
       Surface.text("!", { key: "bar-stowed-hint", styles: ["strong"], color: 8 }),
-    ),
+    )
+  },
 })
 
 // 综合演示：region、component、image、语义字形与标准调色板。

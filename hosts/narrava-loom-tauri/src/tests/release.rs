@@ -464,6 +464,33 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         })
         .expect("大厅应提供作者能力演示入口");
     let author_tools = block_on(host.activate(author_tools_id)).unwrap();
+    fn region_contains_text(nodes: &[HostNodeDto], region_name: &str, expected: &str) -> bool {
+        nodes.iter().any(|node| match node {
+            HostNodeDto::Region { region, nodes, .. } if region == region_name => {
+                nodes.iter().any(|node| match node {
+                    HostNodeDto::Text { text, .. } | HostNodeDto::StyledText { text, .. } => {
+                        text.contains(expected)
+                    }
+                    _ => false,
+                })
+            }
+            _ => false,
+        })
+    }
+    assert!(region_contains_text(
+        &author_tools.nodes,
+        "bar",
+        "Hall status"
+    ));
+    assert!(region_contains_text(&author_tools.nodes, "bar-stowed", "R"));
+    assert!(
+        author_tools.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("本页进入计数：1")
+        )),
+        "语言重绘不得递增持久变量：{:?}",
+        author_tools.nodes
+    );
     assert!(author_tools.nodes.iter().any(|node| matches!(
         node,
         HostNodeDto::Text { text, .. } if text.contains("已请求导出存档")
@@ -500,6 +527,20 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         "语言切换完成时必须立即重绘当前 Passage：{:?}",
         author_tools.nodes
     );
+    assert!(region_contains_text(&author_tools.nodes, "bar", "大厅状态"));
+    assert!(region_contains_text(
+        &author_tools.nodes,
+        "bar-stowed",
+        "雨"
+    ));
+    assert!(
+        author_tools.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("本页进入计数：1")
+        )),
+        "语言重绘不得递增持久变量：{:?}",
+        author_tools.nodes
+    );
     let english_button = author_tools
         .nodes
         .iter()
@@ -517,6 +558,16 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         "切换到 English 后应立即看到英文正文：{:?}",
         author_tools.nodes
     );
+    assert!(region_contains_text(
+        &author_tools.nodes,
+        "bar",
+        "Hall status"
+    ));
+    assert!(region_contains_text(&author_tools.nodes, "bar-stowed", "R"));
+    assert!(author_tools.nodes.iter().any(|node| matches!(
+        node,
+        HostNodeDto::Text { text, .. } if text.contains("本页进入计数：1")
+    )));
     // 两个返回大厅的按钮：正文执行 importSave 后导航，存档槽位来自本次进入时的导出
     let buttons: Vec<String> = author_tools
         .nodes

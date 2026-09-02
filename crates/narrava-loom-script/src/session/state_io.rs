@@ -202,6 +202,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             after,
             script_save,
             input_checkpoint,
+            collapse_refresh_revisit: false,
         })));
         Ok(RuntimeUpdate::Pending { operation: pending })
     }
@@ -210,6 +211,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         &mut self,
         locale: String,
         after: RuntimeUpdate,
+        collapse_refresh_revisit: bool,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         self.ensure_idle()?;
         let operation_id: u64 = self.sequence;
@@ -222,6 +224,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             after,
             script_save: false,
             input_checkpoint: None,
+            collapse_refresh_revisit,
         })));
         Ok(RuntimeUpdate::Pending {
             operation: PendingOperation::SelectLanguage {
@@ -277,7 +280,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         else {
             return Ok(None);
         };
-        self.begin_language(locale, after).map(Some)
+        self.begin_language(locale, after, true).map(Some)
     }
 
     pub(super) fn resume_platform(
@@ -354,7 +357,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         if matches!(waiting.action, PlatformAction::SelectLanguage { .. })
             && self.presented.is_some()
         {
-            return self.replay_current();
+            return self.replay_current(waiting.collapse_refresh_revisit);
         }
         Ok(waiting.after)
     }
