@@ -470,7 +470,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     )));
     assert!(author_tools.nodes.iter().any(|node| matches!(
         node,
-        HostNodeDto::Text { text, .. } if text.contains("当前生效：en")
+        HostNodeDto::Text { text, .. } if text.contains("active locale: en")
     )));
     assert!(author_tools.nodes.iter().any(|node| matches!(
         node,
@@ -500,7 +500,24 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         "语言切换完成时必须立即重绘当前 Passage：{:?}",
         author_tools.nodes
     );
-    // 两个返回大厅的按钮：正文执行 loadGame 后导航，存档槽位来自本次进入时的导出
+    let english_button = author_tools
+        .nodes
+        .iter()
+        .find_map(|node| match node {
+            HostNodeDto::Button { id, target, .. } if target == "AuthorToolsGallery" => Some(id),
+            _ => None,
+        })
+        .expect("重绘后应继续提供 English 切换动作");
+    let author_tools = block_on(host.activate(english_button)).unwrap();
+    assert!(
+        author_tools.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Text { text, .. } if text.contains("active locale: en")
+        )),
+        "切换到 English 后应立即看到英文正文：{:?}",
+        author_tools.nodes
+    );
+    // 两个返回大厅的按钮：正文执行 importSave 后导航，存档槽位来自本次进入时的导出
     let buttons: Vec<String> = author_tools
         .nodes
         .iter()

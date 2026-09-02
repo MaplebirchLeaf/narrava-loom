@@ -19,9 +19,9 @@ examples/
 ├── contents/
 │   ├── story/main.twee       # 可游玩的总览与功能验收页
 │   ├── story/widgets.twee    # 跨文件 Widget 示例
-│   ├── story/z-author-tools.twee # Save、I18n、State 与 Reaction 页面
+│   ├── story/author-tools.twee   # Save、I18n、State 与 Reaction 页面
 │   ├── scripts/main.ts       # V/T/setup、Reaction、Resource 与 Surface
-│   └── scripts/z-author-tools.ts # Save、Logger、I18n 与语言切换封装
+│   └── scripts/author-tools.ts   # Save、Logger、I18n 与语言切换封装
 ├── resources/
 │   ├── data/guide.txt
 │   └── images/loom.svg
@@ -52,8 +52,8 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 
 各脚本文件在自己的末尾通过 `State.global.extend()` 暴露函数给 Twee；日常状态访问使用 `V.name`、
 `T.name` 和 `setup.name`。`State.*` 留给动态键、旧值返回与批量导入。作者工具页调用
-`I18n.select(locale)`，由 Runtime 和 Host 完成语言包校验；`I18n.export()` 的完整模板写入
-`i18n.export` 日志。
+`I18n.select(locale)`，由 Runtime 和 Host 完成语言包校验并立即重绘当前 Passage；
+`I18n.export()` 的完整模板写入 `i18n.export` 日志。
 
 Tauri Host 会把 `Save.export("manual-1")` 写到 `save/manual-1.nsave`，随后同页按钮可以实际读回。
 TUI 目前没有文件存档 IO，因此会显示稳定的 `runtime_session.save_unsupported` 提示；这不影响语言、

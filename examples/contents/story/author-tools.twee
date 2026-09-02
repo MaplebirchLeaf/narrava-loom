@@ -1,20 +1,20 @@
 :: AuthorToolsGallery [reference]
 存档：脚本函数经 State.global 暴露后可在 Twee 中调用，请求进入 Host 队列。<br>
-<<print saveGame("manual-1")>><br>
+<<print exportSave("manual-1")>><br>
 导出槽位会写入 save/manual-1.nsave。<br>
-<<button [[读取存档并返回|Hall]]>><<run loadGame("manual-1")>><</button>>
-<<button [[读取不存在的槽位（失败不阻塞）|Hall]]>><<run loadGame("ghost-slot")>><</button>>
+<<button [[读取存档并返回|Hall]]>><<run importSave("manual-1")>><</button>>
+<<button [[读取不存在的槽位（失败不阻塞）|Hall]]>><<run importSave("ghost-slot")>><</button>>
 
 <br>日志：只写入 Host 控制台，不进入 Passage 输出。<br>
-<<run logStory("玩家打开了作者能力演示页")>>
-<<run logWarnStory("这是 warn 级别示例")>>
+<<run logInfo("玩家打开了作者能力演示页")>>
+<<run logWarning("这是 warn 级别示例")>>
 
 <br>语言：切换请求复用 Runtime 的 Host pending 路径。<br>
-默认语言：<<print defaultLocale()>>，当前生效：<<print currentLocale()>>。<br>
-<<button [[切换到 English|AuthorToolsGallery]]>><<run switchLanguage("en")>><</button>>
-<<button [[切换到默认语言|AuthorToolsGallery]]>><<run switchLanguage(defaultLocale())>><</button>><br>
-切换成功后从下一次渲染开始使用新语言。<br>
-<<print exportI18nTemplate()>><br>
+默认语言：<<print defaultLocale()>>，当前生效：<<print activeLocale()>>。<br>
+<<button [[切换到 English|AuthorToolsGallery]]>><<run selectLanguage("en")>><</button>>
+<<button [[切换到默认语言|AuthorToolsGallery]]>><<run selectLanguage(defaultLocale())>><</button>><br>
+切换成功后立即按新语言重绘当前页面，不新增 Story 历史项。<br>
+<<print logI18nTemplate()>><br>
 完整译者模板写入 i18n.export 日志；开发目录直接导入 languages/en/，发行构建打包为 languages/en.nlang。<br>
 <<link [[返回大厅|Hall]]>><</link>>
 

@@ -29,3 +29,25 @@ You found
 欢迎，{$hero}。这是 Narrava Loom 综合示例。
 [translation]
 Welcome, {$hero}. This is the Narrava Loom grand tour.
+
+:: p18:AuthorToolsGallery:body.22
+[source]
+语言：切换请求复用 Runtime 的 Host pending 路径。
+[translation]
+Language: selection uses the Runtime Host pending path.
+
+:: p18:AuthorToolsGallery:body.24
+[source]
+
+默认语言：{value_1}，当前生效：{value_2}。
+[translation]
+
+Default locale: {value_1}; active locale: {value_2}.
+
+:: p18:AuthorToolsGallery:body.36
+[source]
+
+切换成功后立即按新语言重绘当前页面，不新增 Story 历史项。
+[translation]
+
+After selection, the current page is redrawn immediately without adding a Story history entry.

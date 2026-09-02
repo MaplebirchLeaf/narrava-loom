@@ -88,13 +88,13 @@ after 不能修改已导出文档或把失败伪装成成功。Hook 身份只在
 `.twee` 中调用：
 
 ```ts
-function saveGame(slot = "manual-1"): void {
+function exportSave(slot = "manual-1"): void {
   Save.export(slot)
 }
 ```
 
 ```twee
-<<run saveGame("manual-1")>>
+<<run exportSave("manual-1")>>
 ```
 
 `run` 会丢弃请求 ID，但导出请求仍进入 Host 队列；需要跟踪结果时应在 scripts
