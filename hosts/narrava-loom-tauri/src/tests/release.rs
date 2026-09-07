@@ -173,6 +173,9 @@ fn history_back_restores_persistent_state_before_replaying_the_target() {
         "第五次大厅输出不正确：{:?}",
         update.nodes
     );
+    let autosave_path = root_path.join("save/autosave.nsave");
+    let autosave_before_history: Vec<u8> =
+        fs::read(&autosave_path).expect("跨 Passage 导航后应写入 autosave 槽位");
 
     let _room = block_on(host.history(true)).expect("应回退到房间");
     let hall = block_on(host.history(true)).expect("应回退到第四次大厅");
@@ -188,6 +191,11 @@ fn history_back_restores_persistent_state_before_replaying_the_target() {
         hall.nodes
             .iter()
             .any(|node| matches!(node, HostNodeDto::Text { text, .. } if text.contains("第 5 次")))
+    );
+    assert_eq!(
+        fs::read(autosave_path).unwrap(),
+        autosave_before_history,
+        "历史回溯和前进不应重写自动存档"
     );
 
     drop(host);
@@ -801,6 +809,15 @@ fn packaged_game_starts_without_development_sources() {
             HostNodeDto::Region { region, nodes, .. } if region == "bar" && !nodes.is_empty()
         )),
         "启动更新必须包含游戏作者定义的 Bar 内容"
+    );
+    assert!(
+        !update.nodes.iter().any(|node| matches!(
+            node,
+            HostNodeDto::Region { region, nodes, .. }
+                if matches!(region.as_str(), "bar" | "bar-stowed")
+                    && nodes.iter().any(|node| matches!(node, HostNodeDto::SafeReturn { .. }))
+        )),
+        "SafeReturn 只能补充正文，不能进入侧栏区域"
     );
     assert!(!update.nodes.iter().any(|node| matches!(
         node,

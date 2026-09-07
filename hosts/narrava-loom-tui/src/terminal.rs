@@ -88,7 +88,7 @@ pub fn write_frame(writer: &mut impl Write, frame: &TuiFrame) -> io::Result<()> 
     write_bordered_region(writer, &frame.header)?;
     match frame.sidebar_mode {
         TuiSidebarMode::Expanded => write_bordered_region(writer, &frame.bar)?,
-        TuiSidebarMode::Stowed => write_bordered_region(writer, &frame.bar_stowed)?,
+        TuiSidebarMode::Stowed => write_region_with_margin(writer, &frame.bar_stowed)?,
     }
     if !frame.main.is_empty() {
         writeln!(writer, "\n{section_divider}")?;
@@ -129,6 +129,14 @@ fn write_region(writer: &mut impl Write, lines: &[String]) -> io::Result<()> {
     Ok(())
 }
 
+fn write_region_with_margin(writer: &mut impl Write, lines: &[String]) -> io::Result<()> {
+    if !lines.is_empty() {
+        writeln!(writer)?;
+        write_region(writer, lines)?;
+    }
+    Ok(())
+}
+
 fn write_bordered_region(writer: &mut impl Write, lines: &[String]) -> io::Result<()> {
     if lines.is_empty() {
         return Ok(());
@@ -157,6 +165,8 @@ fn write_help(writer: &mut impl Write) -> io::Result<()> {
     writeln!(writer, "  set <序号> <文字>   修改文本框；空文字也允许")?;
     writeln!(writer, "  redraw              重绘当前画面")?;
     writeln!(writer, "  sidebar             切换侧栏展开／收起")?;
+    writeln!(writer, "  save / load         使用 quick 槽位存档／读档")?;
+    writeln!(writer, "  language            切换到下一种已安装语言")?;
     writeln!(writer, "  help                显示本帮助")?;
     writeln!(writer, "  quit                退出")
 }

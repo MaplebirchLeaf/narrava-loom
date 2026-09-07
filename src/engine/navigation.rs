@@ -297,7 +297,8 @@ impl Engine {
                     if !current.passage().has_tag("exit") {
                         // 本跳没有作者导航动作时，追加指向最近安全返回点的语义动作。
                         // 历史中没有可用目标时暂不追加（启动入口回退与 Diagnostic 后续接入）。
-                        if !execution.output.has_navigation()
+                        if !crate::story::special::is_host_region(current.passage().name)
+                            && !execution.output.has_navigation()
                             && let Some(target) = story.safe_return_target()
                         {
                             execution.output.push(SemanticNode::SafeReturn {

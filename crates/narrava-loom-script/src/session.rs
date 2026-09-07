@@ -213,7 +213,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 self.begin_save(operation, target, RuntimeUpdate::Applied, false, None)
             }
             RuntimeCommand::SelectLanguage { locale } => {
-                self.begin_language(locale, RuntimeUpdate::Applied, false)
+                self.begin_language(locale, RuntimeUpdate::Applied, true)
             }
             RuntimeCommand::Resume { operation, result } => self.resume(operation, result),
             RuntimeCommand::Cancel { operation } => self.cancel(operation),

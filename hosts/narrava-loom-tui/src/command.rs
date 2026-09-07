@@ -46,6 +46,9 @@ pub enum TuiCommand {
     Back,
     Forward,
     ToggleSidebar,
+    QuickSave,
+    QuickLoad,
+    NextLanguage,
     Redraw,
     Quit,
 }
@@ -68,6 +71,15 @@ impl TuiCommand {
         }
         if matches!(trimmed, "s" | "sidebar") {
             return Ok(Self::ToggleSidebar);
+        }
+        if matches!(trimmed, "save" | "quick-save") {
+            return Ok(Self::QuickSave);
+        }
+        if matches!(trimmed, "load" | "quick-load") {
+            return Ok(Self::QuickLoad);
+        }
+        if matches!(trimmed, "language" | "lang") {
+            return Ok(Self::NextLanguage);
         }
         if matches!(trimmed, "q" | "quit" | "exit") {
             return Ok(Self::Quit);
@@ -113,6 +125,9 @@ impl TuiCommand {
             Self::Back => Ok(TuiOperation::Back),
             Self::Forward => Ok(TuiOperation::Forward),
             Self::ToggleSidebar => Ok(TuiOperation::ToggleSidebar),
+            Self::QuickSave => Ok(TuiOperation::QuickSave),
+            Self::QuickLoad => Ok(TuiOperation::QuickLoad),
+            Self::NextLanguage => Ok(TuiOperation::NextLanguage),
             Self::Redraw => Ok(TuiOperation::Redraw),
             Self::Quit => Ok(TuiOperation::Quit),
         }
@@ -129,6 +144,9 @@ pub enum TuiOperation {
     Back,
     Forward,
     ToggleSidebar,
+    QuickSave,
+    QuickLoad,
+    NextLanguage,
     Redraw,
     Quit,
 }

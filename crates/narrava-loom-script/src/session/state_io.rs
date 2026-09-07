@@ -354,6 +354,16 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             return Ok(waiting.after);
         }
         outcome?;
+        if matches!(
+            waiting.action,
+            PlatformAction::Save {
+                operation: SaveOperation::Import,
+                ..
+            }
+        ) && self.presented.is_some()
+        {
+            return self.replay_current(true);
+        }
         if matches!(waiting.action, PlatformAction::SelectLanguage { .. })
             && self.presented.is_some()
         {

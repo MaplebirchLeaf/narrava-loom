@@ -112,6 +112,7 @@ Binding 必须把全局 `Save` 对象连接到同一个 Rust `SaveController`。
 - `SaveController::export()` / `import()` / `take()` / `complete()`；
 - `SaveLifecycleSubscriptions::before()` / `after()` / `off()`。
 
-Tauri Host 已实现命名槽位与 `save/<target>.nsave` 落盘，侧栏面板和脚本请求复用同一保存边界。
-仍未实现的是文件选择器、压缩/加密、缩略图、自动存档、云同步与迁移；这些属于后续 Host
-能力，不写进当前基础文档格式。
+Tauri 与 TUI Host 已实现命名槽位与 `save/<target>.nsave` 落盘，脚本请求复用同一 Runtime 保存
+边界。两者在成功进入另一 Passage 后写入 `autosave` 槽位；这是官方 Host 的一致策略，不改变
+`.nsave` 格式，也不会因语言刷新、历史回溯或侧栏切换触发。仍未实现的是文件选择器、压缩/加密、
+缩略图、可配置自动存档策略、云同步与迁移。

@@ -99,6 +99,24 @@ impl TuiSurface {
         Self::lines_for(&self.blocks)
     }
 
+    /// 收起侧栏把每个顶层块映射为一个紧邻方格，不把这种 Host 布局泄漏到 Protocol。
+    fn stowed_lines(&self) -> Vec<String> {
+        let cells: Vec<TuiBlock> = self
+            .blocks
+            .iter()
+            .filter(|block: &&TuiBlock| !block.lines.is_empty())
+            .map(|block: &TuiBlock| TuiBlock {
+                lines: if block.presentation == TuiBlockPresentation::Panel {
+                    block.lines.clone()
+                } else {
+                    panel_lines(block.lines.clone())
+                },
+                ..TuiBlock::default()
+            })
+            .collect();
+        join_blocks(&cells, "")
+    }
+
     fn lines_for(blocks: &[TuiBlock]) -> Vec<String> {
         let mut lines: Vec<String> = Vec::new();
         let mut index: usize = 0;
@@ -161,6 +179,44 @@ impl TuiSurface {
         lines
     }
 
+    fn dialog_pages(&self) -> Vec<TuiDialogPage> {
+        let mut pages: Vec<&[TuiBlock]> = Vec::new();
+        let mut start: usize = 0;
+        for index in 1..self.blocks.len() {
+            if self.blocks[index].page_title.is_some() {
+                pages.push(&self.blocks[start..index]);
+                start = index;
+            }
+        }
+        if start < self.blocks.len() {
+            pages.push(&self.blocks[start..]);
+        }
+        pages
+            .into_iter()
+            .map(|page: &[TuiBlock]| {
+                let title: String = page
+                    .first()
+                    .and_then(|block: &TuiBlock| block.page_title.clone())
+                    .unwrap_or_default();
+                let content: &[TuiBlock] =
+                    if page.first().is_some_and(|block| block.page_title.is_some()) {
+                        &page[1..]
+                    } else {
+                        page
+                    };
+                TuiDialogPage {
+                    group: if title.is_empty() {
+                        String::from("弹窗")
+                    } else {
+                        format!("弹窗 · {title}")
+                    },
+                    title,
+                    lines: Self::lines_for(content),
+                }
+            })
+            .collect()
+    }
+
     /// 用新行替换首个匹配 key 的块；找不到匹配时返回 `false`。
     fn replace_key(&mut self, key: &str, lines: &[String]) -> bool {
         let Some(block) = self
@@ -184,6 +240,14 @@ pub struct TuiDelayedText {
     pub lines: Vec<String>,
     /// 到达显示时刻前还需等待的毫秒数。
     pub delay_ms: u64,
+}
+
+/// 完整屏幕 TUI 使用的单个 Dialog 页面；边框由 Host 布局层统一绘制。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TuiDialogPage {
+    pub title: String,
+    pub group: String,
+    pub lines: Vec<String>,
 }
 
 /// TUI 侧栏当前显示状态；两套 Region 内容始终保留，但只呈现其中一套。
@@ -222,6 +286,8 @@ pub struct TuiFrame {
     pub sidebar_mode: TuiSidebarMode,
     /// 弹窗区域。
     pub dialog: Vec<String>,
+    /// Dialog 的结构化页面；避免完整屏幕层二次解析字符边框。
+    pub dialog_pages: Vec<TuiDialogPage>,
     /// Host 不认识的开放区域；按逻辑 RegionId 原名保留，绝不静默丢弃。
     pub custom: BTreeMap<String, Vec<String>>,
     /// 玩家可触发的动作列表。
@@ -513,12 +579,19 @@ impl TuiRenderer {
             main: self.lines(RegionId::main()),
             footer: self.lines(RegionId::footer()),
             bar: self.lines(RegionId::bar()),
-            bar_stowed: self.lines(RegionId::bar_stowed()),
+            bar_stowed: self
+                .surfaces
+                .get(RegionId::bar_stowed().as_str())
+                .map_or_else(Vec::new, TuiSurface::stowed_lines),
             sidebar_mode: self.sidebar_mode,
             dialog: self
                 .surfaces
                 .get(RegionId::dialog().as_str())
                 .map_or_else(Vec::new, TuiSurface::dialog_lines),
+            dialog_pages: self
+                .surfaces
+                .get(RegionId::dialog().as_str())
+                .map_or_else(Vec::new, TuiSurface::dialog_pages),
             custom: self
                 .surfaces
                 .iter()
@@ -706,6 +779,10 @@ pub(super) fn panel_lines(lines: Vec<String>) -> Vec<String> {
 }
 
 fn join_panel_blocks(blocks: &[TuiBlock]) -> Vec<String> {
+    join_blocks(blocks, " ")
+}
+
+fn join_blocks(blocks: &[TuiBlock], separator: &str) -> Vec<String> {
     let height: usize = blocks
         .iter()
         .map(|block| block.lines.len())
@@ -729,7 +806,7 @@ fn join_panel_blocks(blocks: &[TuiBlock]) -> Vec<String> {
                         .unwrap_or_else(|| " ".repeat(width))
                 })
                 .collect::<Vec<String>>()
-                .join(" ")
+                .join(separator)
         })
         .collect()
 }

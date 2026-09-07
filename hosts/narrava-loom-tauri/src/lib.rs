@@ -13,7 +13,7 @@ mod save_io;
 use std::{
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, Mutex,
         mpsc::{self, Receiver, Sender},
     },
     thread,
@@ -47,6 +47,7 @@ pub struct TauriHost {
     assets: Arc<HostAssetsDto>,
     resources: Arc<ResourceCatalog>,
     game_path: Arc<PathBuf>,
+    current_passage: Mutex<Option<String>>,
     developer: bool,
 }
 
@@ -95,23 +96,38 @@ impl TauriHost {
             assets,
             resources,
             game_path: host_game_path,
+            current_passage: Mutex::new(None),
             developer,
         })
     }
 
     /// 启动游戏并返回起始 Passage 的语义更新。
     pub async fn start(&self) -> Result<HostUpdateDto, HostErrorDto> {
-        ready_update(self.execute(RuntimeCommand::Start).await)
+        let update: HostUpdateDto = ready_update(self.execute(RuntimeCommand::Start).await)?;
+        self.remember_passage(&update.current)?;
+        Ok(update)
     }
 
     /// 按交互身份推进（导航/按钮/返回等），返回渲染后的语义更新。
     pub async fn activate(&self, interaction: &str) -> Result<HostUpdateDto, HostErrorDto> {
-        ready_update(
+        let previous: Option<String> = self.current_passage()?;
+        let update: HostUpdateDto = ready_update(
             self.execute(RuntimeCommand::Activate {
                 interaction: interaction.to_owned(),
             })
             .await,
-        )
+        )?;
+        self.remember_passage(&update.current)?;
+        if previous.as_deref() != Some(update.current.as_str()) {
+            let autosave = RuntimeCommand::Save {
+                operation: SaveOperation::Export,
+                target: String::from("autosave"),
+            };
+            if let Err(error) = self.execute(autosave).await {
+                eprintln!("! {}：{}", error.code, error.message);
+            }
+        }
+        Ok(update)
     }
 
     /// 沿 Story 历史向前或向后移动。
@@ -121,7 +137,9 @@ impl TauriHost {
         } else {
             RuntimeCommand::Forward
         };
-        ready_update(self.execute(command).await)
+        let update: HostUpdateDto = ready_update(self.execute(command).await)?;
+        self.remember_passage(&update.current)?;
+        Ok(update)
     }
 
     /// 把输入控件的新值写回 Worker State。
@@ -152,9 +170,13 @@ impl TauriHost {
                 ));
             }
         };
-        self.execute(RuntimeCommand::Save { operation, target })
-            .await
-            .map(|_| ())
+        let update: RuntimeUpdate = self
+            .execute(RuntimeCommand::Save { operation, target })
+            .await?;
+        if let RuntimeUpdate::Ready { update } = update {
+            self.remember_passage(&update.current)?;
+        }
+        Ok(())
     }
 
     /// 拉取 Worker 当前日志快照。
@@ -177,9 +199,28 @@ impl TauriHost {
 
     /// 切换运行时语言；若已经进入故事，则立即重绘当前完整呈现帧。
     pub async fn select_language(&self, locale: String) -> Result<(), HostErrorDto> {
-        self.execute(RuntimeCommand::SelectLanguage { locale })
-            .await
-            .map(|_| ())
+        let update: RuntimeUpdate = self
+            .execute(RuntimeCommand::SelectLanguage { locale })
+            .await?;
+        if let RuntimeUpdate::Ready { update } = update {
+            self.remember_passage(&update.current)?;
+        }
+        Ok(())
+    }
+
+    fn current_passage(&self) -> Result<Option<String>, HostErrorDto> {
+        self.current_passage
+            .lock()
+            .map(|current| current.clone())
+            .map_err(|_| HostErrorDto::new("tauri_host.current_passage", "当前 Passage 锁已损坏"))
+    }
+
+    fn remember_passage(&self, passage: &str) -> Result<(), HostErrorDto> {
+        let mut current = self.current_passage.lock().map_err(|_| {
+            HostErrorDto::new("tauri_host.current_passage", "当前 Passage 锁已损坏")
+        })?;
+        *current = Some(passage.to_owned());
+        Ok(())
     }
 
     async fn execute(&self, mut command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {

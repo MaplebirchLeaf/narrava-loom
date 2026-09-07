@@ -1,12 +1,14 @@
 [package]
 name = "narrava-loom-tui"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2024"
 
 [dependencies]
+crossterm = "0.29" # 原始模式、方向键、终端恢复与 resize 事件
 narrava-loom-core = { path = "../.." }
 narrava-loom-protocol = { path = "../../crates/narrava-loom-protocol" } # Runtime/Host 拥有型消息
 narrava-loom-script = { path = "../../crates/narrava-loom-script" } # 脚本执行与宏分发
+ratatui = "0.30" # 完整屏幕布局、焦点样式与可滚动区域
 serde_json = "1" # 输入值 JSON 表达
 terminal_size = "0.4" # 按真实终端列数生成区域分隔线
 unicode-width = "0.2" # Panel 边框按终端显示宽度对齐 Unicode 文本

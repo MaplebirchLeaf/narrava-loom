@@ -363,7 +363,8 @@ pub(super) fn commit_halted_transaction<'hir, 'source, LifecycleError>(
     story.record_navigation(passage_output.has_navigation());
     let current: StoryHistoryEntry<'hir, 'source> = progress.current;
     if !current.passage().has_tag("exit") {
-        if !passage_output.has_navigation()
+        if !crate::story::special::is_host_region(current.passage().name)
+            && !passage_output.has_navigation()
             && let Some(target) = story.safe_return_target()
         {
             passage_output.push(SemanticNode::SafeReturn {

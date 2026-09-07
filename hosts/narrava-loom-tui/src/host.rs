@@ -5,7 +5,7 @@
 //! （编号选择导航、输入控件写回）回送 Host。脚本执行与宏分发复用
 //! `narrava-loom-script`（Boa + 共享 dispatch）。
 
-use std::{io, path::Path};
+use std::{io, io::IsTerminal, path::Path};
 
 use narrava_loom_core::{
     ProjectConfig, SourceList,
@@ -20,14 +20,15 @@ use narrava_loom_core::{
     twee,
 };
 use narrava_loom_protocol::{
-    HostErrorDto, HostUpdateDto, PendingOperation, RuntimeCommand, RuntimeSessionId, RuntimeUpdate,
+    HostErrorDto, HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeSessionId,
+    RuntimeUpdate,
 };
 use narrava_loom_script::{
-    EcmaBinding, RuntimeSession, RuntimeSessionDriver,
+    EcmaBinding, RuntimeServices, RuntimeSession, RuntimeSessionDriver,
     protocol_adapter::{SurfaceValue, diagnostic},
 };
 
-use crate::{TuiFrame, TuiRenderer, write_frame};
+use crate::{TuiFrame, TuiRenderer, platform, write_frame};
 
 /// 装载游戏并进入渲染/输入主循环；`game_path` 是开发目录或含 `game.nar` 的发行目录。
 pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
@@ -60,6 +61,15 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             BytecodeProgram::compile(&lir)
         }
     };
+    let language_packages = platform::load_languages(Path::new(game_path), &config)?;
+    let mut languages: Vec<String> = vec![config.game.default_locale.clone()];
+    languages.extend(
+        language_packages
+            .iter()
+            .map(|package| package.manifest().manifest().locale().to_owned()),
+    );
+    languages.sort();
+    languages.dedup();
     let mut state: State = State::new();
     let script: std::rc::Rc<EcmaBinding> = EcmaBinding::load(
         sources,
@@ -69,15 +79,48 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         &mut state,
     )
     .map_err(|error| HostErrorDto::new("tui_host.script", error.to_string()))?;
+    let identity = config
+        .identity()
+        .map_err(|error| HostErrorDto::new("tui_host.game_identity", error.to_string()))?;
+    let services = RuntimeServices::new(
+        identity,
+        mir.i18n().clone(),
+        config.game.default_locale.clone(),
+        language_packages,
+    );
     let session: RuntimeSession<'_, '_, EcmaBinding> =
-        RuntimeSession::new(&hir, &bytecode, script, state);
+        RuntimeSession::with_services(&hir, &bytecode, script, state, services);
     let session_id =
         RuntimeSessionId::new("main").expect("内建主 Session ID 必须满足 Protocol 校验");
     let mut runtime: RuntimeSessionDriver<'_> = RuntimeSessionDriver::new(session_id, session);
     let mut renderer: TuiRenderer = TuiRenderer::default();
+    let mut language_index: usize = languages
+        .iter()
+        .position(|locale: &String| locale == &config.game.default_locale)
+        .unwrap_or(0);
 
     // 启动起始 Passage 并渲染第一帧。
-    let mut update = ready_update(execute_blocking(&mut runtime, RuntimeCommand::Start)?)?;
+    let mut update = ready_update(execute_blocking(
+        &mut runtime,
+        Path::new(game_path),
+        RuntimeCommand::Start,
+    )?)?;
+
+    if io::stdin().is_terminal() && io::stdout().is_terminal() {
+        let frame: TuiFrame = renderer.render_update(&update);
+        return crate::screen::run_screen(frame, |operation| {
+            apply_operation(
+                &mut runtime,
+                &mut renderer,
+                &mut update,
+                Path::new(game_path),
+                &languages,
+                &mut language_index,
+                operation,
+            )
+        })
+        .map_err(|error| HostErrorDto::new("tui_host.screen", error.to_string()));
+    }
 
     let stdin = io::stdin();
     loop {
@@ -93,41 +136,104 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         }
         let command = crate::TuiCommand::parse(line.trim())
             .map_err(|error| HostErrorDto::new("tui_host.command", error.to_string()))?;
-        match command
+        let operation = command
             .resolve(&frame)
-            .map_err(|error| HostErrorDto::new("tui_host.command", error.to_string()))?
-        {
+            .map_err(|error| HostErrorDto::new("tui_host.command", error.to_string()))?;
+        match operation {
             crate::TuiOperation::Help => continue,
-            crate::TuiOperation::Back => {
-                update = ready_update(execute_blocking(&mut runtime, RuntimeCommand::Back)?)?;
-            }
-            crate::TuiOperation::Forward => {
-                update = ready_update(execute_blocking(&mut runtime, RuntimeCommand::Forward)?)?;
-            }
-            crate::TuiOperation::ToggleSidebar => {
-                renderer.toggle_sidebar();
-            }
             crate::TuiOperation::Redraw => continue,
             crate::TuiOperation::Quit => break,
-            crate::TuiOperation::Activate { id } => {
-                update = ready_update(execute_blocking(
+            crate::TuiOperation::Dismiss => continue,
+            operation => {
+                let _frame = apply_operation(
                     &mut runtime,
-                    RuntimeCommand::Activate { interaction: id },
-                )?)?;
-            }
-            crate::TuiOperation::Input { id, value } => {
-                execute_blocking(
-                    &mut runtime,
-                    RuntimeCommand::Input {
-                        interaction: id,
-                        value: json_from_surface(&value),
-                    },
+                    &mut renderer,
+                    &mut update,
+                    Path::new(game_path),
+                    &languages,
+                    &mut language_index,
+                    operation,
                 )?;
             }
-            crate::TuiOperation::Dismiss => continue,
         }
     }
     Ok(())
+}
+
+fn apply_operation(
+    runtime: &mut RuntimeSessionDriver<'_>,
+    renderer: &mut TuiRenderer,
+    update: &mut HostUpdateDto,
+    game_path: &Path,
+    languages: &[String],
+    language_index: &mut usize,
+    operation: crate::TuiOperation,
+) -> Result<Option<TuiFrame>, HostErrorDto> {
+    let previous_language_index: usize = *language_index;
+    let command: Option<RuntimeCommand> = match operation {
+        crate::TuiOperation::Back => Some(RuntimeCommand::Back),
+        crate::TuiOperation::Forward => Some(RuntimeCommand::Forward),
+        crate::TuiOperation::Activate { id } => Some(RuntimeCommand::Activate { interaction: id }),
+        crate::TuiOperation::Input { id, value } => Some(RuntimeCommand::Input {
+            interaction: id,
+            value: json_from_surface(&value),
+        }),
+        crate::TuiOperation::QuickSave => Some(RuntimeCommand::Save {
+            operation: narrava_loom_protocol::SaveOperation::Export,
+            target: String::from("quick"),
+        }),
+        crate::TuiOperation::QuickLoad => Some(RuntimeCommand::Save {
+            operation: narrava_loom_protocol::SaveOperation::Import,
+            target: String::from("quick"),
+        }),
+        crate::TuiOperation::NextLanguage => {
+            if languages.is_empty() {
+                return Ok(None);
+            }
+            *language_index = (*language_index + 1) % languages.len();
+            Some(RuntimeCommand::SelectLanguage {
+                locale: languages[*language_index].clone(),
+            })
+        }
+        crate::TuiOperation::ToggleSidebar => {
+            renderer.toggle_sidebar();
+            return Ok(Some(renderer.render_update(update)));
+        }
+        crate::TuiOperation::Dismiss | crate::TuiOperation::Help | crate::TuiOperation::Redraw => {
+            return Ok(None);
+        }
+        crate::TuiOperation::Quit => return Ok(None),
+    };
+    let is_navigation: bool = matches!(command, Some(RuntimeCommand::Activate { .. }));
+    let previous_passage: String = update.current.clone();
+    let result: RuntimeUpdate = match execute_blocking(
+        runtime,
+        game_path,
+        command.expect("已处理所有无 Runtime 命令"),
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            *language_index = previous_language_index;
+            return Err(error);
+        }
+    };
+    match result {
+        RuntimeUpdate::Ready { update: next } => {
+            *update = next;
+            if is_navigation && update.current != previous_passage {
+                let autosave = RuntimeCommand::Save {
+                    operation: narrava_loom_protocol::SaveOperation::Export,
+                    target: String::from("autosave"),
+                };
+                if let Err(error) = execute_blocking(runtime, game_path, autosave) {
+                    eprintln!("! {}：{}", error.code, error.message);
+                }
+            }
+            Ok(Some(renderer.render_update(update)))
+        }
+        RuntimeUpdate::Applied => Ok(None),
+        RuntimeUpdate::Pending { .. } => unreachable!("execute_blocking consumes pending updates"),
+    }
 }
 
 fn ready_update(update: RuntimeUpdate) -> Result<HostUpdateDto, HostErrorDto> {
@@ -144,6 +250,7 @@ fn ready_update(update: RuntimeUpdate) -> Result<HostUpdateDto, HostErrorDto> {
 /// TUI 的唯一平台异步职责：等待 Runtime 公开的 delay，再用同一 ID 恢复。
 fn execute_blocking(
     runtime: &mut RuntimeSessionDriver<'_>,
+    game_path: &Path,
     mut command: RuntimeCommand,
 ) -> Result<RuntimeUpdate, HostErrorDto> {
     loop {
@@ -162,14 +269,23 @@ fn execute_blocking(
                 };
             }
             RuntimeUpdate::Pending { operation } => {
+                let operation_id: u64 = operation.id();
+                let result: PendingResult = match operation {
+                    PendingOperation::Save {
+                        direction,
+                        target,
+                        document,
+                        ..
+                    } => match platform::process_save(game_path, direction, &target, document) {
+                        Ok(document) => PendingResult::Save { document },
+                        Err(error) => PendingResult::Failed { error },
+                    },
+                    PendingOperation::SelectLanguage { .. } => PendingResult::SelectLanguage,
+                    PendingOperation::Delay { .. } => unreachable!("delay 已在前一分支处理"),
+                };
                 command = RuntimeCommand::Resume {
-                    operation: operation.id(),
-                    result: Some(narrava_loom_protocol::PendingResult::Failed {
-                        error: HostErrorDto::new(
-                            "tui.platform_operation_unsupported",
-                            "TUI 尚未配置该平台操作",
-                        ),
-                    }),
+                    operation: operation_id,
+                    result: Some(result),
                 };
             }
             update => {
@@ -248,6 +364,6 @@ fn json_from_surface(value: &SurfaceValue) -> serde_json::Value {
 fn write_help_prompt(writer: &mut impl io::Write) -> io::Result<()> {
     writeln!(
         writer,
-        "输入编号选择动作；b 后退、f 前进、s 切换侧栏、h 帮助、r 重绘、q 退出"
+        "输入编号选择动作；b/f 历史、s 侧栏、save/load 快速存读档、language 切换语言、q 退出"
     )
 }

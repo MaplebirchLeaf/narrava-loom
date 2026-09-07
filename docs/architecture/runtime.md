@@ -99,7 +99,8 @@ Twee 普通正文整体是字面文本；`$name` 和 `${expression}` 不自动�
 
 Navigation 与 SafeReturn 携带 `InteractionId`。Host 只能激活上一份 Surface 中存在的
 动作，不能自行构造 Passage 目标。当普通 Passage 没有作者导航时，Engine 可指向最近
-安全 history 项追加 SafeReturn；文字与控件形态由 Host 决定。
+安全 history 项在 Main 末尾追加 SafeReturn；Header、Footer、Bar、BarStowed 与 Dialog 等
+特殊区域既不触发也不承载这个紧急兜底。文字与控件形态由 Host 决定。
 
 ## Event、Reaction、I18n、Resource 与 Save
 

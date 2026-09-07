@@ -6,6 +6,7 @@
 ```bash
 cargo run --locked -p narrava-loom-core -- examples
 cargo run --locked -p narrava-loom-tauri -- examples
+cargo run --locked -p narrava-loom-tui -- examples
 ```
 
 第一条命令检查完整编译管线，不打开窗口；第二条命令启动当前桌面 Tauri Host。移动端复用同一
@@ -47,17 +48,17 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 - `MacroGallery`：switch、for、while、break/continue、unset 与 include。
 
 从任意演示页使用侧栏的后退／前进按钮即可检查 Story 历史；进入第二个 Passage 后后退才会启用，
-后退一次后前进才会启用。TUI 对应命令为 `b` 和 `f`，使用 `s` 在 `Bar` 与
-`BarStowed` 两套互斥侧栏内容之间切换。
+后退一次后前进才会启用。TUI 使用方向键选择、Enter 激活，`b`／`f` 回溯和前进，`s` 在 `Bar`
+与 `BarStowed` 两套互斥侧栏内容之间切换。
 
 各脚本文件在自己的末尾通过 `State.global.extend()` 暴露函数给 Twee；日常状态访问使用 `V.name`、
 `T.name` 和 `setup.name`。`State.*` 留给动态键、旧值返回与批量导入。作者工具页调用
 `I18n.select(locale)`，由 Runtime 和 Host 完成语言包校验并立即重绘当前 Passage 与两种侧栏；
 `I18n.export()` 的完整模板写入 `i18n.export` 日志。
 
-Tauri Host 会把 `Save.export("manual-1")` 写到 `save/manual-1.nsave`，随后同页按钮可以实际读回。
-TUI 目前没有文件存档 IO，因此会显示稳定的 `runtime_session.save_unsupported` 提示；这不影响语言、
-日志与 I18n 模板演示。
+Tauri 与 TUI Host 都会把 `Save.export("manual-1")` 写到 `save/manual-1.nsave`，随后同页按钮可以
+实际读回。TUI 还提供 F2／F3 的 `quick` 槽位和 F4 语言轮换。两个官方 Host 都在成功进入另一
+Passage 后更新 `save/autosave.nsave`；回溯、前进和语言重绘不会更新自动存档。
 
 `Bar` 和 `BarStowed` 的内容同样由游戏的 Passage 与脚本 Macro 提供，Host 不会注入存档、语言、
 日志或模组管理界面。示例在 `[host.tauri]` 中启用了 `developer = true`，因此桌面开发窗口可用

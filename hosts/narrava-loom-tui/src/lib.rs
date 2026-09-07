@@ -3,13 +3,15 @@
 //! 稳定导出保留在此 facade；命令、终端循环和 Surface 渲染分别由命名子模块负责。
 
 mod command;
+mod platform;
 mod renderer;
+mod screen;
 mod terminal;
 
 pub mod host;
 
 pub use command::{TuiCommand, TuiCommandError, TuiInput, TuiInteraction, TuiOperation};
-pub use renderer::{TuiDelayedText, TuiFrame, TuiRenderer, TuiSidebarMode};
+pub use renderer::{TuiDelayedText, TuiDialogPage, TuiFrame, TuiRenderer, TuiSidebarMode};
 pub use terminal::{run_terminal, write_frame};
 
 #[cfg(test)]
