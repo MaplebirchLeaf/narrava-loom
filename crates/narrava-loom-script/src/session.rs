@@ -2,9 +2,7 @@
 
 mod state_io;
 
-pub(crate) use state_io::RuntimePlatform;
-pub use state_io::RuntimeServices;
-use state_io::UnsupportedRuntimePlatform;
+pub use state_io::RuntimeData;
 
 use std::rc::Rc;
 
@@ -21,7 +19,6 @@ use narrava_loom_core::{
     i18n::I18nRuntimeLanguage,
     macro_runtime::{MacroHandlerOutcome, MacroInteractions, MacroLogicContext},
     runtime::{BodyExecution, RuntimeExecutionIdentity, execute_logic_body},
-    script::ScriptCallDispatcher,
     semantic::{InteractionId, RegionId, SemanticOutput, SemanticValue},
     state::{State, StateCheckpoint, StateSnapshot},
     story::{
@@ -34,7 +31,7 @@ use narrava_loom_protocol::{
 };
 
 use crate::{
-    ScriptAdapter, ScriptMacroOutcome, ScriptPending,
+    EcmaBinding, ScriptMacroOutcome, ScriptPending,
     dispatch::{dispatch_macro, emit_passage_event, macro_value_execution},
     json_to_value,
     protocol_adapter::{diagnostic, encode_host_update},
@@ -50,16 +47,16 @@ fn limits() -> EngineExecutionLimits {
     }
 }
 
-enum Waiting<'hir, 'source> {
+enum Pending<'hir, 'source> {
     Main {
         operation: u64,
         execution: narrava_loom_core::host::HostExecutionToken,
     },
-    Special(Box<SpecialWaiting<'hir, 'source>>),
-    Platform(Box<PlatformWaiting>),
+    Special(Box<SpecialExecution<'hir, 'source>>),
+    Host(Box<HostOperation>),
 }
 
-enum PlatformAction {
+enum HostAction {
     Save {
         operation: SaveOperation,
         target: String,
@@ -69,16 +66,15 @@ enum PlatformAction {
     },
 }
 
-struct PlatformWaiting {
+struct HostOperation {
     operation: u64,
-    action: PlatformAction,
+    action: HostAction,
     after: RuntimeUpdate,
     script_save: bool,
     input_checkpoint: Option<StateCheckpoint>,
-    collapse_refresh_revisit: bool,
 }
 
-struct SpecialWaiting<'hir, 'source> {
+struct SpecialExecution<'hir, 'source> {
     operation: u64,
     execution: narrava_loom_core::host::HostExecutionToken,
     update: HostUpdate,
@@ -86,63 +82,59 @@ struct SpecialWaiting<'hir, 'source> {
     region: RegionId,
     state: State,
     story: Story<'hir, 'source>,
-    pending: HostPendingExecutions<EngineMirContinuation<'hir, 'source, ScriptPending>>,
+    continuations: HostPendingExecutions<EngineMirContinuation<'hir, 'source, ScriptPending>>,
+}
+
+/// 从命令进入到 Reaction 安全点完成的一次事务；Pending 期间整体保留。
+struct RuntimeTransaction<'hir, 'source> {
+    before: Rc<StateSnapshot>,
+    state: StateCheckpoint,
+    story: narrava_loom_core::story::StorySnapshot<'hir, 'source>,
+    presented: Option<Rc<HostUpdate>>,
+    interactions: MacroInteractions<'hir, 'source>,
+    reactions: Vec<narrava_loom_core::reaction::ReactionRuntimeState>,
+    output: SemanticOutput,
 }
 
 /// 一局游戏的 Host-neutral Runtime 所有权根。
 ///
 /// Host 只能发送拥有型 [`RuntimeCommand`] 并消费 [`RuntimeUpdate`]；Engine
 /// continuation、上一份可交互输出、State、Story 与脚本 interaction 均不越过此边界。
-pub struct RuntimeSession<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static> {
+pub struct RuntimeSession<'hir, 'source> {
     hir: &'hir HirStory<'source>,
     bytecode: &'hir BytecodeProgram,
-    script: Rc<Adapter>,
+    script: Rc<EcmaBinding>,
     state: State,
     story: Story<'hir, 'source>,
     interactions: MacroInteractions<'hir, 'source>,
-    pending: HostPendingExecutions<EngineMirContinuation<'hir, 'source, ScriptPending>>,
-    scheduled: Option<ScriptPending>,
-    waiting: Option<Waiting<'hir, 'source>>,
+    continuations: HostPendingExecutions<EngineMirContinuation<'hir, 'source, ScriptPending>>,
+    pending: Option<Pending<'hir, 'source>>,
     presented: Option<Rc<HostUpdate>>,
     language: Option<Rc<I18nRuntimeLanguage>>,
     sequence: u64,
-    platform: Box<dyn RuntimePlatform<'hir, 'source> + 'hir>,
+    data: Option<RuntimeData>,
     notices: Vec<HostErrorDto>,
-    reaction_before: Option<StateSnapshot>,
-    reaction_state_checkpoint: Option<StateCheckpoint>,
-    reaction_story_snapshot: Option<narrava_loom_core::story::StorySnapshot<'hir, 'source>>,
-    reaction_presented_checkpoint: Option<Rc<HostUpdate>>,
-    reaction_interactions_checkpoint: Option<MacroInteractions<'hir, 'source>>,
-    reaction_checkpoint: Option<Vec<narrava_loom_core::reaction::ReactionRuntimeState>>,
-    reaction_prefix: SemanticOutput,
+    transaction: Option<RuntimeTransaction<'hir, 'source>>,
 }
 
-impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
-    RuntimeSession<'hir, 'source, Adapter>
-{
+impl<'hir, 'source> RuntimeSession<'hir, 'source> {
     /// 建立一局 Runtime；传入的 State 应已被脚本 Binding 初始化。
     pub fn new(
         hir: &'hir HirStory<'source>,
         bytecode: &'hir BytecodeProgram,
-        script: Rc<Adapter>,
+        script: Rc<EcmaBinding>,
         state: State,
     ) -> Self {
-        Self::with_platform(
-            hir,
-            bytecode,
-            script,
-            state,
-            Box::new(UnsupportedRuntimePlatform),
-        )
+        Self::create(hir, bytecode, script, state, None)
     }
 
-    /// 建立一局 Runtime，并注入唯一的平台 IO adapter。
-    pub(crate) fn with_platform(
+    /// 在唯一构造入口附着 Script dispatcher 与可选数据。
+    fn create(
         hir: &'hir HirStory<'source>,
         bytecode: &'hir BytecodeProgram,
-        script: Rc<Adapter>,
+        script: Rc<EcmaBinding>,
         mut state: State,
-        platform: Box<dyn RuntimePlatform<'hir, 'source> + 'hir>,
+        data: Option<RuntimeData>,
     ) -> Self {
         state.attach_script_dispatcher(script.clone());
         Self {
@@ -152,39 +144,38 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             state,
             story: Story::new(hir),
             interactions: MacroInteractions::new(),
-            pending: HostPendingExecutions::new(),
-            scheduled: None,
-            waiting: None,
+            continuations: HostPendingExecutions::new(),
+            pending: None,
             presented: None,
             language: None,
             sequence: 1,
-            platform,
+            data,
             notices: Vec::new(),
-            reaction_before: None,
-            reaction_state_checkpoint: None,
-            reaction_story_snapshot: None,
-            reaction_presented_checkpoint: None,
-            reaction_interactions_checkpoint: None,
-            reaction_checkpoint: None,
-            reaction_prefix: SemanticOutput::default(),
+            transaction: None,
         }
     }
 
-    /// 建立带 Save/I18n 数据服务的 Runtime；平台文件 IO 仍通过 PendingOperation 完成。
-    pub fn with_services(
+    /// 建立带 Save/I18n 数据的 Runtime；平台文件 IO 仍通过 PendingOperation 完成。
+    pub fn with_data(
         hir: &'hir HirStory<'source>,
         bytecode: &'hir BytecodeProgram,
-        script: Rc<Adapter>,
+        script: Rc<EcmaBinding>,
         state: State,
-        services: RuntimeServices,
+        data: RuntimeData,
     ) -> Self {
-        Self::with_platform(hir, bytecode, script, state, Box::new(services))
+        Self::create(hir, bytecode, script, state, Some(data))
     }
 
     /// 执行一条平台无关命令；Pending 必须以返回的 operation ID 恢复或取消。
     pub fn execute(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        match &command {
+            RuntimeCommand::Resume { operation, .. } | RuntimeCommand::Cancel { operation } => {
+                self.check_operation(*operation)?;
+            }
+            _ => self.ensure_idle()?,
+        }
         let cancels_execution = matches!(&command, RuntimeCommand::Cancel { .. });
-        let processes_script_save: bool = matches!(
+        let executes_story: bool = matches!(
             &command,
             RuntimeCommand::Start
                 | RuntimeCommand::Back
@@ -193,15 +184,9 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 | RuntimeCommand::Input { .. }
                 | RuntimeCommand::Resume { .. }
         );
-        let mut input_checkpoint: Option<StateCheckpoint> =
-            matches!(&command, RuntimeCommand::Input { .. }).then(|| self.state.checkpoint());
-        if processes_script_save && self.reaction_before.is_none() {
-            self.reaction_before = Some(self.state.snapshot());
-            self.reaction_state_checkpoint = Some(self.state.checkpoint());
-            self.reaction_story_snapshot = Some(self.story.snapshot());
-            self.reaction_presented_checkpoint = self.presented.clone();
-            self.reaction_interactions_checkpoint = Some(self.interactions.clone());
-            self.reaction_checkpoint = Some(self.script.reaction_state());
+        let is_input: bool = matches!(&command, RuntimeCommand::Input { .. });
+        if executes_story {
+            self.begin_transaction();
         }
         let result: Result<RuntimeUpdate, HostErrorDto> = match command {
             RuntimeCommand::Start => self.start(),
@@ -213,7 +198,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 self.begin_save(operation, target, RuntimeUpdate::Applied, false, None)
             }
             RuntimeCommand::SelectLanguage { locale } => {
-                self.begin_language(locale, RuntimeUpdate::Applied, true)
+                self.begin_language(locale, RuntimeUpdate::Applied)
             }
             RuntimeCommand::Resume { operation, result } => self.resume(operation, result),
             RuntimeCommand::Cancel { operation } => self.cancel(operation),
@@ -221,24 +206,31 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let mut update: RuntimeUpdate = match result {
             Ok(update) => update,
             Err(error) => {
-                self.rollback_reaction_state();
+                self.rollback_transaction();
                 return Err(error);
             }
         };
         if cancels_execution {
-            self.rollback_reaction_state();
+            self.rollback_transaction();
             return Ok(update);
         }
-        if processes_script_save && !matches!(update, RuntimeUpdate::Pending { .. }) {
+        if executes_story && !matches!(update, RuntimeUpdate::Pending { .. }) {
             update = match self.settle_reactions(update) {
                 Ok(update) => update,
                 Err(error) => {
-                    self.rollback_reaction_state();
+                    self.rollback_transaction();
                     return Err(error);
                 }
             };
         }
-        if processes_script_save && !matches!(update, RuntimeUpdate::Pending { .. }) {
+        let mut input_checkpoint: Option<StateCheckpoint> = None;
+        if executes_story && !matches!(update, RuntimeUpdate::Pending { .. }) {
+            let committed = self.transaction.take();
+            if is_input {
+                input_checkpoint = committed.map(|transaction| transaction.state);
+            }
+        }
+        if executes_story && !matches!(update, RuntimeUpdate::Pending { .. }) {
             match self.process_script_save(update.clone(), &mut input_checkpoint) {
                 Ok(Some(pending)) => return Ok(pending),
                 Ok(None) => {}
@@ -251,7 +243,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 }
             }
         }
-        if processes_script_save && !matches!(update, RuntimeUpdate::Pending { .. }) {
+        if executes_story && !matches!(update, RuntimeUpdate::Pending { .. }) {
             match self.process_script_language(update.clone()) {
                 Ok(Some(pending)) => return Ok(pending),
                 Ok(None) => {}
@@ -261,23 +253,31 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         Ok(update)
     }
 
-    fn rollback_reaction_state(&mut self) {
-        if let Some(checkpoint) = self.reaction_checkpoint.take() {
-            let _ignored = self.script.restore_reaction_state(&checkpoint);
+    fn begin_transaction(&mut self) {
+        if self.transaction.is_none() {
+            self.transaction = Some(RuntimeTransaction {
+                before: Rc::new(self.state.snapshot()),
+                state: self.state.checkpoint(),
+                story: self.story.snapshot(),
+                presented: self.presented.clone(),
+                interactions: self.interactions.clone(),
+                reactions: self.script.reaction_state(),
+                output: SemanticOutput::default(),
+            });
         }
-        self.reaction_before = None;
-        if let Some(checkpoint) = self.reaction_state_checkpoint.take() {
-            self.state.restore_checkpoint(checkpoint);
-        }
-        if let Some(snapshot) = self.reaction_story_snapshot.take() {
-            let _restored = self.story.restore(snapshot);
-        }
-        self.presented = self.reaction_presented_checkpoint.take();
-        if let Some(interactions) = self.reaction_interactions_checkpoint.take() {
-            self.interactions = interactions;
-        }
-        let _ignored = self.script.sync_variables(&self.state);
-        self.reaction_prefix = SemanticOutput::default();
+    }
+
+    fn rollback_transaction(&mut self) {
+        let Some(transaction) = self.transaction.take() else {
+            return;
+        };
+        let _ignored = self.script.restore_reaction_state(&transaction.reactions);
+        self.state.restore_checkpoint(transaction.state);
+        self.story
+            .restore(transaction.story)
+            .expect("同一 Session 的事务必须属于当前 Story");
+        self.presented = transaction.presented;
+        self.interactions = transaction.interactions;
     }
 
     /// 取走命令成功后产生的非阻塞平台提示，例如导航完成后的自动存档失败。
@@ -286,7 +286,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     }
 
     fn ensure_idle(&self) -> Result<(), HostErrorDto> {
-        if self.waiting.is_some() {
+        if self.pending.is_some() {
             return Err(HostErrorDto::new(
                 "runtime_session.pending",
                 "Runtime 正等待 Host 恢复或取消挂起操作",
@@ -303,7 +303,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     }
 
     fn start(&mut self) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.ensure_idle()?;
         if self.presented.is_some() {
             return Err(HostErrorDto::new(
                 "runtime_session.already_started",
@@ -314,7 +313,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
         let language: Option<Rc<I18nRuntimeLanguage>> = self.language.clone();
         let result = HostApi::start_mir_with_reaction(
-            &mut self.pending,
+            &mut self.continuations,
             &mut self.state,
             &mut self.story,
             self.bytecode,
@@ -342,7 +341,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     self.script.as_ref(),
                     self.hir,
                     &mut self.interactions,
-                    &mut self.scheduled,
                     invocation,
                     state,
                     requests,
@@ -355,7 +353,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     }
 
     fn activate(&mut self, interaction: &str) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.ensure_idle()?;
         let previous: Rc<HostUpdate> = self.presented.clone().ok_or_else(|| {
             HostErrorDto::new("runtime_session.not_started", "必须先启动 Runtime")
         })?;
@@ -375,7 +372,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let result = if self.interactions.has(&id) {
             let mut next_interactions: MacroInteractions<'hir, 'source> = MacroInteractions::new();
             let result = HostApi::advance_macro_interaction_mir_with_reaction(
-                &mut self.pending,
+                &mut self.continuations,
                 &mut self.interactions,
                 &mut self.state,
                 &mut self.story,
@@ -410,7 +407,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                         self.script.as_ref(),
                         self.hir,
                         &mut next_interactions,
-                        &mut self.scheduled,
                         invocation,
                         state,
                         requests,
@@ -424,7 +420,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             result
         } else {
             HostApi::advance_mir_with_reaction(
-                &mut self.pending,
+                &mut self.continuations,
                 &mut self.state,
                 &mut self.story,
                 self.bytecode,
@@ -444,7 +440,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                         self.script.as_ref(),
                         self.hir,
                         &mut self.interactions,
-                        &mut self.scheduled,
                         invocation,
                         state,
                         requests,
@@ -458,7 +453,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     }
 
     fn history(&mut self, backward: bool) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.ensure_idle()?;
         if self.presented.is_none() {
             return Err(HostErrorDto::new(
                 "runtime_session.not_started",
@@ -478,17 +472,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         })
     }
 
-    fn replay_current(
-        &mut self,
-        collapse_refresh_revisit: bool,
-    ) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.replay(if collapse_refresh_revisit {
-            narrava_loom_core::host::HostReplayTarget::RefreshCurrent
-        } else {
-            narrava_loom_core::host::HostReplayTarget::Current
-        })
-    }
-
     fn replay(
         &mut self,
         target: narrava_loom_core::host::HostReplayTarget,
@@ -497,7 +480,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         let identity = self.identity(STORY_ID);
         let language = self.language.clone();
         let result = HostApi::replay_mir_with_reaction(
-            &mut self.pending,
+            &mut self.continuations,
             &mut self.state,
             &mut self.story,
             self.bytecode,
@@ -523,7 +506,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     self.script.as_ref(),
                     self.hir,
                     &mut self.interactions,
-                    &mut self.scheduled,
                     invocation,
                     state,
                     requests,
@@ -540,7 +522,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         interaction: &str,
         value: serde_json::Value,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.ensure_idle()?;
         let previous: &HostUpdate = self.presented.as_deref().ok_or_else(|| {
             HostErrorDto::new("runtime_session.not_started", "必须先启动 Runtime")
         })?;
@@ -565,9 +546,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         })?;
         let core_value: Value =
             json_to_value(&value).map_err(|error| HostErrorDto::new(&error.code, error.message))?;
-        let checkpoint: StateCheckpoint = self.state.checkpoint();
         if let Err(error) = assign_value_with_mut(&expression, core_value, &mut self.state) {
-            self.state.restore_checkpoint(checkpoint);
             return Err(HostErrorDto::new(
                 "runtime_session.input_assignment",
                 format!("{error:?}"),
@@ -579,11 +558,9 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     /// 在命令边界统一处理作者 Event 与持久 State 变化。Setter、Event.emit 与
     /// Reaction cond 都只收集事实，不允许重入 Engine；所有叙事效果在这里顺序提交。
     fn settle_reactions(&mut self, update: RuntimeUpdate) -> Result<RuntimeUpdate, HostErrorDto> {
-        let mut before = self
-            .reaction_before
-            .take()
-            .unwrap_or_else(|| self.state.snapshot());
-        let mut output = std::mem::take(&mut self.reaction_prefix);
+        let transaction = self.transaction.as_mut().expect("执行命令必须持有事务");
+        let mut before: Rc<StateSnapshot> = transaction.before.clone();
+        let mut output: SemanticOutput = std::mem::take(&mut transaction.output);
         let mut goto: Option<String> = None;
         let mut settled = false;
 
@@ -613,7 +590,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     "同一 Reaction 安全点只能发起一次导航",
                 ));
             }
-            before = effect_before;
+            before = Rc::new(effect_before);
         }
         if !settled {
             return Err(HostErrorDto::new(
@@ -623,15 +600,21 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         }
 
         if let Some(target) = goto {
-            self.reaction_before = Some(before);
+            self.transaction
+                .as_mut()
+                .expect("Reaction 导航延续当前事务")
+                .before = before;
             // 与普通 goto 一致，被替代 Passage 的输出（含特殊区域与交互）不进入目标页。
             // 仅保留同一 Reaction 安全点在 goto 前明确产生的效果输出。
-            self.reaction_prefix = output;
+            self.transaction
+                .as_mut()
+                .expect("Reaction 导航延续当前事务")
+                .output = output;
             let params = Value::Null;
             let identity = self.identity(STORY_ID);
             let language = self.language.clone();
             let result = HostApi::navigate_mir_with_reaction(
-                &mut self.pending,
+                &mut self.continuations,
                 &mut self.state,
                 &mut self.story,
                 self.bytecode,
@@ -657,7 +640,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                         self.script.as_ref(),
                         self.hir,
                         &mut self.interactions,
-                        &mut self.scheduled,
                         invocation,
                         state,
                         requests,
@@ -681,19 +663,9 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             amended.append_surface(output);
             let dto = encode_host_update(&amended, self.story.can_back(), self.story.can_forward());
             self.presented = Some(Rc::new(amended));
-            self.clear_reaction_checkpoint();
             return Ok(RuntimeUpdate::Ready { update: dto });
         }
-        self.clear_reaction_checkpoint();
         Ok(update)
-    }
-
-    fn clear_reaction_checkpoint(&mut self) {
-        self.reaction_checkpoint = None;
-        self.reaction_state_checkpoint = None;
-        self.reaction_story_snapshot = None;
-        self.reaction_presented_checkpoint = None;
-        self.reaction_interactions_checkpoint = None;
     }
 
     fn apply_reaction_effects(
@@ -725,9 +697,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         match result? {
             HostDriveResult::Ready(update) => self.finish_specials(update, 0),
             HostDriveResult::Pending { execution } => {
-                let pending: ScriptPending = self.take_scheduled()?;
-                let operation: PendingOperation = protocol_pending(&pending);
-                self.waiting = Some(Waiting::Main {
+                let pending: &ScriptPending = &self
+                    .continuations
+                    .get(execution)
+                    .expect("Engine 已登记暂停执行")
+                    .runtime()
+                    .suspension()
+                    .handle;
+                let operation: PendingOperation = protocol_pending(pending);
+                self.pending = Some(Pending::Main {
                     operation: pending.id(),
                     execution,
                 });
@@ -738,42 +716,53 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
 
     fn resume(
         &mut self,
-        operation: u64,
+        _operation: u64,
         _result: Option<narrava_loom_protocol::PendingResult>,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
-        let waiting: Waiting<'hir, 'source> = self.take_waiting(operation)?;
+        let waiting: Pending<'hir, 'source> = self.pending.take().expect("命令入口已确认挂起操作");
         match waiting {
-            Waiting::Main { execution, .. } => {
-                let result = self.resume_drive(execution)?;
+            Pending::Main { execution, .. } => {
+                let resumed = HostApi::resume_pending(
+                    &mut self.continuations,
+                    &mut self.state,
+                    &mut self.story,
+                    self.bytecode,
+                    execution,
+                    |handle, state, _requests, _scopes| {
+                        resume_script(self.script.as_ref(), handle, state)
+                    },
+                )
+                .map_err(diagnostic)?;
+                let result = self.continue_resumed(resumed);
                 self.drive_main(result)
             }
-            Waiting::Special(waiting) => self.resume_special(*waiting),
-            Waiting::Platform(waiting) => self.resume_platform(*waiting, _result),
+            Pending::Special(waiting) => self.resume_special(*waiting),
+            Pending::Host(waiting) => self.resume_host(*waiting, _result),
         }
     }
 
-    fn cancel(&mut self, operation: u64) -> Result<RuntimeUpdate, HostErrorDto> {
-        let waiting: Waiting<'hir, 'source> = self.take_waiting(operation)?;
+    fn cancel(&mut self, _operation: u64) -> Result<RuntimeUpdate, HostErrorDto> {
+        let waiting: Pending<'hir, 'source> = self.pending.take().expect("命令入口已确认挂起操作");
         match waiting {
-            Waiting::Main { execution, .. } => {
+            Pending::Main { execution, .. } => {
                 HostApi::cancel_pending(
-                    &mut self.pending,
+                    &mut self.continuations,
                     &mut self.state,
                     &mut self.story,
                     execution,
                 )
                 .map_err(|error| diagnostic(error.diagnostic.clone()))?;
             }
-            Waiting::Special(mut waiting) => {
+            Pending::Special(mut waiting) => {
                 HostApi::cancel_pending(
-                    &mut waiting.pending,
+                    &mut waiting.continuations,
                     &mut waiting.state,
                     &mut waiting.story,
                     waiting.execution,
                 )
                 .map_err(|error| diagnostic(error.diagnostic.clone()))?;
             }
-            Waiting::Platform(waiting) => {
+            Pending::Host(waiting) => {
                 if waiting.script_save {
                     let error =
                         HostErrorDto::new("runtime_session.platform_cancelled", "平台操作已取消");
@@ -784,24 +773,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             }
         }
         Ok(RuntimeUpdate::Applied)
-    }
-
-    fn resume_drive(
-        &mut self,
-        execution: narrava_loom_core::host::HostExecutionToken,
-    ) -> Result<Result<HostDriveResult, HostErrorDto>, HostErrorDto> {
-        let resumed = HostApi::resume_pending(
-            &mut self.pending,
-            &mut self.state,
-            &mut self.story,
-            self.bytecode,
-            execution,
-            |handle, state, _requests, _scopes| {
-                resume_script(self.script.as_ref(), handle, state, &mut self.scheduled)
-            },
-        )
-        .map_err(diagnostic)?;
-        Ok(self.continue_resumed(resumed))
     }
 
     fn continue_resumed(
@@ -820,7 +791,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 .map_err(diagnostic)?;
                 HostApi::drive_stable_with_reaction(
                     stable,
-                    &mut self.pending,
+                    &mut self.continuations,
                     &mut self.state,
                     &mut self.story,
                     self.bytecode,
@@ -841,7 +812,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                             self.script.as_ref(),
                             self.hir,
                             &mut self.interactions,
-                            &mut self.scheduled,
                             invocation,
                             state,
                             requests,
@@ -870,12 +840,12 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             }
             let mut view_state: State = self.state.fork_view();
             let mut view_story: Story<'hir, 'source> = self.story.fork_view();
-            let mut pending = HostPendingExecutions::new();
+            let mut continuations = HostPendingExecutions::new();
             let params: Value = Value::Null;
             let identity: RuntimeExecutionIdentity = self.identity(SPECIAL_STORY_ID);
             let language: Option<Rc<I18nRuntimeLanguage>> = self.language.clone();
             let result = HostApi::render_special_mir(
-                &mut pending,
+                &mut continuations,
                 &mut view_state,
                 &mut view_story,
                 self.bytecode,
@@ -892,7 +862,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                         self.script.as_ref(),
                         self.hir,
                         &mut self.interactions,
-                        &mut self.scheduled,
                         invocation,
                         state,
                         requests,
@@ -906,9 +875,14 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                     update.append_region(region, rendered.surface().clone())
                 }
                 HostDriveResult::Pending { execution } => {
-                    let script_pending: ScriptPending = self.take_scheduled()?;
-                    let operation: PendingOperation = protocol_pending(&script_pending);
-                    self.waiting = Some(Waiting::Special(Box::new(SpecialWaiting {
+                    let script_pending: &ScriptPending = &continuations
+                        .get(execution)
+                        .expect("Engine 已登记辅助区域暂停执行")
+                        .runtime()
+                        .suspension()
+                        .handle;
+                    let operation: PendingOperation = protocol_pending(script_pending);
+                    self.pending = Some(Pending::Special(Box::new(SpecialExecution {
                         operation: script_pending.id(),
                         execution,
                         update,
@@ -916,7 +890,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                         region,
                         state: view_state,
                         story: view_story,
-                        pending,
+                        continuations,
                     })));
                     return Ok(RuntimeUpdate::Pending { operation });
                 }
@@ -929,17 +903,15 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
 
     fn resume_special(
         &mut self,
-        mut waiting: SpecialWaiting<'hir, 'source>,
+        mut waiting: SpecialExecution<'hir, 'source>,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         let resumed = HostApi::resume_pending(
-            &mut waiting.pending,
+            &mut waiting.continuations,
             &mut waiting.state,
             &mut waiting.story,
             self.bytecode,
             waiting.execution,
-            |handle, state, _requests, _scopes| {
-                resume_script(self.script.as_ref(), handle, state, &mut self.scheduled)
-            },
+            |handle, state, _requests, _scopes| resume_script(self.script.as_ref(), handle, state),
         )
         .map_err(diagnostic)?;
         let result = match resumed {
@@ -954,7 +926,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 .map_err(diagnostic)?;
                 HostApi::drive_stable(
                     stable,
-                    &mut waiting.pending,
+                    &mut waiting.continuations,
                     &mut waiting.state,
                     &mut waiting.story,
                     self.bytecode,
@@ -964,7 +936,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                             self.script.as_ref(),
                             self.hir,
                             &mut self.interactions,
-                            &mut self.scheduled,
                             invocation,
                             state,
                             requests,
@@ -983,53 +954,48 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
                 self.finish_specials(waiting.update, waiting.next_special)
             }
             HostDriveResult::Pending { execution } => {
-                let script_pending: ScriptPending = self.take_scheduled()?;
-                let operation: PendingOperation = protocol_pending(&script_pending);
+                let script_pending: &ScriptPending = &waiting
+                    .continuations
+                    .get(execution)
+                    .expect("Engine 已登记辅助区域暂停执行")
+                    .runtime()
+                    .suspension()
+                    .handle;
+                let operation: PendingOperation = protocol_pending(script_pending);
                 waiting.operation = script_pending.id();
                 waiting.execution = execution;
-                self.waiting = Some(Waiting::Special(Box::new(waiting)));
+                self.pending = Some(Pending::Special(Box::new(waiting)));
                 Ok(RuntimeUpdate::Pending { operation })
             }
         }
     }
 
-    fn take_scheduled(&mut self) -> Result<ScriptPending, HostErrorDto> {
-        self.scheduled.take().ok_or_else(|| {
-            HostErrorDto::new(
-                "runtime_session.pending_without_operation",
-                "Engine 已暂停，但 Script adapter 没有登记挂起操作",
-            )
-        })
-    }
-
-    fn take_waiting(&mut self, operation: u64) -> Result<Waiting<'hir, 'source>, HostErrorDto> {
-        let waiting: Waiting<'hir, 'source> = self.waiting.take().ok_or_else(|| {
+    fn check_operation(&self, operation: u64) -> Result<(), HostErrorDto> {
+        let waiting = self.pending.as_ref().ok_or_else(|| {
             HostErrorDto::new(
                 "runtime_session.unknown_operation",
                 "Runtime 没有等待中的操作",
             )
         })?;
         let expected: u64 = match &waiting {
-            Waiting::Main { operation, .. } => *operation,
-            Waiting::Special(waiting) => waiting.operation,
-            Waiting::Platform(waiting) => waiting.operation,
+            Pending::Main { operation, .. } => *operation,
+            Pending::Special(waiting) => waiting.operation,
+            Pending::Host(waiting) => waiting.operation,
         };
         if expected != operation {
-            self.waiting = Some(waiting);
             return Err(HostErrorDto::new(
                 "runtime_session.operation_mismatch",
                 "operation ID 与当前挂起操作不匹配",
             ));
         }
-        Ok(waiting)
+        Ok(())
     }
 }
 
 fn resume_script(
-    script: &impl ScriptAdapter,
+    script: &EcmaBinding,
     handle: ScriptPending,
     state: &mut State,
-    scheduled: &mut Option<ScriptPending>,
 ) -> Result<
     MacroHandlerOutcome<narrava_loom_core::runtime::RuntimeMacroExecution, ScriptPending>,
     String,
@@ -1038,10 +1004,7 @@ fn resume_script(
         Ok(ScriptMacroOutcome::Complete(value)) => macro_value_execution(&value)
             .map(MacroHandlerOutcome::Complete)
             .map_err(|error| error.to_string()),
-        Ok(ScriptMacroOutcome::Pending(next)) => {
-            *scheduled = Some(next.clone());
-            Ok(MacroHandlerOutcome::Pending(next))
-        }
+        Ok(ScriptMacroOutcome::Pending(next)) => Ok(MacroHandlerOutcome::Pending(next)),
         Err(error) => Err(error.to_string()),
     }
 }

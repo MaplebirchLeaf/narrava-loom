@@ -10,13 +10,15 @@ use narrava_loom_core::{
 
 use narrava_loom_protocol::HostErrorDto;
 
-use super::surface::{Surface, SurfaceAction, SurfaceKey, SurfaceNode, SurfaceValue};
+use narrava_loom_core::semantic::{
+    SemanticAction, SemanticKey, SemanticNode, SemanticOutput, SemanticValue,
+};
 
 const MARKER: &str = "__narravaSurface";
 const MAX_DEPTH: usize = 32;
 
 /// 若脚本返回值带 Surface 标记则解析为语义输出，否则返回 `None`。
-pub fn output(value: &Value) -> Result<Option<Surface>, HostErrorDto> {
+pub fn output(value: &Value) -> Result<Option<SemanticOutput>, HostErrorDto> {
     let Value::Object(object) = value else {
         return Ok(None);
     };
@@ -27,7 +29,7 @@ pub fn output(value: &Value) -> Result<Option<Surface>, HostErrorDto> {
 }
 
 /// 解析标记对象：`fragment` 只作输出/Region 子内容，其余按单节点处理。
-fn parse_output(value: &Value, depth: usize) -> Result<Surface, HostErrorDto> {
+fn parse_output(value: &Value, depth: usize) -> Result<SemanticOutput, HostErrorDto> {
     if depth > MAX_DEPTH {
         return Err(invalid("Surface 嵌套超过 32 层"));
     }
@@ -35,7 +37,7 @@ fn parse_output(value: &Value, depth: usize) -> Result<Surface, HostErrorDto> {
     match string_property(object, MARKER)?.as_str() {
         "fragment" => parse_children(object, depth + 1),
         _ => {
-            let mut output = Surface::default();
+            let mut output = SemanticOutput::default();
             push_node(&mut output, object, depth)?;
             Ok(output)
         }
@@ -43,21 +45,25 @@ fn parse_output(value: &Value, depth: usize) -> Result<Surface, HostErrorDto> {
 }
 
 /// 校验并推送单个节点；带 `key` 时按 key 入树，否则追加。
-fn push_node(output: &mut Surface, object: &ObjectValue, depth: usize) -> Result<(), HostErrorDto> {
+fn push_node(
+    output: &mut SemanticOutput,
+    object: &ObjectValue,
+    depth: usize,
+) -> Result<(), HostErrorDto> {
     let kind = string_property(object, MARKER)?;
     let node = match kind.as_str() {
-        "text" => SurfaceNode::StyledText {
+        "text" => SemanticNode::StyledText {
             text: visible_text(string_property(object, "text")?)?,
             styles: styles(object)?,
             color: color(object)?,
             delay: delay(object)?,
             heading: heading(object)?,
         },
-        "hard-break" => SurfaceNode::HardBreak,
+        "hard-break" => SemanticNode::HardBreak,
         "image" => {
             let resource = string_property(object, "resource")?;
             ResourcePath::parse(&resource).map_err(|error| invalid(error.to_string()))?;
-            SurfaceNode::Image {
+            SemanticNode::Image {
                 resource,
                 alt: visible_text(optional_string(object, "alt")?.unwrap_or_default())?,
                 caption: optional_string(object, "caption")?
@@ -65,7 +71,7 @@ fn push_node(output: &mut Surface, object: &ObjectValue, depth: usize) -> Result
                     .transpose()?,
             }
         }
-        "region" => SurfaceNode::Region {
+        "region" => SemanticNode::Region {
             region: region(object)?,
             content: parse_children(object, depth + 1)?,
         },
@@ -74,7 +80,7 @@ fn push_node(output: &mut Surface, object: &ObjectValue, depth: usize) -> Result
             if version.fract() != 0.0 || !(1.0..=f64::from(u16::MAX)).contains(&version) {
                 return Err(invalid("Surface component version 必须是 1..65535 的整数"));
             }
-            SurfaceNode::Component {
+            SemanticNode::Component {
                 capability: ComponentCapability::parse(string_property(object, "capability")?)
                     .map_err(|error| invalid(error.to_string()))?,
                 version: version as u16,
@@ -82,10 +88,10 @@ fn push_node(output: &mut Surface, object: &ObjectValue, depth: usize) -> Result
                 fallback: parse_children(object, depth + 1)?,
             }
         }
-        "action" => SurfaceNode::Action {
+        "action" => SemanticNode::Action {
             label: visible_text(string_property(object, "label")?)?,
             action: match string_property(object, "action")?.as_str() {
-                "dismiss" => SurfaceAction::Dismiss,
+                "dismiss" => SemanticAction::Dismiss,
                 action => return Err(invalid(format!("未知 Surface action：{action}"))),
             },
             role: match optional_string(object, "role")?
@@ -105,7 +111,7 @@ fn push_node(output: &mut Surface, object: &ObjectValue, depth: usize) -> Result
     match optional_string(object, "key")? {
         Some(key) => output
             .push_keyed(
-                SurfaceKey::parse(key).map_err(|error| invalid(error.to_string()))?,
+                SemanticKey::parse(key).map_err(|error| invalid(error.to_string()))?,
                 node,
             )
             .map_err(|error| invalid(error.to_string())),
@@ -117,18 +123,18 @@ fn push_node(output: &mut Surface, object: &ObjectValue, depth: usize) -> Result
 }
 
 /// 解析 `children` 数组：字符串直接成文本，对象递归为节点。
-fn parse_children(object: &ObjectValue, depth: usize) -> Result<Surface, HostErrorDto> {
+fn parse_children(object: &ObjectValue, depth: usize) -> Result<SemanticOutput, HostErrorDto> {
     let Value::Array(children) = required_property(object, "children")? else {
         return Err(invalid("Surface children 必须是数组"));
     };
-    let mut output = Surface::default();
+    let mut output = SemanticOutput::default();
     for child in children.snapshot() {
         match child {
             Value::String(text) => {
                 let text: String = text
                     .to_unicode_string()
                     .ok_or_else(|| invalid("Surface 文本必须是有效 Unicode"))?;
-                output.push(SurfaceNode::Text(visible_text(text)?));
+                output.push(SemanticNode::Text(visible_text(text)?));
             }
             Value::Object(object) => push_node(&mut output, &object, depth)?,
             _ => {
@@ -186,7 +192,7 @@ fn region(object: &ObjectValue) -> Result<RegionId, HostErrorDto> {
 }
 
 /// 解析组件属性为纯数据 Surface 值。
-fn properties(object: &ObjectValue) -> Result<BTreeMap<String, SurfaceValue>, HostErrorDto> {
+fn properties(object: &ObjectValue) -> Result<BTreeMap<String, SemanticValue>, HostErrorDto> {
     let Value::Object(properties) = required_property(object, "properties")? else {
         return Err(invalid("Surface component properties 必须是对象"));
     };
@@ -198,27 +204,27 @@ fn properties(object: &ObjectValue) -> Result<BTreeMap<String, SurfaceValue>, Ho
 }
 
 /// 任意 Core 值 → Surface 值（函数/命名空间拒绝）。
-fn surface_value(value: &Value) -> Result<SurfaceValue, HostErrorDto> {
+fn surface_value(value: &Value) -> Result<SemanticValue, HostErrorDto> {
     match value {
-        Value::Undefined | Value::Null => Ok(SurfaceValue::Null),
-        Value::Boolean(value) => Ok(SurfaceValue::Boolean(*value)),
-        Value::Number(value) if value.is_finite() => Ok(SurfaceValue::Number(*value)),
+        Value::Undefined | Value::Null => Ok(SemanticValue::Null),
+        Value::Boolean(value) => Ok(SemanticValue::Boolean(*value)),
+        Value::Number(value) if value.is_finite() => Ok(SemanticValue::Number(*value)),
         Value::String(value) => value
             .to_unicode_string()
-            .map(SurfaceValue::Text)
+            .map(SemanticValue::Text)
             .ok_or_else(|| invalid("Component 文本必须是有效 Unicode")),
         Value::Array(values) => values
             .snapshot()
             .iter()
             .map(surface_value)
             .collect::<Result<Vec<_>, _>>()
-            .map(SurfaceValue::List),
+            .map(SemanticValue::List),
         Value::Object(values) => values
             .snapshot()
             .iter()
             .map(|(name, value)| Ok((name.clone(), surface_value(value)?)))
             .collect::<Result<BTreeMap<_, _>, _>>()
-            .map(SurfaceValue::Map),
+            .map(SemanticValue::Map),
         _ => Err(invalid("Component properties 只能包含有限纯数据")),
     }
 }
@@ -233,10 +239,7 @@ fn object(value: &Value) -> Result<&ObjectValue, HostErrorDto> {
 
 /// 取可选属性（未出现视为缺失）。
 fn property(object: &ObjectValue, name: &str) -> Option<Value> {
-    object
-        .snapshot()
-        .into_iter()
-        .find_map(|(key, value)| (key == name).then_some(value))
+    object.get(name)
 }
 
 /// 取必填属性，缺失报错。

@@ -140,7 +140,7 @@ fn reaction_add(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> Js
     let (definition, callbacks): (ReactionDefinition, ReactionCallbacks<ScriptCallable>) =
         decode_definition(dto)?;
     let id: String = definition.id.as_str().to_owned();
-    active_registry(context)?
+    active_registry(context)
         .borrow_mut()
         .add(definition, callbacks)
         .map_err(bridge_error)?;
@@ -181,7 +181,7 @@ fn mutate_reaction(
     ) -> Result<bool, narrava_loom_core::reaction::ReactionError>,
 ) -> JsResult<JsValue> {
     let id: String = string_argument(arguments, context)?;
-    operation(&mut active_registry(context)?.borrow_mut(), &id)
+    operation(&mut active_registry(context).borrow_mut(), &id)
         .map(JsValue::new)
         .map_err(bridge_error)
 }
@@ -287,7 +287,7 @@ fn decode_passage_matcher(dto: MatcherDto) -> JsResult<PassageMatcher> {
 }
 
 fn serialize_status(context: &Context, id: &str) -> JsResult<Option<String>> {
-    let reactions: Ref<'_, ReactionRegistry<ScriptCallable>> = active_registry(context)?.borrow();
+    let reactions: Ref<'_, ReactionRegistry<ScriptCallable>> = active_registry(context).borrow();
     let Some(entry) = reactions.get(id) else {
         return Ok(None);
     };
@@ -301,11 +301,11 @@ fn serialize_status(context: &Context, id: &str) -> JsResult<Option<String>> {
     .map_err(bridge_error)
 }
 
-fn active_registry(context: &Context) -> JsResult<&Rc<RefCell<ReactionRegistry<ScriptCallable>>>> {
+fn active_registry(context: &Context) -> &Rc<RefCell<ReactionRegistry<ScriptCallable>>> {
     context
         .get_data::<ActiveReactions>()
         .map(|active: &ActiveReactions| &active.registry)
-        .ok_or_else(|| bridge_error("Reaction bridge 未安装"))
+        .expect("Reaction adapter 在调用脚本前安装")
 }
 
 fn string_argument(arguments: &[JsValue], context: &mut Context) -> JsResult<String> {

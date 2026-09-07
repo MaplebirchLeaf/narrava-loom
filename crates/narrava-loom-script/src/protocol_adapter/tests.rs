@@ -1,12 +1,12 @@
-//! `protocol_bridge` 的受验证转换测试。
+//! `script_output` 的受验证转换测试。
 
-use crate::protocol_adapter::SurfaceNode;
+use narrava_loom_core::semantic::SemanticNode;
 use narrava_loom_core::{
     expression::value::{TextValue, Value},
     semantic::{RegionId, TextColor, TextStyle},
 };
 
-use crate::protocol_adapter::protocol_bridge::output;
+use crate::protocol_adapter::script_output::output;
 
 fn text(value: &str) -> Value {
     Value::String(TextValue::from(value))
@@ -33,13 +33,13 @@ fn builder_values_become_keyed_semantic_text_image_and_regions() {
     let output = output(&value).unwrap().unwrap();
 
     assert_eq!(output.key(0).unwrap().as_str(), "status");
-    let [SurfaceNode::Region { region, content }] = output.nodes() else {
+    let [SemanticNode::Region { region, content }] = output.nodes() else {
         panic!("应转换 Region");
     };
     assert_eq!(*region, RegionId::bar());
     assert!(matches!(
         content.nodes(),
-        [SurfaceNode::StyledText { styles, color: TextColor::RED, .. }]
+        [SemanticNode::StyledText { styles, color: TextColor::RED, .. }]
             if styles == &[TextStyle::Strong]
     ));
 }
@@ -73,9 +73,9 @@ fn builder_accepts_hard_break_and_custom_region() {
     let output = output(&value).unwrap().unwrap();
     assert!(matches!(
         output.nodes(),
-        [SurfaceNode::Region { region, content }]
+        [SemanticNode::Region { region, content }]
             if region.as_str() == "hud"
-                && matches!(content.nodes(), [SurfaceNode::HardBreak])
+                && matches!(content.nodes(), [SemanticNode::HardBreak])
     ));
 }
 

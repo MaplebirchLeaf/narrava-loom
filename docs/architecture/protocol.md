@@ -113,7 +113,7 @@ Mod 继续修改 Core 可理解的 Source、AST/IR、资源身份和语义配置
 
 ## Scripts 边界
 
-`.ts/.js` 的 Core 边界已经闭合为可选 `ScriptBinding` capability：Core 提供 ScriptBundle、受控 API、函数句柄与 VM 调用协议，具体宿主决定是否提供 ECMAScript Runtime。没有 Script capability 的宿主仍可运行不含脚本的游戏；不同宿主不必使用同一种 JavaScript Runtime。
+`.ts/.js` 通过有序 `ScriptBundle` 进入 `EcmaBinding`。State 通过 `ScriptCallDispatcher` 调用脚本函数；实际函数、Promise 与 Boa Context 留在 Script crate。作者 Surface builder 经边界校验后直接成为 Core 语义输出，不建立同构中间树。
 
 ## 首个 Host：Tauri
 

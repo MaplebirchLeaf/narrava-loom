@@ -272,6 +272,11 @@ impl<Pending> HostPendingExecutions<Pending> {
         self.entries.is_empty()
     }
 
+    /// 借用暂停元数据；恢复和取消仍必须先取走所有权。
+    pub fn get(&self, token: HostExecutionToken) -> Option<&Pending> {
+        self.entries.get(&token)
+    }
+
     /// 取走所有权后才能恢复或取消，防止同一 continuation 被并发消费两次。
     pub fn take(&mut self, token: HostExecutionToken) -> Option<Pending> {
         self.entries.remove(&token)

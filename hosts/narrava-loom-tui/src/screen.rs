@@ -272,7 +272,7 @@ fn handle_editor(
             };
             Some(TuiOperation::Input {
                 id,
-                value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(value),
+                value: narrava_loom_core::semantic::SemanticValue::Text(value),
             })
         }
         KeyCode::Backspace => {
@@ -483,7 +483,7 @@ pub(crate) fn apply_input_feedback(frame: &mut TuiFrame, operation: &TuiOperatio
             }
         }
         Some(TuiInput::Text { value: current }) => {
-            if let narrava_loom_script::protocol_adapter::SurfaceValue::Text(value) = value {
+            if let narrava_loom_core::semantic::SemanticValue::Text(value) = value {
                 *current = value.clone();
                 frame.interactions[index].label = format!("[{value}]");
             }

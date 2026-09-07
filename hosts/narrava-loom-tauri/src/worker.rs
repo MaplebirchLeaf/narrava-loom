@@ -1,8 +1,5 @@
-//! Runtime Worker 主循环与请求处理。
-//!
-//! 本模块拥有常驻 Worker 线程的请求协议与事务循环：装载游戏包、编译 Story、
-//! 驱动 Engine 事务、处理宏分发与 save/语言/日志请求，并把结果转成 DTO 回传。
-//! 宏分发回调复用 `narrava-loom-script::dispatch`。
+//! Worker 持有编译产物与 RuntimeSession，串行处理命令并回传 Protocol 更新。
+//! timer 和文件 IO 由外层 Host 完成，Worker 不等待挂起操作。
 
 use std::{
     path::Path,
@@ -17,8 +14,8 @@ use narrava_loom_core::{
     mir::MirStory, nar::ValidatedNarPackage, resource::ResourceCatalog, state::State, twee,
 };
 
-use narrava_loom_protocol::{RuntimeCommand, RuntimeSessionId, RuntimeUpdate};
-use narrava_loom_script::{RuntimeServices, RuntimeSessionDriver};
+use narrava_loom_protocol::{RuntimeCommand, RuntimeUpdate};
+use narrava_loom_script::{RuntimeData, RuntimeSession};
 
 use crate::{HostErrorDto, HostLogDto, package::load_language_packages};
 
@@ -150,18 +147,15 @@ pub(crate) fn run_worker(
         Ok(identity) => identity,
         Err(error) => return fail_worker(requests, "tauri_host.game_identity", error.to_string()),
     };
-    let services = RuntimeServices::new(
+    let services = RuntimeData::new(
         identity,
         mir.i18n().clone(),
         config.game.default_locale.clone(),
         language_packages,
     );
-    let session = narrava_loom_script::RuntimeSession::with_services(
-        &hir, &bytecode, script, state, services,
-    );
-    let session_id =
-        RuntimeSessionId::new("main").expect("内建主 Session ID 必须满足 Protocol 校验");
-    let mut runtime: RuntimeSessionDriver<'_> = RuntimeSessionDriver::new(session_id, session);
+    let session =
+        narrava_loom_script::RuntimeSession::with_data(&hir, &bytecode, script, state, services);
+    let mut runtime = session;
     let mut logs: Vec<HostLogDto> = vec![HostLogDto {
         level: String::from("info"),
         message: String::from("Runtime Worker 已就绪"),
@@ -188,7 +182,7 @@ pub(crate) fn run_worker(
     }
 }
 
-fn append_runtime_notices(runtime: &mut RuntimeSessionDriver<'_>, logs: &mut Vec<HostLogDto>) {
+fn append_runtime_notices(runtime: &mut RuntimeSession<'_, '_>, logs: &mut Vec<HostLogDto>) {
     logs.extend(runtime.take_notices().into_iter().map(|notice| HostLogDto {
         level: String::from("error"),
         message: format!("{}：{}", notice.code, notice.message),

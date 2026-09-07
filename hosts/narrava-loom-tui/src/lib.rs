@@ -1,6 +1,6 @@
-//! Core Surface 到终端区域、文本和交互列表的最小 Host Renderer。
+//! Core SemanticOutput 到终端区域、文本和交互列表的最小 Host Renderer。
 //!
-//! 稳定导出保留在此 facade；命令、终端循环和 Surface 渲染分别由命名子模块负责。
+//! 稳定导出保留在此 facade；命令、终端循环和 SemanticOutput 渲染分别由命名子模块负责。
 
 mod command;
 mod platform;

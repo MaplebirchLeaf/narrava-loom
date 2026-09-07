@@ -2,6 +2,13 @@
 
 本文件只记录使用者能够观察到的版本变化，不复制提交日志。
 
+## 0.6.0 - 2026-09-07
+
+- Rust Host 直接驱动 `RuntimeSession`；移除 `RuntimeSessionDriver`、`RuntimeSessionHandle`、`ScriptAdapter` 及未接入执行链的 Core Script 门面。Save/I18n 构造改用 `RuntimeData` 与 `with_data`。
+- Script 输出与原生渲染统一使用 Core `SemanticOutput`，移除重复 Surface 类型；Protocol wire 字段不变，TypeScript DTO 改从 Rust 声明生成。
+- 命令事务统一恢复 State、Story、Reaction、交互与上一帧；错误操作 ID 不再干扰活动事务，失败的输入存档恢复输入前状态。
+- Protocol Session ID 反序列化复用构造校验，拒绝绕过类型约束的非法身份。
+
 ## 0.5.3 - 2026-09-02
 
 ### 已包含

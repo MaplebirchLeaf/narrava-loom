@@ -31,7 +31,7 @@ use narrava_loom_core::{
         resolve_state_changes,
     },
     resource::ResourceCatalog,
-    script::{ScriptBundle, ScriptCallDispatcher, ScriptFunctionHost},
+    script::{ScriptBundle, ScriptCallDispatcher},
     state::{State, StateSnapshot},
 };
 use oxc::{
@@ -43,19 +43,15 @@ use oxc::{
     transformer::{TransformOptions, Transformer, TypeScriptOptions},
 };
 
-mod adapter;
 pub mod dispatch;
 pub mod protocol_adapter;
-mod reaction_bridge;
+mod reaction_adapter;
 mod reaction_runtime;
-mod resource_bridge;
+mod resource_adapter;
 mod session;
-mod session_handle;
-mod state_bridge;
+mod state_adapter;
 
-pub use adapter::ScriptAdapter;
-pub use session::{RuntimeServices, RuntimeSession};
-pub use session_handle::{RuntimeSessionDriver, RuntimeSessionHandle};
+pub use session::{RuntimeData, RuntimeSession};
 
 /// ECMAScript 装载、桥接或执行失败。
 ///
@@ -330,7 +326,9 @@ impl EcmaBinding {
     }
 
     /// 取出脚本登记的 Save 请求（operation, target）；无请求时返回 `None`。
-    pub fn take_save(&self) -> Result<Option<(String, String)>, ScriptError> {
+    pub fn take_save(
+        &self,
+    ) -> Result<Option<(narrava_loom_protocol::SaveOperation, String)>, ScriptError> {
         let mut runtime = self.runtime.borrow_mut();
         let value = runtime
             .context
@@ -351,7 +349,17 @@ impl EcmaBinding {
         let target = request["target"]
             .as_str()
             .ok_or_else(|| ScriptError::new("script.save_request", "Save target 无效"))?;
-        Ok(Some((operation.to_owned(), target.to_owned())))
+        let operation: narrava_loom_protocol::SaveOperation = match operation {
+            "export" => narrava_loom_protocol::SaveOperation::Export,
+            "import" => narrava_loom_protocol::SaveOperation::Import,
+            _ => {
+                return Err(ScriptError::new(
+                    "runtime_session.save_operation",
+                    format!("未知 Script Save 操作：{operation}"),
+                ));
+            }
+        };
+        Ok(Some((operation, target.to_owned())))
     }
 
     /// 取出脚本登记的语言切换请求；无请求时返回 `None`。
@@ -402,13 +410,6 @@ impl EcmaBinding {
             .map_err(|error| script_error("script.save_after", error))
     }
 
-    /// 恢复存档后同步脚本变量视图。
-    ///
-    /// State API 直接读取活动 Rust State，恢复存档后不再维护或刷新 JS 镜像。
-    pub fn sync_variables(&self, _state: &State) -> Result<(), ScriptError> {
-        Ok(())
-    }
-
     /// 装载脚本源码与桥接并返回绑定；返回 `Rc` 供 State 的脚本分发器共享。
     pub fn load(
         sources: &SourceList,
@@ -456,7 +457,7 @@ impl EcmaBinding {
             call,
         );
         let mut runtime = self.runtime.borrow_mut();
-        state_bridge::with_state(&mut runtime.context, state, |context| {
+        state_adapter::with_state(&mut runtime.context, state, |context| {
             context
                 .eval(Source::from_bytes(expression.as_bytes()))
                 .map_err(|error| script_error("script.macro", error))?;
@@ -475,7 +476,7 @@ impl EcmaBinding {
     ) -> Result<ScriptMacroOutcome, ScriptError> {
         let expression = format!("__narrava.resolveHostOperation({})", pending.id);
         let mut runtime = self.runtime.borrow_mut();
-        state_bridge::with_state(&mut runtime.context, state, |context| {
+        state_adapter::with_state(&mut runtime.context, state, |context| {
             context
                 .eval(Source::from_bytes(expression.as_bytes()))
                 .map_err(|error| script_error("script.host_operation", error))?;
@@ -597,12 +598,12 @@ impl EcmaRuntime {
         state: &mut State,
     ) -> Result<Self, ScriptError> {
         let mut context = runtime_context(DEFAULT_SCRIPT_LOOP_LIMIT);
-        state_bridge::install(&mut context)
+        state_adapter::install(&mut context)
             .map_err(|error| script_error("script.state_bridge", error))?;
-        resource_bridge::install(&mut context, resources.clone())
+        resource_adapter::install(&mut context, resources.clone())
             .map_err(|error| script_error("script.resource_bridge", error))?;
         let reactions: Rc<RefCell<ReactionRegistry<ScriptCallable>>> =
-            reaction_bridge::install(&mut context)
+            reaction_adapter::install(&mut context)
                 .map_err(|error| script_error("script.reaction_bridge", error))?;
         let configuration = serde_json::json!({
             "defaultLocale": default_locale,
@@ -616,7 +617,7 @@ impl EcmaRuntime {
             .iter()
             .map(|module| transpile(module.path(), module.source()))
             .collect::<Result<Vec<_>, _>>()?;
-        state_bridge::with_state(&mut context, state, |context| {
+        state_adapter::with_state(&mut context, state, |context| {
             let bootstrap: &str = bootstrap_source();
             context
                 .eval(Source::from_bytes(&bootstrap))
@@ -638,9 +639,9 @@ impl EcmaRuntime {
     }
 }
 
-impl ScriptFunctionHost for EcmaRuntime {
-    /// 供 Core 以 JSON 形式调用脚本函数并读回结果。
-    fn call(
+impl EcmaRuntime {
+    /// 在当前 State 上调用脚本函数并读回 Core 值。
+    pub fn call(
         &mut self,
         callable: &ScriptCallable,
         arguments: Vec<Value>,
@@ -656,7 +657,7 @@ impl ScriptFunctionHost for EcmaRuntime {
             callable.id(),
             serde_json::to_string(&arguments).expect("JSON Value 必须可序列化")
         );
-        state_bridge::with_state(&mut self.context, state, |context| {
+        state_adapter::with_state(&mut self.context, state, |context| {
             let result = context
                 .eval(Source::from_bytes(expression.as_bytes()))
                 .map_err(|_| ScriptCallError::Failed)?;

@@ -151,7 +151,7 @@ fn state_replace(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> J
 fn with_active<T>(context: &Context, operation: impl FnOnce(&mut State) -> T) -> JsResult<T> {
     let slot = context
         .get_data::<ActiveState>()
-        .ok_or_else(|| type_error("State bridge 未安装"))?;
+        .expect("State adapter 在调用脚本前安装");
     let mut active = slot.value.borrow_mut();
     let state = active
         .as_mut()

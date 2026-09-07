@@ -46,19 +46,14 @@ fn runtime_messages_round_trip_without_runtime_objects() {
 }
 
 #[test]
-fn pending_operation_preserves_opaque_identity() {
-    let operation = PendingOperation::Delay {
-        operation: 17,
-        milliseconds: 250,
-    };
-    assert_eq!(operation.id(), 17);
-}
-
-#[test]
 fn session_request_and_response_keep_the_same_cross_language_identity() {
     let session = RuntimeSessionId::new("game_7").unwrap();
     let request = RuntimeRequest::new(session.clone(), RuntimeCommand::Start);
     let encoded = serde_json::to_string(&request).unwrap();
+    assert_eq!(
+        serde_json::to_value(&request).unwrap()["protocolVersion"],
+        RUNTIME_PROTOCOL_VERSION
+    );
     assert_eq!(
         serde_json::from_str::<RuntimeRequest>(&encoded).unwrap(),
         request
@@ -77,20 +72,11 @@ fn session_request_and_response_keep_the_same_cross_language_identity() {
 }
 
 #[test]
-fn runtime_envelopes_expose_the_canonical_protocol_version() {
-    let request = RuntimeRequest::new(
-        RuntimeSessionId::new("main").unwrap(),
-        RuntimeCommand::Start,
-    );
-    let json = serde_json::to_value(request).unwrap();
-    assert_eq!(json["protocolVersion"], RUNTIME_PROTOCOL_VERSION);
-}
-
-#[test]
 fn session_identity_rejects_values_that_are_unsafe_for_external_registries() {
-    assert!(RuntimeSessionId::new("").is_err());
-    assert!(RuntimeSessionId::new("../game").is_err());
-    assert!(RuntimeSessionId::new("game:1").is_err());
+    for value in ["", "../game", "game:1"] {
+        assert!(RuntimeSessionId::new(value).is_err());
+        assert!(serde_json::from_value::<RuntimeSessionId>(serde_json::json!(value)).is_err());
+    }
 }
 
 #[test]

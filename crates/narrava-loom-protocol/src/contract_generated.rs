@@ -1,4 +1,4 @@
-// Generated from bindings/script-contract.json. Do not edit by hand.
+// Generated from Protocol Rust declarations and bindings/script-contract.json. Do not edit by hand.
 
 pub const RUNTIME_PROTOCOL_VERSION: u16 = 1;
 pub const GLOBALS: &[&str] = &["State", "V", "T", "setup", "Reaction", "Macro", "Logger", "Event", "Host", "Engine", "Story", "Save", "Resource", "I18n", "Surface"];

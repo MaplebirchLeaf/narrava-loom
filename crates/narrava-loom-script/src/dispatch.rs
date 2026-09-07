@@ -23,22 +23,19 @@ use narrava_loom_core::{
         slot, textbox,
     },
     runtime::{BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeMacroExecution},
-    semantic::SemanticOutput,
+    semantic::{SemanticNode, SemanticOutput},
     state::State,
     story::StoryRuntimeRequests,
 };
 
-use crate::{
-    ScriptError,
-    protocol_adapter::{Surface, SurfaceNode},
-};
+use crate::ScriptError;
 
 /// 把 Core 已确认的 Passage 生命周期事实投递给游戏脚本。
 ///
 /// 映射属于共享 Native Script Binding，而不是某一种 Host；Tauri 与 TUI 必须调用同一实现，
 /// 才能保证同一游戏在不同前端收到相同的内建事件序列。
 pub fn emit_passage_event(
-    script: &impl crate::ScriptAdapter,
+    script: &crate::EcmaBinding,
     phase: PassageLifecyclePhase,
     context: PassageLifecycleContext<'_, '_, '_, '_>,
 ) -> Result<(), Diagnostic> {
@@ -67,10 +64,9 @@ pub fn emit_passage_event(
 
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_macro<'hir, 'source>(
-    script: &impl crate::ScriptAdapter,
+    script: &crate::EcmaBinding,
     hir: &'hir HirStory<'source>,
     interactions: &mut MacroInteractions<'hir, 'source>,
-    scheduled: &mut Option<crate::ScriptPending>,
     invocation: EngineMirMacroInvocation<'_>,
     state: &mut State,
     requests: &mut StoryRuntimeRequests<'_, 'hir, 'source>,
@@ -409,7 +405,6 @@ pub fn dispatch_macro<'hir, 'source>(
             crate::ScriptMacroOutcome::Complete(value) => value,
             crate::ScriptMacroOutcome::Pending(handle) => {
                 scopes.enter_call(Vec::new());
-                *scheduled = Some(handle.clone());
                 let suspended =
                     scopes
                         .suspend()
@@ -527,13 +522,12 @@ pub(crate) fn find_hir_macro_in_body<'hir, 'source>(
 }
 
 pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, ScriptError> {
-    // 脚本 bridge 产生协议 Surface；Core 宏执行输出需要语义表示，做同构反向转换。
-    let surface: Surface = match crate::protocol_adapter::protocol_bridge::output(value)? {
+    let output: SemanticOutput = match crate::protocol_adapter::script_output::output(value)? {
         Some(output) => output,
         None => {
-            let mut output = Surface::default();
+            let mut output = SemanticOutput::default();
             if let Some(text) = value_to_text(value) {
-                output.push(SurfaceNode::Text(text));
+                output.push(SemanticNode::Text(text));
             }
             output
         }
@@ -541,7 +535,7 @@ pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, Scr
     Ok(RuntimeMacroExecution {
         execution: BodyExecution {
             control: narrava_loom_core::runtime::BodyControl::Continue,
-            output: SemanticOutput::from(&surface),
+            output,
         },
         includes_entered: 0,
     })

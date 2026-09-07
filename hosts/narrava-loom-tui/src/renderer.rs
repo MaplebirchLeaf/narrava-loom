@@ -1,6 +1,6 @@
-//! Core/Protocol Surface 到终端帧的呈现适配。
+//! Core/Protocol SemanticOutput 到终端帧的呈现适配。
 //!
-//! 块缓冲、同行 panel 拼接和样式降级共同决定一次 Surface 到行文本的转换，
+//! 块缓冲、同行 panel 拼接和样式降级共同决定一次 SemanticOutput 到行文本的转换，
 //! 因此保留在同一紧密算法模块内，不形成平台无关布局契约。
 
 use crate::{TuiInput, TuiInteraction};
@@ -8,11 +8,11 @@ use narrava_loom_core::semantic::{
     ContainerFlow, ContainerPresentation, HeadingLevel, NavigationRole, RegionId, TextColor,
     TextStyle,
 };
+use narrava_loom_core::semantic::{
+    SemanticAction, SemanticInputKind, SemanticNode, SemanticOutput, SemanticTarget, SemanticValue,
+};
 use narrava_loom_protocol::{
     ContainerFlowDto, ContainerPresentationDto, HostNodeDto, HostReplaceTargetDto, HostUpdateDto,
-};
-use narrava_loom_script::protocol_adapter::{
-    Surface, SurfaceAction, SurfaceInputKind, SurfaceNode, SurfaceTarget, SurfaceValue,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -311,7 +311,7 @@ pub struct TuiRenderer {
 }
 
 impl TuiRenderer {
-    /// 在两套作者提供的侧栏内容之间切换；不会修改 Runtime Surface。
+    /// 在两套作者提供的侧栏内容之间切换；不会修改 Runtime SemanticOutput。
     pub fn toggle_sidebar(&mut self) {
         self.sidebar_mode = self.sidebar_mode.toggled();
     }
@@ -430,13 +430,18 @@ impl TuiRenderer {
     }
 
     /// 渲染当前时刻（elapsed = 0）的帧；`delay > 0` 的文本停放在 `frame.delayed`。
-    pub fn render(&mut self, current: &str, output: &Surface) -> TuiFrame {
+    pub fn render(&mut self, current: &str, output: &SemanticOutput) -> TuiFrame {
         self.render_at(current, output, 0)
     }
 
     /// 渲染经过 `elapsed_ms` 毫秒后的帧：`delay <= elapsed_ms` 的文本进入对应区域，
     /// 其余仍停放在 `frame.delayed` 供消费方继续等待。
-    pub fn render_at(&mut self, current: &str, output: &Surface, elapsed_ms: u64) -> TuiFrame {
+    pub fn render_at(
+        &mut self,
+        current: &str,
+        output: &SemanticOutput,
+        elapsed_ms: u64,
+    ) -> TuiFrame {
         self.surfaces.clear();
         self.interactions.clear();
         self.delayed.clear();
@@ -445,11 +450,11 @@ impl TuiRenderer {
     }
 
     /// 递归渲染输出树：Region 下钻、Replace 就地覆盖、未到时的延迟文本停放。
-    fn render_output(&mut self, region: RegionId, output: &Surface, elapsed_ms: u64) {
+    fn render_output(&mut self, region: RegionId, output: &SemanticOutput, elapsed_ms: u64) {
         let mut interaction_group: String = region_group(region.as_str());
         for (index, node) in output.nodes().iter().enumerate() {
             if region == RegionId::dialog()
-                && let SurfaceNode::StyledText {
+                && let SemanticNode::StyledText {
                     text,
                     heading: Some(_),
                     ..
@@ -460,13 +465,13 @@ impl TuiRenderer {
             let interaction_start: usize = self.interactions.len();
             let key = output.key(index).map(|key| key.as_str().to_owned());
             match node {
-                SurfaceNode::Region { region, content } => {
+                SemanticNode::Region { region, content } => {
                     self.render_output(region.clone(), content, elapsed_ms)
                 }
-                SurfaceNode::Replace { target, content } => {
+                SemanticNode::Replace { target, content } => {
                     let lines = render_content(content, &mut self.interactions);
                     match target {
-                        SurfaceTarget::Region(target) => {
+                        SemanticTarget::Region(target) => {
                             self.surface_mut(target).blocks = vec![TuiBlock {
                                 key: None,
                                 presentation: TuiBlockPresentation::Plain,
@@ -476,7 +481,7 @@ impl TuiRenderer {
                                 inline: false,
                             }];
                         }
-                        SurfaceTarget::Key(target) => {
+                        SemanticTarget::Key(target) => {
                             for surface in self.surfaces.values_mut() {
                                 if surface.replace_key(target.as_str(), &lines) {
                                     break;
@@ -485,7 +490,7 @@ impl TuiRenderer {
                         }
                     }
                 }
-                SurfaceNode::StyledText {
+                SemanticNode::StyledText {
                     delay: Some(delay), ..
                 } if *delay > elapsed_ms => {
                     let lines = render_node(node, &mut self.interactions);
@@ -503,7 +508,7 @@ impl TuiRenderer {
                         TuiBlockPresentation,
                         TuiBlockFlow,
                     ) = match node {
-                        SurfaceNode::Container {
+                        SemanticNode::Container {
                             presentation,
                             flow,
                             content,
@@ -521,7 +526,10 @@ impl TuiRenderer {
                         ),
                     };
                     if !lines.is_empty()
-                        || matches!(node, SurfaceNode::Container { .. } | SurfaceNode::HardBreak)
+                        || matches!(
+                            node,
+                            SemanticNode::Container { .. } | SemanticNode::HardBreak
+                        )
                     {
                         self.surface_mut(&region).blocks.push(TuiBlock {
                             key,
@@ -531,7 +539,7 @@ impl TuiRenderer {
                             page_title: surface_page_title(node),
                             inline: matches!(
                                 node,
-                                SurfaceNode::Text(_) | SurfaceNode::StyledText { .. }
+                                SemanticNode::Text(_) | SemanticNode::StyledText { .. }
                             ),
                         });
                     }
@@ -846,16 +854,16 @@ fn push_dto_action(
     Vec::new()
 }
 
-fn dto_surface_value(value: &serde_json::Value) -> SurfaceValue {
+fn dto_surface_value(value: &serde_json::Value) -> SemanticValue {
     match value {
-        serde_json::Value::Null => SurfaceValue::Null,
-        serde_json::Value::Bool(value) => SurfaceValue::Boolean(*value),
+        serde_json::Value::Null => SemanticValue::Null,
+        serde_json::Value::Bool(value) => SemanticValue::Boolean(*value),
         serde_json::Value::Number(value) => value
             .as_f64()
-            .map(SurfaceValue::Number)
-            .unwrap_or(SurfaceValue::Null),
-        serde_json::Value::String(value) => SurfaceValue::Text(value.clone()),
-        _ => SurfaceValue::Null,
+            .map(SemanticValue::Number)
+            .unwrap_or(SemanticValue::Null),
+        serde_json::Value::String(value) => SemanticValue::Text(value.clone()),
+        _ => SemanticValue::Null,
     }
 }
 
@@ -879,7 +887,7 @@ fn styled_dto(mut text: String, styles: &[String], color: u8, heading: Option<u8
 }
 
 /// 渲染子输出并返回其全部行（顺带把可触发节点收集进 `interactions`）。
-fn render_content(output: &Surface, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
+fn render_content(output: &SemanticOutput, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
     output
         .nodes()
         .iter()
@@ -889,18 +897,18 @@ fn render_content(output: &Surface, interactions: &mut Vec<TuiInteraction>) -> V
 
 /// 渲染单个节点：文本/样式文本成行，图像转占位，Action/Input/Navigation/SafeReturn
 /// 收集为交互（不产出行）。
-fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
+fn render_node(node: &SemanticNode, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
     match node {
-        SurfaceNode::Text(text) => visible_lines(unicode(text)),
-        SurfaceNode::HardBreak => Vec::new(),
-        SurfaceNode::StyledText {
+        SemanticNode::Text(text) => visible_lines(unicode(text)),
+        SemanticNode::HardBreak => Vec::new(),
+        SemanticNode::StyledText {
             text,
             styles,
             color,
             heading,
             ..
         } => visible_lines(styled(unicode(text), styles, *color, *heading)),
-        SurfaceNode::Image {
+        SemanticNode::Image {
             resource,
             alt,
             caption,
@@ -913,8 +921,8 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
                 .map(|value| format!(" — {}", unicode(value)))
                 .unwrap_or_default()
         )],
-        SurfaceNode::Component { fallback, .. } => render_content(fallback, interactions),
-        SurfaceNode::Container {
+        SemanticNode::Component { fallback, .. } => render_content(fallback, interactions),
+        SemanticNode::Container {
             presentation,
             content,
             ..
@@ -922,21 +930,21 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
             let presentation: TuiBlockPresentation = (*presentation).into();
             presentation.render(render_content(content, interactions))
         }
-        SurfaceNode::Action { label, action, .. } => {
+        SemanticNode::Action { label, action, .. } => {
             interactions.push(TuiInteraction {
                 group: String::new(),
                 id: None,
                 label: unicode(label),
                 kind: match action {
-                    SurfaceAction::Dismiss => "dismiss",
+                    SemanticAction::Dismiss => "dismiss",
                 },
                 input: None,
             });
             Vec::new()
         }
-        SurfaceNode::Input { id, binding } => {
+        SemanticNode::Input { id, binding } => {
             let (label, kind, input) = match &binding.kind {
-                SurfaceInputKind::Checkbox {
+                SemanticInputKind::Checkbox {
                     unchecked,
                     checked,
                     selected,
@@ -949,7 +957,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
                         selected: *selected,
                     },
                 ),
-                SurfaceInputKind::Radio {
+                SemanticInputKind::Radio {
                     value, selected, ..
                 } => (
                     if *selected { "(o)" } else { "( )" }.to_owned(),
@@ -959,7 +967,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
                         selected: *selected,
                     },
                 ),
-                SurfaceInputKind::Text { value } => {
+                SemanticInputKind::Text { value } => {
                     let value: String = unicode(value);
                     (format!("[{value}]"), "textbox", TuiInput::Text { value })
                 }
@@ -973,7 +981,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
             });
             Vec::new()
         }
-        SurfaceNode::Navigation {
+        SemanticNode::Navigation {
             id, label, role, ..
         } => {
             interactions.push(TuiInteraction {
@@ -988,7 +996,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
             });
             Vec::new()
         }
-        SurfaceNode::SafeReturn { id, target } => {
+        SemanticNode::SafeReturn { id, target } => {
             interactions.push(TuiInteraction {
                 group: String::new(),
                 id: Some(id.as_str().to_owned()),
@@ -998,7 +1006,7 @@ fn render_node(node: &SurfaceNode, interactions: &mut Vec<TuiInteraction>) -> Ve
             });
             Vec::new()
         }
-        SurfaceNode::Region { content, .. } | SurfaceNode::Replace { content, .. } => {
+        SemanticNode::Region { content, .. } | SemanticNode::Replace { content, .. } => {
             render_content(content, interactions)
         }
     }
@@ -1113,9 +1121,9 @@ fn dto_page_title(node: &HostNodeDto) -> Option<String> {
     }
 }
 
-fn surface_page_title(node: &SurfaceNode) -> Option<String> {
+fn surface_page_title(node: &SemanticNode) -> Option<String> {
     match node {
-        SurfaceNode::StyledText {
+        SemanticNode::StyledText {
             text,
             heading: Some(_),
             ..

@@ -1,10 +1,10 @@
 //! TUI 渲染器与终端交互测试（原内联于 lib.rs，按源码规范收拢）。
 
+use narrava_loom_core::semantic::{SemanticKey, SemanticNode, SemanticOutput, SemanticTarget};
 use narrava_loom_core::{
     expression::value::TextValue,
     semantic::{RegionId, TextColor},
 };
-use narrava_loom_script::protocol_adapter::{Surface, SurfaceKey, SurfaceNode, SurfaceTarget};
 
 #[test]
 fn runtime_dto_renders_without_borrowing_core_host_update() {
@@ -193,8 +193,8 @@ fn applied_input_updates_the_local_full_screen_feedback() {
             label: String::from("[ ]"),
             kind: "checkbox",
             input: Some(TuiInput::Checkbox {
-                unchecked: narrava_loom_script::protocol_adapter::SurfaceValue::Boolean(false),
-                checked: narrava_loom_script::protocol_adapter::SurfaceValue::Boolean(true),
+                unchecked: narrava_loom_core::semantic::SemanticValue::Boolean(false),
+                checked: narrava_loom_core::semantic::SemanticValue::Boolean(true),
                 selected: false,
             }),
         }],
@@ -204,7 +204,7 @@ fn applied_input_updates_the_local_full_screen_feedback() {
         &mut frame,
         &TuiOperation::Input {
             id: String::from("hint"),
-            value: narrava_loom_script::protocol_adapter::SurfaceValue::Boolean(true),
+            value: narrava_loom_core::semantic::SemanticValue::Boolean(true),
         },
     );
     assert_eq!(frame.interactions[0].label, "[x]");
@@ -247,21 +247,23 @@ fn tui_platform_save_round_trips_and_rejects_path_escape() {
 /// Region 与 Replace（按 key）就地更新对应终端区域，交互被收集进帧。
 #[test]
 fn region_and_key_replacements_update_terminal_surfaces() {
-    let mut main = Surface::default();
+    let mut main = SemanticOutput::default();
     main.push_keyed(
-        SurfaceKey::parse("status").unwrap(),
-        SurfaceNode::Container {
+        SemanticKey::parse("status").unwrap(),
+        SemanticNode::Container {
             presentation: narrava_loom_core::semantic::ContainerPresentation::Plain,
             flow: narrava_loom_core::semantic::ContainerFlow::Stack,
-            content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("旧状态"))]),
+            content: SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from(
+                "旧状态",
+            ))]),
         },
     )
     .unwrap();
-    main.push(SurfaceNode::Replace {
-        target: SurfaceTarget::Key(SurfaceKey::parse("status").unwrap()),
-        content: Surface::from_nodes(vec![
-            SurfaceNode::Text(TextValue::from("新状态")),
-            SurfaceNode::Navigation {
+    main.push(SemanticNode::Replace {
+        target: SemanticTarget::Key(SemanticKey::parse("status").unwrap()),
+        content: SemanticOutput::from_nodes(vec![
+            SemanticNode::Text(TextValue::from("新状态")),
+            SemanticNode::Navigation {
                 id: narrava_loom_core::semantic::InteractionId::parse("status:continue").unwrap(),
                 label: TextValue::from("继续"),
                 target: String::from("Next"),
@@ -269,9 +271,9 @@ fn region_and_key_replacements_update_terminal_surfaces() {
             },
         ]),
     });
-    main.push(SurfaceNode::Region {
+    main.push(SemanticNode::Region {
         region: RegionId::header(),
-        content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("标题"))]),
+        content: SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("标题"))]),
     });
 
     let frame = TuiRenderer::default().render("Start", &main);
@@ -286,15 +288,15 @@ fn region_and_key_replacements_update_terminal_surfaces() {
 /// delay 文本先停放在 `delayed`，超过延迟后 `render_at` 才让其进入正文。
 #[test]
 fn styled_text_with_delay_is_parked_then_revealed() {
-    let output = Surface::from_nodes(vec![
-        SurfaceNode::StyledText {
+    let output = SemanticOutput::from_nodes(vec![
+        SemanticNode::StyledText {
             text: TextValue::from("立即显示"),
             styles: Vec::new(),
             color: TextColor::DEFAULT,
             delay: None,
             heading: None,
         },
-        SurfaceNode::StyledText {
+        SemanticNode::StyledText {
             text: TextValue::from("两秒后出现"),
             styles: Vec::new(),
             color: TextColor::DEFAULT,
@@ -319,10 +321,10 @@ fn styled_text_with_delay_is_parked_then_revealed() {
 /// 结构化 HardBreak 把相邻文本保持为两条终端行。
 #[test]
 fn explicit_line_break_becomes_two_terminal_lines() {
-    let output = Surface::from_nodes(vec![
-        SurfaceNode::Text(TextValue::from("第一行")),
-        SurfaceNode::HardBreak,
-        SurfaceNode::Text(TextValue::from("第二行")),
+    let output = SemanticOutput::from_nodes(vec![
+        SemanticNode::Text(TextValue::from("第一行")),
+        SemanticNode::HardBreak,
+        SemanticNode::Text(TextValue::from("第二行")),
     ]);
 
     let frame = TuiRenderer::default().render("Break", &output);
@@ -332,16 +334,16 @@ fn explicit_line_break_becomes_two_terminal_lines() {
 
 #[test]
 fn adjacent_text_styles_and_punctuation_stay_on_the_same_line() {
-    let output = Surface::from_nodes(vec![
-        SurfaceNode::Text(TextValue::from("你发现了")),
-        SurfaceNode::StyledText {
+    let output = SemanticOutput::from_nodes(vec![
+        SemanticNode::Text(TextValue::from("你发现了")),
+        SemanticNode::StyledText {
             text: TextValue::from(" 发光的钥匙"),
             styles: vec![narrava_loom_core::semantic::TextStyle::Strong],
             color: TextColor::DEFAULT,
             delay: None,
             heading: None,
         },
-        SurfaceNode::Text(TextValue::from("。")),
+        SemanticNode::Text(TextValue::from("。")),
     ]);
 
     let frame = TuiRenderer::default().render("Inline", &output);
@@ -351,9 +353,9 @@ fn adjacent_text_styles_and_punctuation_stay_on_the_same_line() {
 
 #[test]
 fn custom_region_falls_back_without_losing_content() {
-    let output = Surface::from_nodes(vec![SurfaceNode::Region {
+    let output = SemanticOutput::from_nodes(vec![SemanticNode::Region {
         region: RegionId::parse("hud").unwrap(),
-        content: Surface::from_nodes(vec![SurfaceNode::Text(TextValue::from("状态"))]),
+        content: SemanticOutput::from_nodes(vec![SemanticNode::Text(TextValue::from("状态"))]),
     }]);
 
     let frame = TuiRenderer::default().render("Custom", &output);
@@ -708,9 +710,7 @@ fn terminal_commands_resolve_against_current_frame() {
                 label: String::from("( )"),
                 kind: "radiobutton",
                 input: Some(TuiInput::Radio {
-                    value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(String::from(
-                        "quiet",
-                    )),
+                    value: narrava_loom_core::semantic::SemanticValue::Text(String::from("quiet")),
                     selected: false,
                 }),
             },
@@ -731,7 +731,7 @@ fn terminal_commands_resolve_against_current_frame() {
         TuiCommand::parse("1").unwrap().resolve(&frame).unwrap(),
         TuiOperation::Input {
             id: String::from("route:quiet"),
-            value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(String::from("quiet")),
+            value: narrava_loom_core::semantic::SemanticValue::Text(String::from("quiet")),
         }
     );
     assert_eq!(
@@ -741,7 +741,7 @@ fn terminal_commands_resolve_against_current_frame() {
             .unwrap(),
         TuiOperation::Input {
             id: String::from("name"),
-            value: narrava_loom_script::protocol_adapter::SurfaceValue::Text(String::from("游侠")),
+            value: narrava_loom_core::semantic::SemanticValue::Text(String::from("游侠")),
         }
     );
     assert_eq!(

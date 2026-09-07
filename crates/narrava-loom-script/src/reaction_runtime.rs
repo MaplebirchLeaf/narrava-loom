@@ -14,10 +14,10 @@ use narrava_loom_core::{
     story::StoryRuntimeRequests,
 };
 
-use crate::ScriptAdapter;
+use crate::EcmaBinding;
 
 pub(crate) fn apply_lifecycle_reactions<'hir, 'source>(
-    script: &impl ScriptAdapter,
+    script: &EcmaBinding,
     hir: &'hir HirStory<'source>,
     passage: &narrava_loom_core::hir::HirPassage<'source>,
     state: &mut State,

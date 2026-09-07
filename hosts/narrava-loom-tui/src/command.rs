@@ -1,19 +1,19 @@
 //! 终端命令解析、校验和可执行操作。
 
 use crate::TuiFrame;
-use narrava_loom_script::protocol_adapter::SurfaceValue;
+use narrava_loom_core::semantic::SemanticValue;
 use std::fmt;
 
 /// 输入控件执行时需要的完整语义。TUI 保留这些值，避免终端层根据标签反推状态。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiInput {
     Checkbox {
-        unchecked: SurfaceValue,
-        checked: SurfaceValue,
+        unchecked: SemanticValue,
+        checked: SemanticValue,
         selected: bool,
     },
     Radio {
-        value: SurfaceValue,
+        value: SemanticValue,
         selected: bool,
     },
     Text {
@@ -118,7 +118,7 @@ impl TuiCommand {
                     .ok_or(TuiCommandError::MissingIdentity)?;
                 Ok(TuiOperation::Input {
                     id,
-                    value: SurfaceValue::Text(value.clone()),
+                    value: SemanticValue::Text(value.clone()),
                 })
             }
             Self::Help => Ok(TuiOperation::Help),
@@ -138,7 +138,7 @@ impl TuiCommand {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TuiOperation {
     Activate { id: String },
-    Input { id: String, value: SurfaceValue },
+    Input { id: String, value: SemanticValue },
     Dismiss,
     Help,
     Back,

@@ -41,9 +41,16 @@ impl fmt::Display for HostErrorDto {
 }
 
 /// Binding 用来登记一局 Runtime 的跨语言不透明身份。
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct RuntimeSessionId(String);
+
+impl<'de> Deserialize<'de> for RuntimeSessionId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value: String = String::deserialize(deserializer)?;
+        Self::new(value).map_err(serde::de::Error::custom)
+    }
+}
 
 impl RuntimeSessionId {
     /// 建立非空且适合日志、IPC 与外部 registry 使用的身份。

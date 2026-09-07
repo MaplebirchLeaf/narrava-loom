@@ -3,13 +3,10 @@
 //! 这些类型与转换依赖 Core，因此属于 Native Script Runtime 实现，
 //! 不得放回零 Core 依赖的 `narrava-loom-protocol`。
 
-mod conversion;
-pub mod protocol_bridge;
-mod protocol_dto;
-mod surface;
+mod host_update;
+pub mod script_output;
 
-pub use protocol_dto::encode_host_update;
-pub use surface::*;
+pub use host_update::encode_host_update;
 
 /// 把 Core 诊断降级为可跨 Runtime/Host 传输的错误。
 pub fn diagnostic(

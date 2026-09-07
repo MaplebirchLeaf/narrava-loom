@@ -23,9 +23,9 @@ State、Story、Macro 或 Reaction 真相。
 
 ## Engine 事务
 
-Engine 在执行前捕获 State、Story 和 Reaction 检查点。成功时一次提交变量、导航、
-触发状态和 Surface；Runtime 错误、无效请求、取消、Script 同步失败或预算耗尽会
-恢复整个检查点。
+Engine 在执行前捕获 State 与 Story 检查点；RuntimeSession 的命令事务额外持有
+Reaction、交互和呈现状态。执行错误、取消或预算耗尽恢复对应事务；
+命令边界与快照生命周期见 [Runtime Session](runtime-session.md)。
 
 `goto` 先建立已验证但未提交的 Story 请求。只有当前 Passage 以 `StopPassage`
 结束时 Engine 才确认目标并继续导航链。`include` 在源码位置压入 VM frame，不创建
@@ -126,7 +126,7 @@ VM 只接收可序列化的拥有型 Bytecode，并在 `Halt`、`NavigationPendi
 
 `HostApi::drive_stable()` 驱动 Macro、导航和 Halted 提交，只在得到可呈现的
 `HostUpdate` 或异步 operation 时返回。`resume_and_drive()` 将 Handler 恢复纳入同一
-事务。Host 令牌只携带执行身份；VM frame、State/Story/Reaction 检查点、局部域、
+事务。Host 令牌只携带执行身份；VM frame、State/Story 检查点、局部域、
 待确认请求和平台句柄由 continuation 所有。
 
 恢复链验证执行身份和指令位置，然后继续同一帧。迭代器、include 栈、语言选择和

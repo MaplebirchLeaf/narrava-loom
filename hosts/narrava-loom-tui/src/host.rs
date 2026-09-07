@@ -1,9 +1,7 @@
-//! TUI Host：编译游戏、驱动 Core Engine 并渲染到终端。
-//!
-//! 同步单线程驱动：加载开发目录或 `game.nar` 发行包 → 编译 Twee/脚本 →
-//! `HostApi` 驱动 Engine 事务 → `TuiRenderer` 渲染 Surface → 终端输入
-//! （编号选择导航、输入控件写回）回送 Host。脚本执行与宏分发复用
-//! `narrava-loom-script`（Boa + 共享 dispatch）。
+//! TUI Host：装载与编译游戏，直接驱动 RuntimeSession 并渲染 Protocol 更新。
+//! 同步完成 PendingOperation 的等待与文件 IO，再以原 operation ID 恢复。
+
+use narrava_loom_core::semantic::SemanticValue;
 
 use std::{io, io::IsTerminal, path::Path};
 
@@ -20,13 +18,9 @@ use narrava_loom_core::{
     twee,
 };
 use narrava_loom_protocol::{
-    HostErrorDto, HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeSessionId,
-    RuntimeUpdate,
+    HostErrorDto, HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeUpdate,
 };
-use narrava_loom_script::{
-    EcmaBinding, RuntimeServices, RuntimeSession, RuntimeSessionDriver,
-    protocol_adapter::{SurfaceValue, diagnostic},
-};
+use narrava_loom_script::{EcmaBinding, RuntimeData, RuntimeSession, protocol_adapter::diagnostic};
 
 use crate::{TuiFrame, TuiRenderer, platform, write_frame};
 
@@ -82,17 +76,15 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     let identity = config
         .identity()
         .map_err(|error| HostErrorDto::new("tui_host.game_identity", error.to_string()))?;
-    let services = RuntimeServices::new(
+    let services = RuntimeData::new(
         identity,
         mir.i18n().clone(),
         config.game.default_locale.clone(),
         language_packages,
     );
-    let session: RuntimeSession<'_, '_, EcmaBinding> =
-        RuntimeSession::with_services(&hir, &bytecode, script, state, services);
-    let session_id =
-        RuntimeSessionId::new("main").expect("内建主 Session ID 必须满足 Protocol 校验");
-    let mut runtime: RuntimeSessionDriver<'_> = RuntimeSessionDriver::new(session_id, session);
+    let session: RuntimeSession<'_, '_> =
+        RuntimeSession::with_data(&hir, &bytecode, script, state, services);
+    let mut runtime = session;
     let mut renderer: TuiRenderer = TuiRenderer::default();
     let mut language_index: usize = languages
         .iter()
@@ -161,7 +153,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
 }
 
 fn apply_operation(
-    runtime: &mut RuntimeSessionDriver<'_>,
+    runtime: &mut RuntimeSession<'_, '_>,
     renderer: &mut TuiRenderer,
     update: &mut HostUpdateDto,
     game_path: &Path,
@@ -249,7 +241,7 @@ fn ready_update(update: RuntimeUpdate) -> Result<HostUpdateDto, HostErrorDto> {
 
 /// TUI 的唯一平台异步职责：等待 Runtime 公开的 delay，再用同一 ID 恢复。
 fn execute_blocking(
-    runtime: &mut RuntimeSessionDriver<'_>,
+    runtime: &mut RuntimeSession<'_, '_>,
     game_path: &Path,
     mut command: RuntimeCommand,
 ) -> Result<RuntimeUpdate, HostErrorDto> {
@@ -348,15 +340,15 @@ fn load_game(game_path: &str) -> Result<LoadedGame, HostErrorDto> {
     Ok(LoadedGame::Development { sources, resources })
 }
 
-/// Surface 值 → JSON（输入控件写回用）。
-fn json_from_surface(value: &SurfaceValue) -> serde_json::Value {
+/// SemanticOutput 值 → JSON（输入控件写回用）。
+fn json_from_surface(value: &SemanticValue) -> serde_json::Value {
     match value {
-        SurfaceValue::Null => serde_json::Value::Null,
-        SurfaceValue::Boolean(value) => serde_json::Value::Bool(*value),
-        SurfaceValue::Number(value) => serde_json::Number::from_f64(*value)
+        SemanticValue::Null => serde_json::Value::Null,
+        SemanticValue::Boolean(value) => serde_json::Value::Bool(*value),
+        SemanticValue::Number(value) => serde_json::Number::from_f64(*value)
             .map(serde_json::Value::Number)
             .unwrap_or_else(|| serde_json::Value::String(value.to_string())),
-        SurfaceValue::Text(value) => serde_json::Value::String(value.clone()),
+        SemanticValue::Text(value) => serde_json::Value::String(value.clone()),
         _ => serde_json::Value::Null,
     }
 }

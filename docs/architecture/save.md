@@ -57,7 +57,7 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 4. 在临时所有权中建立完整的新 `$variables`、Story 时间线与历史状态关联；
 5. 校验全部通过后一次性替换 `$variables`、清空 `_temporary` 并提交 Story；
 6. RuntimeSession 根据当前启动脚本已注册的 ID 恢复 Reaction 状态；
-7. RuntimeSession 只保留一份 State/Story/Reaction 回滚检查点，后续 Script 同步失败时统一恢复。
+7. RuntimeSession 使用 Resume 命令事务恢复 State/Story/Reaction；Import 或 Save.after 失败时统一回滚，脚本直接读取活动 Rust State。
 
 捕获直接借用活动 `$variables` 和已经隔离的历史快照进行 ValueGraph 编码。Story history 在运行期
 保存 Passage 引用及进入前的持久状态，只有可移植存档边界写入 PassageName；因此 Save 大小取决于

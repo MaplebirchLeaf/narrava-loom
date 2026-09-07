@@ -7,58 +7,24 @@ use narrava_loom_core::{
     i18n::{I18nCatalog, I18nRuntimeLanguage, NlangValidatedPackage},
     reaction::ReactionRuntimeState,
     save::SaveDocument,
-    script::ScriptCallDispatcher,
     state::{State, StateCheckpoint},
-    story::{Story, StorySnapshot},
+    story::Story,
 };
 use narrava_loom_protocol::{
     HostErrorDto, PendingOperation, PendingResult, RuntimeUpdate, SaveOperation,
 };
 
-use super::{PlatformAction, PlatformWaiting, RuntimeSession, Waiting};
-use crate::ScriptAdapter;
+use super::{HostAction, HostOperation, Pending, RuntimeSession};
 
-/// Runtime 需要 Host 完成的平台 IO。
-///
-/// 实现只负责读写文件与装载语言包；调用顺序、Script hook、State 同步和当前语言
-/// 提交由 [`RuntimeSession`] 统一管理。
-pub(crate) trait RuntimePlatform<'hir, 'source> {
-    fn prepare_save(
-        &mut self,
-        operation: SaveOperation,
-        target: &str,
-        state: &State,
-        story: &Story<'hir, 'source>,
-        reactions: &[ReactionRuntimeState],
-    ) -> Result<Option<Vec<u8>>, HostErrorDto>;
-
-    fn complete_save(
-        &mut self,
-        operation: SaveOperation,
-        target: &str,
-        document: Option<Vec<u8>>,
-        state: &mut State,
-        story: &mut Story<'hir, 'source>,
-    ) -> Result<Option<Vec<ReactionRuntimeState>>, HostErrorDto>;
-
-    fn select_language(
-        &mut self,
-        locale: &str,
-    ) -> Result<Option<I18nRuntimeLanguage>, HostErrorDto>;
-}
-
-/// 未配置平台 IO 时使用的显式拒绝实现。
-pub struct UnsupportedRuntimePlatform;
-
-/// Runtime 自己持有的 Save/I18n 数据服务；不包含路径、文件句柄或 UI。
-pub struct RuntimeServices {
+/// Runtime 自己持有的 Save/I18n 数据；不包含路径、文件句柄或 UI。
+pub struct RuntimeData {
     game: GameIdentity,
     catalog: I18nCatalog,
     default_locale: String,
     language_packages: Vec<NlangValidatedPackage>,
 }
 
-impl RuntimeServices {
+impl RuntimeData {
     pub fn new(
         game: GameIdentity,
         catalog: I18nCatalog,
@@ -72,13 +38,10 @@ impl RuntimeServices {
             language_packages,
         }
     }
-}
 
-impl<'hir, 'source> RuntimePlatform<'hir, 'source> for RuntimeServices {
-    fn prepare_save(
-        &mut self,
+    fn prepare_save<'hir, 'source>(
+        &self,
         operation: SaveOperation,
-        _target: &str,
         state: &State,
         story: &Story<'hir, 'source>,
         reactions: &[ReactionRuntimeState],
@@ -93,10 +56,9 @@ impl<'hir, 'source> RuntimePlatform<'hir, 'source> for RuntimeServices {
             .map_err(|error| HostErrorDto::new("runtime_session.save", error.to_string()))
     }
 
-    fn complete_save(
-        &mut self,
+    fn complete_save<'hir, 'source>(
+        &self,
         operation: SaveOperation,
-        _target: &str,
         document: Option<Vec<u8>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -115,10 +77,7 @@ impl<'hir, 'source> RuntimePlatform<'hir, 'source> for RuntimeServices {
         Ok(Some(document.reactions().to_vec()))
     }
 
-    fn select_language(
-        &mut self,
-        locale: &str,
-    ) -> Result<Option<I18nRuntimeLanguage>, HostErrorDto> {
+    fn select_language(&self, locale: &str) -> Result<Option<I18nRuntimeLanguage>, HostErrorDto> {
         I18nRuntimeLanguage::select(
             &self.catalog,
             &self.default_locale,
@@ -129,49 +88,7 @@ impl<'hir, 'source> RuntimePlatform<'hir, 'source> for RuntimeServices {
     }
 }
 
-impl<'hir, 'source> RuntimePlatform<'hir, 'source> for UnsupportedRuntimePlatform {
-    fn prepare_save(
-        &mut self,
-        _operation: SaveOperation,
-        _target: &str,
-        _state: &State,
-        _story: &Story<'hir, 'source>,
-        _reactions: &[ReactionRuntimeState],
-    ) -> Result<Option<Vec<u8>>, HostErrorDto> {
-        Err(HostErrorDto::new(
-            "runtime_session.save_unsupported",
-            "当前 Host 没有提供存档 IO",
-        ))
-    }
-
-    fn complete_save(
-        &mut self,
-        _operation: SaveOperation,
-        _target: &str,
-        _document: Option<Vec<u8>>,
-        _state: &mut State,
-        _story: &mut Story<'hir, 'source>,
-    ) -> Result<Option<Vec<ReactionRuntimeState>>, HostErrorDto> {
-        Err(HostErrorDto::new(
-            "runtime_session.save_unsupported",
-            "当前 Host 没有提供存档 IO",
-        ))
-    }
-
-    fn select_language(
-        &mut self,
-        _locale: &str,
-    ) -> Result<Option<I18nRuntimeLanguage>, HostErrorDto> {
-        Err(HostErrorDto::new(
-            "runtime_session.language_unsupported",
-            "当前 Host 没有提供语言包装载",
-        ))
-    }
-}
-
-impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
-    RuntimeSession<'hir, 'source, Adapter>
-{
+impl<'hir, 'source> RuntimeSession<'hir, 'source> {
     pub(super) fn begin_save(
         &mut self,
         operation: SaveOperation,
@@ -180,14 +97,16 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         script_save: bool,
         input_checkpoint: Option<StateCheckpoint>,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.ensure_idle()?;
-        let document: Option<Vec<u8>> = self.platform.prepare_save(
-            operation,
-            &target,
-            &self.state,
-            &self.story,
-            &self.script.reaction_state(),
-        )?;
+        let document: Option<Vec<u8>> = self
+            .data
+            .as_ref()
+            .ok_or_else(|| unsupported("save"))?
+            .prepare_save(
+                operation,
+                &self.state,
+                &self.story,
+                &self.script.reaction_state(),
+            )?;
         let operation_id: u64 = self.sequence;
         self.sequence = self.sequence.saturating_add(1);
         let pending = PendingOperation::Save {
@@ -196,13 +115,12 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             target: target.clone(),
             document,
         };
-        self.waiting = Some(Waiting::Platform(Box::new(PlatformWaiting {
+        self.pending = Some(Pending::Host(Box::new(HostOperation {
             operation: operation_id,
-            action: PlatformAction::Save { operation, target },
+            action: HostAction::Save { operation, target },
             after,
             script_save,
             input_checkpoint,
-            collapse_refresh_revisit: false,
         })));
         Ok(RuntimeUpdate::Pending { operation: pending })
     }
@@ -211,20 +129,17 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         &mut self,
         locale: String,
         after: RuntimeUpdate,
-        collapse_refresh_revisit: bool,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
-        self.ensure_idle()?;
         let operation_id: u64 = self.sequence;
         self.sequence = self.sequence.saturating_add(1);
-        self.waiting = Some(Waiting::Platform(Box::new(PlatformWaiting {
+        self.pending = Some(Pending::Host(Box::new(HostOperation {
             operation: operation_id,
-            action: PlatformAction::SelectLanguage {
+            action: HostAction::SelectLanguage {
                 locale: locale.clone(),
             },
             after,
             script_save: false,
             input_checkpoint: None,
-            collapse_refresh_revisit,
         })));
         Ok(RuntimeUpdate::Pending {
             operation: PendingOperation::SelectLanguage {
@@ -235,7 +150,11 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     }
 
     fn select_language(&mut self, locale: &str) -> Result<(), HostErrorDto> {
-        let language: Option<I18nRuntimeLanguage> = self.platform.select_language(locale)?;
+        let language: Option<I18nRuntimeLanguage> = self
+            .data
+            .as_ref()
+            .ok_or_else(|| unsupported("language"))?
+            .select_language(locale)?;
         self.script
             .select_locale(locale)
             .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
@@ -255,17 +174,7 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         else {
             return Ok(None);
         };
-        let operation_kind: SaveOperation = match operation.as_str() {
-            "export" => SaveOperation::Export,
-            "import" => SaveOperation::Import,
-            _ => {
-                return Err(HostErrorDto::new(
-                    "runtime_session.save_operation",
-                    format!("未知 Script Save 操作：{operation}"),
-                ));
-            }
-        };
-        self.begin_save(operation_kind, target, after, true, input_checkpoint.take())
+        self.begin_save(operation, target, after, true, input_checkpoint.take())
             .map(Some)
     }
 
@@ -280,73 +189,47 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         else {
             return Ok(None);
         };
-        self.begin_language(locale, after, true).map(Some)
+        self.begin_language(locale, after).map(Some)
     }
 
-    pub(super) fn resume_platform(
+    pub(super) fn resume_host(
         &mut self,
-        waiting: PlatformWaiting,
+        waiting: HostOperation,
         result: Option<PendingResult>,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
-        let import_checkpoint: Option<(
-            StateCheckpoint,
-            StorySnapshot<'hir, 'source>,
-            Vec<ReactionRuntimeState>,
-        )> = matches!(
-            &waiting.action,
-            PlatformAction::Save {
-                operation: SaveOperation::Import,
-                ..
-            }
-        )
-        .then(|| {
-            (
-                self.state.checkpoint(),
-                self.story.snapshot(),
-                self.script.reaction_state(),
-            )
-        });
-        let mut import_checkpoint = import_checkpoint;
         let outcome: Result<(), HostErrorDto> = match &waiting.action {
-            PlatformAction::Save { operation, target } => match result {
-                Some(PendingResult::Save { document }) => {
-                    self.apply_save(*operation, target, document)
-                }
+            HostAction::Save { operation, .. } => match result {
+                Some(PendingResult::Save { document }) => self.apply_save(*operation, document),
                 Some(PendingResult::Failed { error }) => Err(error),
                 _ => Err(platform_result_mismatch("save")),
             },
-            PlatformAction::SelectLanguage { locale } => match result {
+            HostAction::SelectLanguage { locale } => match result {
                 Some(PendingResult::SelectLanguage) => self.select_language(locale),
                 Some(PendingResult::Failed { error }) => Err(error),
                 _ => Err(platform_result_mismatch("selectLanguage")),
             },
         };
         if outcome.is_err()
-            && let Some((state_checkpoint, story_snapshot, reaction_checkpoint)) =
-                import_checkpoint.take()
+            && matches!(
+                waiting.action,
+                HostAction::Save {
+                    operation: SaveOperation::Import,
+                    ..
+                }
+            )
         {
-            self.rollback_import(Some(state_checkpoint), Some(story_snapshot))?;
-            self.script
-                .restore_reaction_state(&reaction_checkpoint)
-                .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            self.rollback_transaction();
+            // Save.after observes the restored state; non-fatal notices may still settle events.
+            self.begin_transaction();
         }
         if waiting.script_save {
-            if let Err(error) = self.finish_script_save(&waiting.action, outcome.clone()) {
-                if outcome.is_ok()
-                    && let Some((state_checkpoint, story_snapshot, reaction_checkpoint)) =
-                        import_checkpoint
-                {
-                    self.rollback_import(Some(state_checkpoint), Some(story_snapshot))?;
-                    self.script
-                        .restore_reaction_state(&reaction_checkpoint)
-                        .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
-                }
-                return Err(error);
-            }
+            self.finish_script_save(&waiting.action, outcome.clone())?;
             if let Err(error) = outcome {
                 if let Some(checkpoint) = waiting.input_checkpoint {
-                    self.state.restore_checkpoint(checkpoint);
-                    self.sync_script_variables()?;
+                    self.transaction
+                        .as_mut()
+                        .expect("Resume 持有命令事务")
+                        .state = checkpoint;
                     return Err(error);
                 }
                 self.notices.push(error);
@@ -356,18 +239,13 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
         outcome?;
         if matches!(
             waiting.action,
-            PlatformAction::Save {
+            HostAction::Save {
                 operation: SaveOperation::Import,
                 ..
-            }
+            } | HostAction::SelectLanguage { .. }
         ) && self.presented.is_some()
         {
-            return self.replay_current(true);
-        }
-        if matches!(waiting.action, PlatformAction::SelectLanguage { .. })
-            && self.presented.is_some()
-        {
-            return self.replay_current(waiting.collapse_refresh_revisit);
+            return self.replay(narrava_loom_core::host::HostReplayTarget::RefreshCurrent);
         }
         Ok(waiting.after)
     }
@@ -375,35 +253,27 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
     fn apply_save(
         &mut self,
         operation: SaveOperation,
-        target: &str,
         document: Option<Vec<u8>>,
     ) -> Result<(), HostErrorDto> {
-        let reactions = self.platform.complete_save(
-            operation,
-            target,
-            document,
-            &mut self.state,
-            &mut self.story,
-        )?;
+        let reactions = self
+            .data
+            .as_ref()
+            .ok_or_else(|| unsupported("save"))?
+            .complete_save(operation, document, &mut self.state, &mut self.story)?;
         if let Some(reactions) = reactions
             && let Err(error) = self.script.restore_reaction_state(&reactions)
         {
             return Err(HostErrorDto::new(&error.code, error.message));
-        }
-        if operation == SaveOperation::Import
-            && let Err(error) = self.sync_script_variables()
-        {
-            return Err(error);
         }
         Ok(())
     }
 
     pub(super) fn finish_script_save(
         &self,
-        action: &PlatformAction,
+        action: &HostAction,
         outcome: Result<(), HostErrorDto>,
     ) -> Result<(), HostErrorDto> {
-        let PlatformAction::Save { operation, target } = action else {
+        let HostAction::Save { operation, target } = action else {
             return Ok(());
         };
         self.script
@@ -417,36 +287,6 @@ impl<'hir, 'source, Adapter: ScriptAdapter + ScriptCallDispatcher + 'static>
             )
             .map_err(|error| HostErrorDto::new(&error.code, error.message))
     }
-
-    /// 恢复 Import 之前的 Core 与 Script 状态，避免任一步骤失败留下半提交存档。
-    fn rollback_import(
-        &mut self,
-        state_checkpoint: Option<StateCheckpoint>,
-        story_snapshot: Option<StorySnapshot<'hir, 'source>>,
-    ) -> Result<(), HostErrorDto> {
-        let state_checkpoint: StateCheckpoint = state_checkpoint.expect("Import 必须捕获 State");
-        let story_snapshot: StorySnapshot<'hir, 'source> =
-            story_snapshot.expect("Import 必须捕获 Story");
-        self.state.restore_checkpoint(state_checkpoint);
-        self.story
-            .restore(story_snapshot)
-            .expect("同一 RuntimeSession 捕获的 Story 快照必须可恢复");
-        self.sync_script_variables().map_err(|error| {
-            HostErrorDto::new(
-                "runtime_session.save_rollback",
-                format!(
-                    "存档导入失败，Core 已回滚，但 Script 状态恢复失败：{}",
-                    error.message
-                ),
-            )
-        })
-    }
-
-    fn sync_script_variables(&self) -> Result<(), HostErrorDto> {
-        self.script
-            .sync_variables(&self.state)
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))
-    }
 }
 
 fn platform_result_mismatch(expected: &str) -> HostErrorDto {
@@ -454,4 +294,17 @@ fn platform_result_mismatch(expected: &str) -> HostErrorDto {
         "runtime_session.platform_result_mismatch",
         format!("平台挂起操作需要 {expected} 完成结果"),
     )
+}
+
+fn unsupported(operation: &str) -> HostErrorDto {
+    match operation {
+        "save" => HostErrorDto::new(
+            "runtime_session.save_unsupported",
+            "当前 Host 没有提供存档 IO",
+        ),
+        _ => HostErrorDto::new(
+            "runtime_session.language_unsupported",
+            "当前 Host 没有提供语言包装载",
+        ),
+    }
 }

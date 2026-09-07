@@ -1,4 +1,4 @@
-/** Generated from bindings/script-contract.json. Do not edit by hand. */
+/** Generated from Protocol Rust declarations and bindings/script-contract.json. Do not edit by hand. */
 declare global {
   type NarravaScriptGlobalName =
     | "State"
@@ -59,11 +59,16 @@ declare global {
     | "button"
     | "safeReturn"
   type NarravaHostErrorDto = { readonly code: string; readonly message: string }
-  type NarravaRuntimeSaveOperation = "export" | "import"
-  type NarravaPendingResult = { readonly type: "save"; readonly document?: readonly number[] } | { readonly type: "selectLanguage" } | { readonly type: "failed"; readonly error: NarravaHostErrorDto }
+  type NarravaHostNodeDto = { readonly type: "text"; readonly key: string; readonly text: string } | { readonly type: "hardBreak"; readonly key: string } | { readonly type: "styledText"; readonly key: string; readonly text: string; readonly styles: readonly string[]; readonly color: number; readonly delay?: number; readonly heading?: number } | { readonly type: "image"; readonly key: string; readonly resource: string; readonly alt: string; readonly caption: string | null } | { readonly type: "region"; readonly key: string; readonly region: string; readonly nodes: readonly NarravaHostNodeDto[] } | { readonly type: "container"; readonly key: string; readonly presentation: NarravaContainerPresentationDto; readonly flow: NarravaContainerFlowDto; readonly nodes: readonly NarravaHostNodeDto[] } | { readonly type: "component"; readonly key: string; readonly capability: string; readonly version: number; readonly properties: unknown; readonly fallback: readonly NarravaHostNodeDto[] } | { readonly type: "replace"; readonly key: string; readonly target: NarravaHostReplaceTargetDto; readonly nodes: readonly NarravaHostNodeDto[] } | { readonly type: "action"; readonly key: string; readonly label: string; readonly action: string; readonly role: string } | { readonly type: "checkbox"; readonly key: string; readonly id: string; readonly unchecked: unknown; readonly checked: unknown; readonly selected: boolean } | { readonly type: "radiobutton"; readonly key: string; readonly id: string; readonly group: string; readonly value: unknown; readonly selected: boolean } | { readonly type: "textbox"; readonly key: string; readonly id: string; readonly value: string } | { readonly type: "navigation"; readonly key: string; readonly id: string; readonly label: string; readonly target: string } | { readonly type: "button"; readonly key: string; readonly id: string; readonly label: string; readonly target: string } | { readonly type: "safeReturn"; readonly key: string; readonly id: string; readonly target: string }
+  type NarravaContainerPresentationDto = "plain" | "panel"
+  type NarravaContainerFlowDto = "stack" | "row"
+  type NarravaHostReplaceTargetDto = { readonly kind: "region"; readonly value: string } | { readonly kind: "key"; readonly value: string }
+  type NarravaHostUpdateDto = { readonly current: string; readonly nodes: readonly NarravaHostNodeDto[]; readonly can_back: boolean; readonly can_forward: boolean }
   type NarravaRuntimeCommand = { readonly type: "start" } | { readonly type: "back" } | { readonly type: "forward" } | { readonly type: "activate"; readonly interaction: string } | { readonly type: "input"; readonly interaction: string; readonly value: unknown } | { readonly type: "save"; readonly operation: NarravaRuntimeSaveOperation; readonly target: string } | { readonly type: "selectLanguage"; readonly locale: string } | { readonly type: "resume"; readonly operation: number; readonly result?: NarravaPendingResult } | { readonly type: "cancel"; readonly operation: number }
+  type NarravaRuntimeSaveOperation = "export" | "import"
   type NarravaPendingOperation = { readonly type: "delay"; readonly operation: number; readonly milliseconds: number } | { readonly type: "save"; readonly operation: number; readonly direction: NarravaRuntimeSaveOperation; readonly target: string; readonly document?: readonly number[] } | { readonly type: "selectLanguage"; readonly operation: number; readonly locale: string }
-  type NarravaRuntimeUpdate = { readonly type: "ready"; readonly update: { readonly current: string; readonly nodes: readonly unknown[]; readonly can_back: boolean; readonly can_forward: boolean } } | { readonly type: "applied" } | { readonly type: "pending"; readonly operation: NarravaPendingOperation }
+  type NarravaPendingResult = { readonly type: "save"; readonly document?: readonly number[] } | { readonly type: "selectLanguage" } | { readonly type: "failed"; readonly error: NarravaHostErrorDto }
+  type NarravaRuntimeUpdate = { readonly type: "ready"; readonly update: NarravaHostUpdateDto } | { readonly type: "applied" } | { readonly type: "pending"; readonly operation: NarravaPendingOperation }
   type NarravaRuntimeRequest = { readonly protocolVersion: 1; readonly session: string; readonly command: NarravaRuntimeCommand }
   type NarravaRuntimeResponse = { readonly protocolVersion: 1; readonly session: string; readonly update: NarravaRuntimeUpdate }
 }

@@ -43,15 +43,15 @@
 | `save` | 版本化存档、Value 图、兼容校验与原子恢复 |
 | `resource` / `nar` / `release` | 资源、发布容器与交付目录 |
 | `diagnostic` / `logger` | 稳定问题数据与结构化运行记录 |
-| `script` | Script Bundle、加载上下文与 Binding 契约 |
+| `script` | 有序 Script Bundle 与 ScriptCallDispatcher 函数边界 |
 
 ## 外部契约
 
 | 路径 | 职责 |
 |---|---|
-| `bindings/script-contract.json` | 跨 Rust/TypeScript 的 canonical 标签和 DTO 名称 |
+| `bindings/script-contract.json` | 脚本全局、内建事件、builder 名称与协议版本 |
 | `bindings/typescript/narrava.d.ts` | 游戏 scripts 的 TypeScript API |
-| `crates/narrava-loom-script/src/protocol_adapter/` | Core Surface 与 Protocol DTO 转换 |
+| `crates/narrava-loom-script/src/protocol_adapter/` | Script 输出校验、Core 语义与 Protocol DTO 转换 |
 | `editors/vscode-narrava-loom/` | Twee 语法、导航与 VS Code 扩展 |
 | `examples/` | 无 Rust 的综合游戏示例 |
 

@@ -1,88 +1,83 @@
-# Runtime Session 收敛规格
+# Runtime Session
 
-> 状态：Tauri 与 TUI 已接入
-
-## 目标
-
-统一 Native Host 对 Engine、Macro continuation、脚本事件和挂起操作的编排。Tauri 与 TUI
-只负责装载平台文件、等待平台操作、Renderer 与玩家输入，不各自保存第二套 Narrava 生命周期。
-
-统一边界为：
+`RuntimeSession` 是一局游戏的所有权根。Tauri Worker 与 TUI 直接调用 `execute`，
+传入 owned `RuntimeCommand`，接收 `RuntimeUpdate`；Host 负责 IO、等待和呈现。
 
 ```text
-RuntimeCommand → RuntimeSession → RuntimeUpdate | PendingOperation
+Tauri commands → Worker ┐
+                       ├→ RuntimeSession → Core HostApi → Engine / VM
+TUI command loop ───────┘         ↕                        ↕
+                            EcmaBinding            State / Story
+                                 ↓
+                      SemanticOutput → Protocol DTO → Host Renderer
 ```
 
-## 所有权
+## 所有权与源码入口
 
-- 零 Core 依赖的 `narrava-loom-protocol` 拥有可序列化的 `RuntimeCommand`、`RuntimeUpdate`、`PendingOperation` 与 Host DTO；
-- `narrava-loom-script::protocol_adapter` 负责 Surface builder 校验与 Core 输出到拥有型 DTO 的转换；
-- Native RuntimeSession 内部借用已准备的 HIR/Bytecode，独占 State、Story、interaction 与 continuation；
-- 跨语言侧只保存无 Rust 生命周期的 `RuntimeSessionHandle`；Native registry 以 `RuntimeSessionDriver` 保存实际编译借用与 ScriptAdapter；
-- Script Contract 由 `ScriptAdapter` 表达，Boa/Oxc 的 `EcmaBinding` 只是当前实现；
-- Host 只保存平台资源和 IO 句柄，不读取 Engine continuation；
-- Boa/Oxc 是 `narrava-loom-script` 的 ECMAScript Adapter，不进入 Script Contract 或 Protocol；
-- JavaScript `Surface` 只构造 Protocol 已定义的 Surface 节点，不拥有第二套语义。
+- `session.rs` 持有 State、Story、交互、上一帧、continuation 和命令事务；
+- `session/state_io.rs` 处理 Save 与语言选择；`RuntimeData` 只保存游戏身份、I18n 目录和已验证语言包；
+- `dispatch.rs` 分派 Macro，`reaction_runtime.rs` 执行 Reaction 效果；
+- `state_adapter.rs`、`resource_adapter.rs`、`reaction_adapter.rs` 是 Boa 与 Core 类型/API 的适配边界；
+- `protocol_adapter/script_output.rs` 校验作者 `Surface` builder 数据，直接生成 Core `SemanticOutput`；
+- `protocol_adapter/host_update.rs` 将 Core 输出转换为 owned Host DTO；
+- `narrava-loom-protocol` 只定义 owned、serializable 数据，不依赖 Core、Script 或 Host。
 
-`narrava-loom-script::RuntimeSession` 是内部 Native 实现，Tauri/TUI 共同消费
-`RuntimeSessionDriver`，跨语言调用方只看到 `RuntimeSessionHandle`。两端不再直接调用
-`HostApi::start_mir`、`advance_mir`、`resume_pending` 或 `render_special_mir`，也不保存
-`HostPendingExecutions`。Host 按 `PendingOperation` 完成 delay、Save 文件 IO 或语言平台确认，
-再用同一 operation ID 和拥有型 `PendingResult` 恢复 Runtime。
+官方 Host 没有 Native Session registry。`RuntimeSessionId`、request/response envelope 是
+Protocol 数据契约，不再对应另一层 Handle/Driver 执行对象。`EcmaBinding` 直接持有实际
+ECMAScript 实现；Core 通过 `ScriptCallDispatcher` 调回脚本，避免依赖 Script crate。
 
-Tauri 以异步 facade 落实这条边界：专用 Worker 只运行单个同步 Session step，不在 Worker 内等待
-timer 或执行文件 IO；facade 完成平台操作后再发送 `resume`。因此 Runtime 状态仍严格串行，WebView
-IPC 与日志、语言等只读 Host 查询不会被 Delay 或 Save IO 占住。TUI 本身是同步终端循环，但同样只
-通过 `PendingOperation` 完成平台动作，不把等待能力写进 RuntimeSession。
+## 命令与事务
 
-## 当前命令
+命令入口先校验当前是否允许新命令，或 resume/cancel 是否匹配挂起操作。
+被拒绝的命令不改变活动事务。执行链为：
 
-- `start`：启动当前单局 Session；首帧产生后再次启动会被拒绝；
-- `back`／`forward`：沿 Story 游标重放历史 Passage，不新增访问记录；
-- `activate`：激活上一份更新公开的 interaction；
-- `input`：提交上一份更新公开且校验通过的输入值；
-- `save`：Runtime 先准备拥有型平台请求；Host 只读写文件，Resume 后由 Session 验证、恢复并同步 Script State；
-- `selectLanguage`：产生平台挂起请求，Resume 后由 Session 原子提交 Script locale 与当前语言；
-- `resume`／`cancel`：以不透明 operation ID 恢复或取消挂起操作。
+```text
+command → checkpoint → execute → pending / commit / rollback
+```
 
-每条成功命令在呈现边界进入一次 Reaction 安全点：Runtime 排空作者 Event、比较命令前后的
-持久 State，顺序执行结构化效果，并把 Reaction `goto` 送回同一 Engine continuation 链。
-State Reaction 的 `before/after` 分别来自命令开始与安全点进入时的快照；它记录提交边界，
-不保存 setter 级变更日志。效果引发的新变化使用效果前后的快照继续下一轮。
-条件、效果、导航、恢复或 Script 同步失败时，State、Story、Reaction 状态、交互表和上一份
-可展示更新一起回滚；pending 期间检查点由 Session 持有，Host 不参与事务。
+`RuntimeTransaction` 整体保存完整 State 检查点、Story 快照、Reaction 次数状态、
+交互表、上一帧，以及 Reaction 比较基线和未完成输出。Pending 期间保留同一事务；
+Reaction 导航延续它，结算完成后一次释放。执行错误或取消恢复整个事务。
 
-命令集合只归纳现有能力，不增加新的作者 API。
+State 的两种快照有不同内容：`StateCheckpoint` 覆盖全部命名空间，用于短期回滚；
+`StateSnapshot` 只包含持久变量，用于历史、Save 和 Reaction 变化比较。
+Story 快照恢复时间线，但不回退身份分配高水位。
 
-RuntimeSession 的状态机测试直接替换 `ScriptAdapter`，覆盖未启动命令、挂起期拒绝新命令、
-operation mismatch 不丢失 continuation、cancel、再次 pending 以及特殊区域 pending。
+Core Engine 的检查点负责单条执行链；Session 事务还覆盖执行链完成后的 Reaction、
+特殊区域和呈现状态，不能把两者视为同一生命周期。特殊区域使用隔离的 State/Story 视图。
 
-每份 Ready 更新携带 `can_back`／`can_forward`。Tauri 据此启用侧栏历史按钮，TUI 使用
-`back`／`forward`（简写 `b`／`f`）；Host 不用浏览器或终端自己的历史代替 Story。
-历史命令会恢复目标记录进入前的 `$variables`，清空 `_temporary`，再通过同一 Engine 路径重放
-目标 Passage；`global`、`setup` 与脚本运行环境不随 Story 游标回退。
+Save Import 使用 Resume 的命令事务。失败先回滚，再通知 `Save.after`；允许作为 notice
+报告的失败继续从恢复后的状态结算。Input 的脚本存档请求额外携带原输入前 State 检查点：
+它跨越已经完成的输入命令，用于后续 IO 失败时撤销输入。该检查点从命令事务移交，不重复捕获。
+脚本 State API 直接访问活动 Rust State，没有 JS 变量镜像或同步步骤。
 
-## 挂起模型
+## Pending 与 Host
 
-`Host.delay`、Save 与语言选择共用一个 pending/resume 状态机。RuntimeSession 保存真实 Engine
-continuation和平台事务上下文；Protocol 只公开拥有型请求、operation ID 与完成结果。Host 不得持有
-或伪造 VM frame，也不能直接修改 State/Story。未来操作只能增加新的 tagged variant。
+- `continuations` 保存 Core 执行所有权，包含 VM frame、局部域及 Script 挂起凭据；
+- `pending` 表示等待 Host 的唯一操作，并记录恢复主链、特殊区域还是 Save/语言操作；
+- 操作元数据直接取自 continuation，不保留 `scheduled` 副本或独立 waiting 状态。
 
-## Canonical Script Contract
+Protocol 只公开 operation ID、请求和完成结果。Tauri facade 异步等待 timer 或文件 IO，
+完成后向 Worker 发送 Resume；TUI 同步完成相同操作。两端都不直接恢复 VM 或修改 State。
+语言刷新和 Import 重绘统一使用 `RefreshCurrent`，不增加同名历史重访。
 
-[`bindings/script-contract.json`](../../bindings/script-contract.json) 是作者脚本全局名称、内建事件和
-Surface builder 种类的 canonical 清单。`bun run contract:generate` 从中生成 Rust 名称目录和
-TypeScript 标签联合类型、Runtime command/update/pending/result/envelope 结构与协议版本；
-`bun run contract:check` 禁止生成物漂移。内部 Bootstrap 源码按职责位于
-`crates/narrava-loom-script/bootstrap/`；开发时由 Bun 打包为一个已提交的 IIFE，Rust 仅通过
-`include_str!` 在编译期嵌入该生成文件。最终 Runtime 仍由 Boa 执行 ECMAScript，不携带或调用 Bun。
-Bootstrap 读取同一 canonical 清单建立内建事件集合，并验证全部全局对象与 Surface builder 已真实安装。
+## 信任边界与验证
 
-Save 文件读写是 Host IO，但存档捕获、解析、兼容校验、State/Story 恢复和 Script 同步均在
-RuntimeSession 的恢复事务内完成。内部 `RuntimeServices` 只准备/应用 Core 数据，不执行文件选择和读写；
-直接 UI 操作与脚本请求进入同一命令流。
+用户交互身份和值、Host 完成结果、Script 返回值、Save 内容、资源路径与语言包仍严格校验。
+Session ID 的构造与反序列化使用同一规则。已安装 Boa slot、私有事务和已登记 continuation
+属于内部不变量；不再以可恢复错误重复检查。语言包格式校验与绑定当前 I18n 目录的校验保留，
+因为它们验证不同约束。
 
-## 本阶段不包含
+状态机测试使用真实 ECMAScript、编译管线和 RuntimeCommand，覆盖多次挂起、特殊区域、
+错误操作 ID、取消、可重试回滚、历史、Save round-trip、Host 失败及语言刷新。
 
-Godot Host、Python/Java Binding、新 Renderer、新 Host capability，以及二维坐标系统
-均不属于本阶段。
+## 契约生成
+
+Protocol Rust 数据声明是 wire 字段与 variant 的唯一来源。
+[`bindings/script-contract.json`](../../bindings/script-contract.json) 保存脚本全局、内建事件、
+Surface builder 名称与协议版本。`contract:generate` 从这两处生成 TypeScript DTO 和 Rust
+名称目录；`contract:check` 拒绝生成物漂移。生成器仅接受当前 DTO 使用的数据声明语法，
+遇到不支持的类型会失败。
+
+Bootstrap 的 TypeScript 源码位于 `crates/narrava-loom-script/bootstrap/`，由 Bun 在开发期
+打包为嵌入 Rust 的 ECMAScript。运行游戏时由 Boa 执行，不依赖 Bun。
