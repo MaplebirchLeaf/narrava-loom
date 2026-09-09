@@ -4,36 +4,10 @@
 // 供语义着色、跳转、补全与诊断使用。所有位置都相对源码起始偏移。
 
 // 内置宏名 → 形态：inline 原地展开 / container 包裹正文 / clause 分支子句。
-const BUILTIN_MACRO_KINDS = Object.freeze({
-  break: "inline",
-  capture: "container",
-  case: "clause",
-  continue: "inline",
-  default: "clause",
-  else: "clause",
-  elseif: "clause",
-  exit: "inline",
-  for: "container",
-  goto: "inline",
-  if: "container",
-  include: "inline",
-  link: "container",
-  print: "inline",
-  return: "inline",
-  run: "inline",
-  set: "inline",
-  silently: "container",
-  switch: "container",
-  unset: "inline",
-  while: "container",
-  widget: "container",
-  button: "container",
-  replace: "container",
-  slot: "container",
-  checkbox: "inline",
-  radiobutton: "inline",
-  textbox: "inline",
-})
+const { MACRO_APIS } = require("./macro-api")
+const BUILTIN_MACRO_KINDS = Object.freeze(
+  Object.fromEntries(Object.entries(MACRO_APIS).map(([name, api]) => [name, api.kind])),
+)
 // 内置宏名列表（BUILTIN_MACRO_KINDS 的键）。
 const BUILTIN_MACROS = Object.freeze(Object.keys(BUILTIN_MACRO_KINDS))
 // 特殊 Passage 名：正文进入固定区域，且不得带有 Tag。

@@ -16,9 +16,11 @@
 3. [Twee、选择、变量、条件和循环](writing-twee.md)：Passage、导航、变量、条件、循环与 Macro；
 4. [TypeScript/JavaScript、Macro 与 Resource](scripting-and-resources.md)：TS/JS、State、自定义 Macro、Surface、Resource 与 CSS；
 5. [Event](event.md)：作者事件、拉取订阅、Engine Passage 事件与 Reaction 事件链；
-6. [Story、Engine、Logger、I18n 与 Save](runtime-and-save.md)：重新开始、诊断、多语言与存档；
-7. [Reaction](reaction.md)：Event、State 与 lifecycle 的声明式叙事反应；
-8. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错。
+6. [Story、Engine、Logger 与 I18n](runtime-and-i18n.md)：重新开始、诊断与多语言；
+7. [Save](save.md)：保存范围、读写存档和处理结果；
+8. [Macro](macro.md)：原生宏、点击正文与内容复用；
+9. [Reaction](reaction.md)：Event、State 与 lifecycle 的声明式叙事反应；
+10. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错。
 
 精确的宏、内置函数、运算符和公开脚本 API 不在教程里重复维护，统一见
 [作者 API 与语法速查](../reference/api-and-syntax.md)。

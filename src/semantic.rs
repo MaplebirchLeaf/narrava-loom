@@ -427,7 +427,6 @@ pub enum SemanticNode {
     Image {
         resource: String,
         alt: TextValue,
-        caption: Option<TextValue>,
     },
     Region {
         region: RegionId,

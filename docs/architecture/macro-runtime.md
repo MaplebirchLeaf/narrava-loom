@@ -1,8 +1,8 @@
-# Macro
+# Macro 执行与所有权
 
 Macro 负责 Twee 中的叙事动作、控制流和作者扩展。Twee Parser 保留语法事实，HIR/MIR
 保留可执行语义，Runtime 所有 Definition、局部域、事务和 suspension。可用 Macro 及参数
-见 [API 与语法速查](../reference/api-and-syntax.md)。
+作者使用见 [Macro](../author/macro.md)，完整契约见 [API 与语法速查](../reference/api-and-syntax.md)。
 
 ## 定义与语法形状
 

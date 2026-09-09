@@ -7,7 +7,6 @@ interface SurfaceOptions {
   delay?: unknown
   heading?: unknown
   alt?: unknown
-  caption?: unknown
   role?: unknown
 }
 
@@ -35,7 +34,6 @@ export default function surface(): void {
         resource: String(resource),
         key: options.key,
         alt: options.alt ?? "",
-        caption: options.caption,
       }),
     region: (region: unknown, children: unknown[], options: SurfaceOptions = {}) =>
       surfaceNode("region", {

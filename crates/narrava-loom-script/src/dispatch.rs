@@ -19,8 +19,8 @@ use narrava_loom_core::{
     macro_runtime::{
         MacroDefinition, MacroDefinitions, MacroInteractions, MacroLocalScopes, MacroLogicContext,
         MacroResumeOutcome, MacroSuspension, RuntimeMacroHandler, button_with_body, checkbox,
-        link_with_body, parse_argument_list, prepare_argument_values, print, radiobutton, replace,
-        slot, textbox,
+        image, link_with_body, meter, parse_argument_list, prepare_argument_values, print,
+        radiobutton, replace, slot, textbox,
     },
     runtime::{BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeMacroExecution},
     semantic::{SemanticNode, SemanticOutput},
@@ -86,9 +86,9 @@ pub fn dispatch_macro<'hir, 'source>(
             });
         }
     };
-    if call.name == "print" {
+    if matches!(call.name, "print" | "image" | "meter") {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("print 参数无效：{error:?}"),
+            error: format!("{} 参数无效：{error:?}", call.name),
             scopes: scopes.clone(),
         })?;
         let arguments: Vec<Value> = {
@@ -97,11 +97,18 @@ pub fn dispatch_macro<'hir, 'source>(
                 evaluate_with_mut(expression, &mut context)
             })
             .map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("print 参数无法求值：{error:?}"),
+                error: format!("{} 参数无法求值：{error:?}", call.name),
                 scopes: scopes.clone(),
             })?
         };
-        let execution = print(&arguments).map_err(|error| EngineMirMacroCallbackFailure {
+        let execution: BodyExecution = (if call.name == "image" {
+            image(&arguments)
+        } else if call.name == "meter" {
+            meter(&arguments)
+        } else {
+            print(&arguments)
+        })
+        .map_err(|error| EngineMirMacroCallbackFailure {
             error: error.to_string(),
             scopes: scopes.clone(),
         })?;

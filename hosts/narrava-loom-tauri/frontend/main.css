@@ -344,12 +344,6 @@ nv-story figure[data-surface-type="image"] img {
   height: auto;
 }
 
-nv-story figure[data-surface-type="image"] figcaption {
-  margin-top: 0.4em;
-  color: var(--narrava-muted);
-  font-size: 0.875em;
-}
-
 #bar-surface:empty,
 #dialog-surface:empty {
   display: none;

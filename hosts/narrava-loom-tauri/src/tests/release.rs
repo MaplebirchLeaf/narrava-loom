@@ -990,3 +990,87 @@ fn host_theme_styles_every_surface_text_semantic() {
     assert!(css.contains("color: var(--narrava-color, var(--narrava-positive));"));
     assert!(css.contains("color: var(--narrava-color, var(--narrava-negative));"));
 }
+
+#[test]
+fn twee_image_reaches_protocol_with_resource_and_options() {
+    let repository: std::path::PathBuf = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root: String = format!("target/test-projects/twee-image-{}", std::process::id());
+    let root_path: &Path = Path::new(&root);
+    fs::create_dir_all(root_path.join("contents/story")).unwrap();
+    fs::copy(
+        repository.join("examples/config.toml"),
+        root_path.join("config.toml"),
+    )
+    .unwrap();
+    fs::write(
+        root_path.join("contents/story/main.twee"),
+        r#":: Start
+<<image "images/loom.svg">>
+<<set $portrait = "images/loom.svg">>
+<<image $portrait "森林">>
+"#,
+    )
+    .unwrap();
+    fs::create_dir_all(root_path.join("resources/images")).unwrap();
+    let image_bytes: Vec<u8> =
+        fs::read(repository.join("examples/resources/images/loom.svg")).unwrap();
+    fs::write(root_path.join("resources/images/loom.svg"), &image_bytes).unwrap();
+    let host: TauriHost = TauriHost::spawn(&root).unwrap();
+    let update: HostUpdateDto = block_on(host.start()).unwrap();
+    let images: Vec<(&str, &str)> = update
+        .nodes
+        .iter()
+        .filter_map(|node| match node {
+            HostNodeDto::Image { resource, alt, .. } => Some((resource.as_str(), alt.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        images,
+        vec![("images/loom.svg", ""), ("images/loom.svg", "森林")]
+    );
+    let response: tauri::http::Response<Vec<u8>> =
+        crate::resource_protocol::respond(&host.resources, "images/loom.svg");
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.body(), &image_bytes);
+    drop(host);
+    fs::remove_dir_all(root_path).unwrap();
+}
+
+#[test]
+fn twee_meter_reaches_the_existing_component_protocol() {
+    let root: String = format!("target/test-projects/twee-meter-{}", std::process::id());
+    let root_path: &Path = Path::new(&root);
+    fs::create_dir_all(root_path.join("contents/story")).unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/config.toml"),
+        root_path.join("config.toml"),
+    )
+    .unwrap();
+    fs::write(
+        root_path.join("contents/story/main.twee"),
+        ":: Start\n<<set $stamina = 72>>\n<<meter \"体力\" $stamina 0 100>>",
+    )
+    .unwrap();
+    let host: TauriHost = TauriHost::spawn(&root).unwrap();
+    let update: HostUpdateDto = block_on(host.start()).unwrap();
+    let properties: &serde_json::Value = update
+        .nodes
+        .iter()
+        .find_map(|node| match node {
+            HostNodeDto::Component {
+                capability,
+                version: 1,
+                properties,
+                ..
+            } if capability == "meter" => Some(properties),
+            _ => None,
+        })
+        .expect("原生 meter 应复用 component 协议");
+    assert_eq!(
+        properties,
+        &serde_json::json!({"label": "体力", "value": 72.0, "min": 0.0, "max": 100.0})
+    );
+    drop(host);
+    fs::remove_dir_all(root_path).unwrap();
+}

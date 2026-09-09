@@ -66,9 +66,6 @@ fn push_node(
             SemanticNode::Image {
                 resource,
                 alt: visible_text(optional_string(object, "alt")?.unwrap_or_default())?,
-                caption: optional_string(object, "caption")?
-                    .map(visible_text)
-                    .transpose()?,
             }
         }
         "region" => SemanticNode::Region {

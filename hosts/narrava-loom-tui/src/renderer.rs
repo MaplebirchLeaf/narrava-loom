@@ -397,7 +397,11 @@ impl TuiRenderer {
                         }
                         _ => (
                             render_dto_node(node, &mut self.interactions),
-                            TuiBlockPresentation::Plain,
+                            if matches!(node, HostNodeDto::Image { .. }) {
+                                TuiBlockPresentation::Panel
+                            } else {
+                                TuiBlockPresentation::Plain
+                            },
                             TuiBlockFlow::Stack,
                         ),
                     };
@@ -521,7 +525,11 @@ impl TuiRenderer {
                         }
                         _ => (
                             render_node(node, &mut self.interactions),
-                            TuiBlockPresentation::Plain,
+                            if matches!(node, SemanticNode::Image { .. }) {
+                                TuiBlockPresentation::Panel
+                            } else {
+                                TuiBlockPresentation::Plain
+                            },
                             TuiBlockFlow::Stack,
                         ),
                     };
@@ -660,18 +668,7 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
             heading,
             ..
         } => visible_lines(styled_dto(text.clone(), styles, *color, *heading)),
-        HostNodeDto::Image {
-            resource,
-            alt,
-            caption,
-            ..
-        } => vec![format!(
-            "[图像: {alt} <{resource}>{}]",
-            caption
-                .as_ref()
-                .map(|value| format!(" — {value}"))
-                .unwrap_or_default()
-        )],
+        HostNodeDto::Image { alt, .. } => panel_lines(vec![alt.clone()]),
         HostNodeDto::Container {
             presentation,
             nodes,
@@ -679,6 +676,22 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
         } => {
             let presentation: TuiBlockPresentation = (*presentation).into();
             presentation.render(render_dto_content(nodes, interactions))
+        }
+        HostNodeDto::Component {
+            capability,
+            version: 1,
+            properties,
+            ..
+        } if capability == "meter" => {
+            vec![render_meter(
+                properties
+                    .get("label")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(""),
+                properties.get("value").and_then(serde_json::Value::as_f64),
+                properties.get("min").and_then(serde_json::Value::as_f64),
+                properties.get("max").and_then(serde_json::Value::as_f64),
+            )]
         }
         HostNodeDto::Component { fallback, .. }
         | HostNodeDto::Region {
@@ -760,6 +773,28 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
     }
 }
 
+/// 十格字符条属于 TUI 表现；越界值保留文字，填充限制在量程内。
+fn render_meter(label: &str, value: Option<f64>, min: Option<f64>, max: Option<f64>) -> String {
+    let min: f64 = min.filter(|value| value.is_finite()).unwrap_or(0.0);
+    let max: f64 = max
+        .filter(|value| value.is_finite())
+        .unwrap_or(100.0)
+        .max(min);
+    let value: f64 = value.filter(|value| value.is_finite()).unwrap_or(min);
+    let scale: f64 = min.abs().max(max.abs()).max(1.0);
+    let fraction: f64 = if max > min {
+        (value.clamp(min, max) / scale - min / scale) / (max / scale - min / scale)
+    } else {
+        0.0
+    };
+    let filled: usize = (fraction * 10.0).round().clamp(0.0, 10.0) as usize;
+    format!(
+        "{label} {}{} {value}/{max}",
+        "█".repeat(filled),
+        "░".repeat(10 - filled)
+    )
+}
+
 pub(super) fn panel_lines(lines: Vec<String>) -> Vec<String> {
     let mut lines: Vec<String> = lines
         .into_iter()
@@ -798,23 +833,41 @@ fn join_blocks(blocks: &[TuiBlock], separator: &str) -> Vec<String> {
         .unwrap_or(0);
     (0..height)
         .map(|row| {
-            blocks
-                .iter()
-                .map(|block| {
-                    let width: usize = block
-                        .lines
-                        .iter()
-                        .map(|line| terminal_width(line))
-                        .max()
-                        .unwrap_or(0);
-                    block
-                        .lines
-                        .get(row)
-                        .cloned()
-                        .unwrap_or_else(|| " ".repeat(width))
-                })
-                .collect::<Vec<String>>()
-                .join(separator)
+            let mut line: String = String::new();
+            for block in blocks {
+                let width: usize = block
+                    .lines
+                    .iter()
+                    .map(|line| terminal_width(line))
+                    .max()
+                    .unwrap_or(0);
+                let cell: String = block
+                    .lines
+                    .get(row)
+                    .cloned()
+                    .unwrap_or_else(|| " ".repeat(width));
+                let junction: Option<char> = if separator.is_empty() {
+                    match (line.chars().last(), cell.chars().next()) {
+                        (Some('┐'), Some('┌')) => Some('┬'),
+                        (Some('│'), Some('│')) => Some('│'),
+                        (Some('┘'), Some('└')) => Some('┴'),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                if let Some(junction) = junction {
+                    line.pop();
+                    line.push(junction);
+                    line.push_str(&cell['│'.len_utf8()..]);
+                } else {
+                    if !line.is_empty() {
+                        line.push_str(separator);
+                    }
+                    line.push_str(&cell);
+                }
+            }
+            line
         })
         .collect()
 }
@@ -895,7 +948,7 @@ fn render_content(output: &SemanticOutput, interactions: &mut Vec<TuiInteraction
         .collect()
 }
 
-/// 渲染单个节点：文本/样式文本成行，图像转占位，Action/Input/Navigation/SafeReturn
+/// 渲染单个节点：文本/样式文本成行，图像以 alt 方框显示，Action/Input/Navigation/SafeReturn
 /// 收集为交互（不产出行）。
 fn render_node(node: &SemanticNode, interactions: &mut Vec<TuiInteraction>) -> Vec<String> {
     match node {
@@ -908,19 +961,28 @@ fn render_node(node: &SemanticNode, interactions: &mut Vec<TuiInteraction>) -> V
             heading,
             ..
         } => visible_lines(styled(unicode(text), styles, *color, *heading)),
-        SemanticNode::Image {
-            resource,
-            alt,
-            caption,
-        } => vec![format!(
-            "[图像: {} <{}>{}]",
-            unicode(alt),
-            resource,
-            caption
-                .as_ref()
-                .map(|value| format!(" — {}", unicode(value)))
-                .unwrap_or_default()
-        )],
+        SemanticNode::Image { alt, .. } => panel_lines(vec![unicode(alt)]),
+        SemanticNode::Component {
+            capability,
+            version: 1,
+            properties,
+            ..
+        } if capability.as_str() == "meter" => {
+            let number = |name: &str| match properties.get(name) {
+                Some(SemanticValue::Number(value)) => Some(*value),
+                _ => None,
+            };
+            let label: &str = match properties.get("label") {
+                Some(SemanticValue::Text(label)) => label,
+                _ => "",
+            };
+            vec![render_meter(
+                label,
+                number("value"),
+                number("min"),
+                number("max"),
+            )]
+        }
         SemanticNode::Component { fallback, .. } => render_content(fallback, interactions),
         SemanticNode::Container {
             presentation,

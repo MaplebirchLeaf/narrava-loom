@@ -146,7 +146,6 @@ Macro.add("statusCard", {
     Surface.image("images/hero.png", {
       key: "hero",
       alt: "站在森林入口的主角",
-      caption: "图片来自 Resource。",
     }),
   ),
 })
@@ -174,7 +173,7 @@ Surface.component(
 )
 ```
 
-Tauri 原生支持 `meter@1`。其他 Host 或未知版本显示 fallback。`properties` 只能包含有限纯数据，
+Tauri 将 `meter@1` 显示为图形状态条，TUI 显示字符状态条。未知能力或版本显示 fallback。`properties` 只能包含有限纯数据，
 不能放函数、DOM、Tauri 对象或循环引用。稳定 `key` 应描述同一逻辑节点；同一输出内重复 key
 会报错。完整可运行示例见 `examples` 的 `SurfaceGallery` Passage。
 

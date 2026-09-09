@@ -29,7 +29,7 @@ Oxc 只用于移除 TypeScript 类型语法。脚本通过受控 Adapter 访问 
 Reaction、Macro、Resource、I18n 和 Save。
 
 Twee 的 Parser、IR 与 VM 边界见 [Twee 编译器](twee.md)；Expression 与 Macro 分别见
-[Expression](expression.md) 和 [Macro](macro.md)。
+[Expression](expression.md) 和 [Macro](macro-runtime.md)。
 
 ## 项目输入
 
@@ -121,7 +121,7 @@ Surface 只表达文本、语义样式、区域、交互、稳定 Key 和替换�
 - Logger 保存结构化运行记录；Diagnostic 表达可定位的失败，两者不代替彼此。
 - I18n 选择属于 Runtime 执行上下文，不写入 State。
 
-Save 格式与恢复事务见 [Save](save.md)。
+Save 格式与恢复事务见 [Save](save-format.md)。
 
 ## 未实现范围
 

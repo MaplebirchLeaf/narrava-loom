@@ -61,3 +61,57 @@ assert.match(
 )
 
 console.log("Narrava Tauri palette and panel mapping verified")
+
+// 执行现有 Renderer 的 Image 分支，验证 Resource URL 与可变文字字段。
+const updateStart = source.indexOf("function updateSurfaceElement(element, node) {")
+const updateEnd = source.indexOf("\n}\n", updateStart) + 2
+const resourcePaths = []
+const updateImage = Function(
+  "urlForResourcePath",
+  `return (${source.slice(updateStart, updateEnd)})`,
+)((path) => {
+  resourcePaths.push(path)
+  return `narrava-resource://localhost/${path}`
+})
+const imageElement = {}
+const figure = {
+  querySelector: () => imageElement,
+}
+updateImage(figure, {
+  type: "image",
+  resource: "images/forest.png",
+  alt: "森林",
+})
+assert.deepEqual(resourcePaths, ["images/forest.png"])
+assert.equal(imageElement.src, "narrava-resource://localhost/images/forest.png")
+assert.equal(imageElement.alt, "森林")
+updateImage(figure, { type: "image", resource: "images/forest.png", alt: "" })
+assert.equal(imageElement.alt, "")
+
+const numberStart = source.indexOf("function finiteNumberOrFallback(")
+const numberEnd = source.indexOf("\n}", numberStart) + 2
+const updateMeter = Function(
+  "finiteNumberOrFallback",
+  `return (${source.slice(updateStart, updateEnd)})`,
+)(Function(`return (${source.slice(numberStart, numberEnd)})`)())
+const meterLabel = {}
+const meterElement = {
+  setAttribute(name, value) {
+    this[name] = value
+  },
+}
+const meterContainer = {
+  dataset: {},
+  querySelector: (selector) => (selector === "span" ? meterLabel : meterElement),
+}
+updateMeter(meterContainer, {
+  type: "component",
+  capability: "meter",
+  version: 1,
+  properties: { label: "体力", value: 72, min: 0, max: 100 },
+})
+assert.equal(meterLabel.textContent, "体力")
+assert.equal(meterElement.value, 72)
+assert.equal(meterElement.min, 0)
+assert.equal(meterElement.max, 100)
+assert.equal(meterElement["aria-label"], "体力")

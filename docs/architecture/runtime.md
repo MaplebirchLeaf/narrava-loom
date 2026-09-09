@@ -75,7 +75,7 @@ Story 的 Passage 名和 Tag 区分大小写。`request_goto()` 只验证目标�
 
 Macro 持有 Definition、Widget 正文和调用帧。嵌套 Widget 使用独立 `@args` 和局部域；
 `exit`、循环控制和 `goto` 只由各自最近的语义边界消费。普通字符串不会自动二次
-解析为 Twee；动态 Fragment 必须经过显式 Parser 入口。完整契约见 [Macro](macro.md) 与
+解析为 Twee；动态 Fragment 必须经过显式 Parser 入口。完整契约见 [Macro](macro-runtime.md) 与
 [Expression](expression.md)。
 
 `.ts/.js` 形成有序 `ScriptBundle`，由 `narrava-loom-script` 使用 Boa 执行，Oxc 移除
@@ -115,7 +115,7 @@ Resource 逻辑路径使用 `/`，拒绝绝对路径、空段、`.`、`..`、反
 Core 可延迟读取并缓存成功结果；URL、Blob、解码与 DOM 对象属于 Host。
 
 Save 捕获当前及历史 `$variables`、Story 时间线、Reaction 状态和游戏身份，编码为版本化
-二进制文档并原子恢复。格式与校验见 [Save](save.md)，翻译契约见 [I18n](i18n.md)。
+二进制文档并原子恢复。格式与校验见 [Save](save-format.md)，翻译契约见 [I18n](i18n.md)。
 模组组合尚未实现，不属于当前 Runtime API。
 
 ## VM 与 continuation

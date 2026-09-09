@@ -574,17 +574,13 @@ fn stowed_sidebar_renders_each_top_level_block_as_a_separate_cell() {
 
     assert_eq!(
         frame.bar_stowed,
-        [
-            "┌────┐┌────┐┌───┐",
-            "│ 雨 ││ 痛 ││ ! │",
-            "└────┘└────┘└───┘"
-        ]
+        ["┌────┬────┬───┐", "│ 雨 │ 痛 │ ! │", "└────┴────┴───┘"]
     );
 
     let mut output: Vec<u8> = Vec::new();
     write_frame(&mut output, &frame).unwrap();
     let output: String = String::from_utf8(output).unwrap();
-    assert!(output.contains("┌────┐┌────┐┌───┐"));
+    assert!(output.contains("┌────┬────┬───┐"));
     assert!(!output.contains("┌───────────────────────┐"));
 }
 
@@ -787,4 +783,66 @@ fn terminal_loop_is_operable_with_plain_stdin_and_stdout() {
     assert!(printed.contains("未知命令"));
     assert!(printed.contains("set <序号> <文字>"));
     assert!(activated);
+}
+
+#[test]
+fn image_renders_alt_in_a_box_in_semantic_and_protocol_frames() {
+    let output: SemanticOutput = SemanticOutput::from_nodes(vec![SemanticNode::Image {
+        resource: String::from("images/forest.png"),
+        alt: TextValue::from("森林"),
+    }]);
+    let mut renderer: TuiRenderer = TuiRenderer::default();
+    let frame: TuiFrame = renderer.render("Start", &output);
+    assert_eq!(frame.main, ["┌──────┐", "│ 森林 │", "└──────┘"]);
+    let update: narrava_loom_protocol::HostUpdateDto = narrava_loom_protocol::HostUpdateDto {
+        current: String::from("Start"),
+        can_back: false,
+        can_forward: false,
+        nodes: vec![narrava_loom_protocol::HostNodeDto::Image {
+            key: String::from("image"),
+            resource: String::from("images/forest.png"),
+            alt: String::from("森林"),
+        }],
+    };
+    assert_eq!(renderer.render_update(&update).main, frame.main);
+}
+
+#[test]
+fn meter_component_renders_the_same_numeric_bar_from_core_and_protocol() {
+    use narrava_loom_core::expression::value::Value;
+    for (value, min, max, expected) in [
+        (72.0, 0.0, 100.0, "体力 ███████░░░ 72/100"),
+        (15.0, 10.0, 20.0, "体力 █████░░░░░ 15/20"),
+        (120.0, 0.0, 100.0, "体力 ██████████ 120/100"),
+        (-1.0, 0.0, 100.0, "体力 ░░░░░░░░░░ -1/100"),
+    ] {
+        let output: SemanticOutput = narrava_loom_core::macro_runtime::meter(&[
+            Value::string("体力"),
+            Value::Number(value),
+            Value::Number(min),
+            Value::Number(max),
+        ])
+        .unwrap()
+        .output;
+        let update: narrava_loom_protocol::HostUpdateDto = narrava_loom_protocol::HostUpdateDto {
+            current: String::from("Start"),
+            can_back: false,
+            can_forward: false,
+            nodes: vec![narrava_loom_protocol::HostNodeDto::Component {
+                key: String::from("stamina"),
+                capability: String::from("meter"),
+                version: 1,
+                properties: serde_json::json!({"label": "体力", "value": value, "min": min, "max": max}),
+                fallback: vec![],
+            }],
+        };
+        assert_eq!(
+            TuiRenderer::default().render("Start", &output).main,
+            [expected]
+        );
+        assert_eq!(
+            TuiRenderer::default().render_update(&update).main,
+            [expected]
+        );
+    }
 }

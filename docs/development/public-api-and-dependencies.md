@@ -30,3 +30,20 @@ microtask；`Host.delay(ms)` 则建立真实 Core suspension，由 Rust Worker �
 - 更新 lockfile 必须是有意的依赖更新，不应成为普通构建的副作用。
 
 仓库标准检查见[仓库命令](commands.md)。
+
+## 统一版本与提交
+
+根 `Cargo.toml` 的 package.version 是项目版本来源。五个 Rust crate、根 package.json、
+作者 TypeScript 包、VS Code 扩展与 Tauri 配置保持相同版本；`bun run check` 会检查一致性。
+
+每次提交前按变更性质递增语义化版本：修复用 patch，新增兼容能力用 minor；
+0.x 阶段的破坏性 API 变化也递增 minor，1.x 起使用 major。不要分别修改包版本。
+
+```bash
+bun run version:bump patch
+# 或 minor / major
+```
+
+命令会同步所有项目包版本并刷新 Cargo/Bun 锁文件。仅修正已有版本漂移使用
+`bun run version:sync`，它不替代提交前的版本递增。
+示例游戏版本与语言包兼容范围属于游戏内容身份，不随引擎包自动升级；修改它们时需配套验证存档与语言包。

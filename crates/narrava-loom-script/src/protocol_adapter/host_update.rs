@@ -60,15 +60,10 @@ fn convert_output(output: &SemanticOutput, scope: &str) -> Vec<HostNodeDto> {
                     delay: *delay,
                     heading: heading.map(HeadingLevel::level),
                 },
-                SemanticNode::Image {
-                    resource,
-                    alt,
-                    caption,
-                } => HostNodeDto::Image {
+                SemanticNode::Image { resource, alt } => HostNodeDto::Image {
                     key,
                     resource: resource.clone(),
                     alt: unicode(alt),
-                    caption: caption.as_ref().map(unicode),
                 },
                 SemanticNode::Region { region, content } => HostNodeDto::Region {
                     nodes: convert_output(content, &key),

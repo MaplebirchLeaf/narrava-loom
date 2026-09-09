@@ -1,7 +1,7 @@
 {
   "name": "narrava-loom-twee",
   "displayName": "Narrava Loom Twee",
-  "version": "0.5.1",
+  "version": "0.7.0",
   "description": "Narrava Loom .twee language highlighting and editing support",
   "categories": [
     "Programming Languages"
@@ -22,7 +22,7 @@
   ],
   "main": "./extension.js",
   "scripts": {
-    "test": "node tests/catalog.mjs && node tests/verify.mjs"
+    "test": "node tests/catalog.mjs && node tests/verify.mjs && node tests/providers.mjs"
   },
   "devDependencies": {
     "vscode-oniguruma": "^2.0.1",

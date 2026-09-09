@@ -2,6 +2,15 @@
 
 本文件只记录使用者能够观察到的版本变化，不复制提交日志。
 
+## 0.7.0 - 2026-09-09
+
+- Twee 新增原生 `image` Macro，复用 Resource 与 Image 语义链，支持表达式路径与位置参数 alt；Tauri 显示图片，TUI 将 alt 显示在方框内。
+- **不兼容变化**：Image 的 Semantic、Protocol 与 `Surface.image` 选项移除 caption；作者改用 `<<image "images/tree.png" "树">>`，说明正文单独编写。
+- 原生 `meter` Macro 复用 meter@1 component，TUI 显示十格字符条，Tauri 显示图形状态条。
+- TUI 收起侧栏相邻方格共享边框；VS Code 扩展为原生宏提供悬停及补全说明，分隔符保留原有 TextMate scope。
+- 作者 Macro/Save 使用手册与内部执行/格式文档分离；dialog/page 尚未实现，单独保留设计与验收要求。
+- Cargo、package.json 与 Tauri 版本联动升级，并纳入检查命令。
+
 ## 0.6.0 - 2026-09-07
 
 - Rust Host 直接驱动 `RuntimeSession`；移除 `RuntimeSessionDriver`、`RuntimeSessionHandle`、`ScriptAdapter` 及未接入执行链的 Core Script 门面。Save/I18n 构造改用 `RuntimeData` 与 `with_data`。

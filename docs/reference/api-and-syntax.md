@@ -28,6 +28,8 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `unset` | `<<unset $name>>` | 删除可写目标 |
 | `run` | `<<run expression>>` | 求值并丢弃结果，保留副作用 |
 | `print` | `<<print expression [color] [style...]>>` 或 `<<print expression {color, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、color、delay 与结构性标题的 StyledText |
+| `meter` | `<<meter "体力" $stamina 0 100>>` | label、value、min、max；有限数值且 min < max；复用 meter@1 component，TUI 字符条、Tauri 图形条 |
+| `image` | `<<image "img/tree.png" "树">>` | 用 Resource 逻辑路径输出图片；alt 为可选字符串，路径支持 Expression；Tauri 显示图片，TUI 将 alt 显示在方框中 |
 | `include` | `<<include "Passage">>` | 在当前位置执行另一 Passage，不发生导航 |
 | `goto` | `<<goto "Passage">>` | 请求导航并停止当前 Passage |
 | `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
@@ -200,7 +202,7 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 
 - `text(text, { key?, styles?, color?, delay?, heading? })`
 - `hardBreak()`
-- `image(resource, { key?, alt?, caption? })`
+- `image(resource, { key?, alt? })`
 - `region(region, children, { key? })`
 - `component(capability, version, properties, fallback, { key? })`
 - `action(label, "dismiss", { key?, role? })`
@@ -288,3 +290,26 @@ Tag、Macro、Expression 函数、变量、注释、链接和插值，并提供�
 
 语言服务会从内置表、跨文件 Widget 和脚本 `Macro.add/update()` 的 `body` 字段区分 Inline 与
 Container：Inline 出现闭合标签、Container 缺少或错配闭合标签都会产生诊断。
+
+### 原生图片 Macro
+
+```twee
+<<image "img/tree.png" "树">>
+<<image $portrait $name>>
+```
+
+路径相对于 Resource 目录，例如 `resources/img/tree.png`。
+不接受绝对路径、父目录跳转、盘符或 URL。alt 为可选字符串，默认为空。
+Tauri 通过现有 Resource 协议显示图片；TUI 将 alt 放进方框，不显示路径。
+图片不提供 caption 字段，说明正文可单独使用 `print`。
+
+### 原生状态条 Macro
+
+```twee
+<<meter "体力" $stamina 0 100>>
+```
+
+四个参数都必填，label 必须是字符串，其余参数必须是有限数值，且 min < max。
+值可以超出量程：保留原值，Host 将填充限制在空条与满条之间。
+宏复用 `Surface.component("meter", 1, {label, value, min, max}, fallback)` 的现有语义链，
+不另设 Meter 类型。TUI 使用十格字符条；Tauri 使用图形条，外观由 Host/CSS 决定。

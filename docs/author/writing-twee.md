@@ -146,7 +146,7 @@
 
 可用控制包括 `for`、`while`、`break`、`continue`、`switch`、`include`、`goto`、`run`、
 `silently`、`exit`、Widget 和 `capture`。精确参数与作用域见
-[/docs/architecture/macro.md](/docs/architecture/macro.md)。
+[Macro 执行与所有权](/docs/architecture/macro-runtime.md)。
 
 ## `silently` 到底做什么
 

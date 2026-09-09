@@ -119,13 +119,12 @@ declare global {
     ): NarravaSurfaceNode
     /** 插入一个结构性硬换行。硬换行没有内容或稳定身份，因此不接受参数。 */
     hardBreak(): NarravaSurfaceNode
-    /** 引用 Resource 逻辑路径的图片；alt/caption 可选。 */
+    /** 引用 Resource 逻辑路径的图片；alt 可选。 */
     image(
       resource: string,
       options?: {
         readonly key?: string
         readonly alt?: string
-        readonly caption?: string
       },
     ): NarravaSurfaceNode
     /** 把子节点放入开放逻辑区域；内建值包括 main/header/footer/bar/bar-stowed/dialog。 */

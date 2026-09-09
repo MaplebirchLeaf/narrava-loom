@@ -501,8 +501,7 @@
       image: (resource, options = {}) => surfaceNode("image", {
         resource: String(resource),
         key: options.key,
-        alt: options.alt ?? "",
-        caption: options.caption
+        alt: options.alt ?? ""
       }),
       region: (region, children, options = {}) => surfaceNode("region", {
         region,

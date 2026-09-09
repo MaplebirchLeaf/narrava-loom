@@ -1,4 +1,4 @@
-# Story、Engine、Logger、I18n 与 Save
+# Story、Engine、Logger 与 I18n
 
 ## Story、Engine 与重新开始
 
@@ -73,41 +73,6 @@ const templateJson = I18n.export()
 
 详细格式见 [/docs/architecture/i18n.md](/docs/architecture/i18n.md)。
 
-## Save 存档
+## 存档
 
-进入存档：`$` 变量、Story 历史以及 Core 规定的数据。
-不进入存档：`_` 临时变量、`@` 局部变量、脚本函数、DOM、Blob URL、平台对象。
-
-Core 已实现存档捕获、校验和恢复模型。声明文件包含：
-
-```ts
-const json = Save.capture()
-Save.restore(json)
-Save.export()
-Save.import()
-```
-
-Save 生命周期 Hook：
-
-```ts
-const beforeExport = Save.before("export", ({ target }) => {
-  Logger.info("save", `准备导出到 ${target}`)
-  return target === "quick" ? "quick-backup" : undefined
-})
-
-const afterExport = Save.after("export", completion => {
-  if (completion.succeeded) Logger.info("save", "导出完成")
-  else Logger.error("save", completion.error ?? "导出失败")
-})
-
-Save.off(beforeExport)
-Save.off(afterExport)
-```
-
-支持 `capture/restore/export/import` 四种 operation。before 按登记顺序执行；export/import 的
-before 可以返回新字符串改写 Host target。after 只在操作取得真实完成结果后执行，不能把失败
-改成成功。capture/restore 在 Worker 内同步完成；export/import 由 Tauri Host 写入或读取游戏
-目录中的 `save/<target>.nsave`，磁盘操作完成后才触发 after。target 只允许 1 至 80 个 ASCII
-字母、数字、`-` 或 `_`，所以不能借此访问 `save/` 外的文件。
-
-详细边界见 [/docs/architecture/save.md](/docs/architecture/save.md)。
+存读档用法、保存范围与失败处理见 [Save](save.md)。

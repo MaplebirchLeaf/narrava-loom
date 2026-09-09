@@ -268,7 +268,7 @@ function createSurfaceElement(node) {
     element = document.createElement("br")
   } else if (node.type === "image") {
     element = document.createElement("figure")
-    element.append(document.createElement("img"), document.createElement("figcaption"))
+    element.append(document.createElement("img"))
   } else if (node.type === "component") {
     element = document.createElement("section")
     if (node.capability === "meter" && node.version === 1) {
@@ -397,11 +397,8 @@ function updateSurfaceElement(element, node) {
   }
   if (node.type === "image") {
     const image = element.querySelector("img")
-    const caption = element.querySelector("figcaption")
     image.src = urlForResourcePath(node.resource)
     image.alt = node.alt
-    caption.textContent = node.caption ?? ""
-    caption.hidden = node.caption === null
     return
   }
   if (node.type === "component") {

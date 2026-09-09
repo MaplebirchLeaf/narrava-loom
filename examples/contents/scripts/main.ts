@@ -232,7 +232,6 @@ Macro.add("surfaceDemo", {
       Surface.image("images/loom.svg", {
         key: "loom-image",
         alt: "由经纬线组成的 Narrava Loom 示意图",
-        caption: "图片由 Resource 逻辑路径加载。",
       }),
       Surface.component(
         "future-card",

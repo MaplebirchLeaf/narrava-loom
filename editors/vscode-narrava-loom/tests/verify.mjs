@@ -51,7 +51,10 @@ function scopesFor(line, text) {
 
 assert.equal(manifest.engines.vscode.startsWith("^"), true)
 assert.equal(manifest.main, "./extension.js")
-assert.equal(manifest.version, "0.5.1")
+assert.equal(
+  manifest.version,
+  JSON.parse(await readFile(new URL("package.json", repository), "utf8")).version,
+)
 assert.ok(manifest.files.includes("references/**"))
 assert.deepEqual(manifest.contributes.languages[0].extensions, [".twee"])
 assert.equal(manifest.contributes.grammars[0].scopeName, "source.narrava-twee")
@@ -85,8 +88,6 @@ for (const token of [
   "punctuation.definition.template-expression.begin.narrava-twee",
   "punctuation.section.embedded.begin.narrava-twee",
   "punctuation.section.embedded.end.narrava-twee",
-  "punctuation.definition.tag.begin.narrava-twee",
-  "punctuation.definition.tag.end.narrava-twee",
   "support.type.passage-tag",
 ]) {
   assert.ok(serialized.includes(token), `grammar should cover ${token}`)
@@ -121,19 +122,13 @@ assert.equal(
 )
 assert.equal(grammar.repository.link.match.includes("->"), false)
 assert.equal(grammar.repository.link.match.includes("<-"), false)
-assert.equal(
-  grammar.repository.macro.beginCaptures["1"].name,
-  "punctuation.definition.tag.begin.narrava-twee",
-)
+assert.equal(scopeFor("<<print>>", "<<"), "punctuation.definition.tag.begin.narrava-twee")
+assert.equal(scopeFor("<<print>>", ">>"), "punctuation.definition.tag.end.narrava-twee")
 assert.equal(
   grammar.repository.macro.beginCaptures["2"].name,
   "punctuation.definition.tag.begin.narrava-twee",
 )
-assert.equal(grammar.repository.macro.beginCaptures["3"].name, "meta.identifier.macro.narrava-twee")
-assert.equal(
-  grammar.repository.macro.endCaptures["1"].name,
-  "punctuation.definition.tag.end.narrava-twee",
-)
+assert.equal(scopeFor('<<print "文字">>', '"'), "punctuation.definition.string.begin.narrava-twee")
 assert.equal(
   grammar.repository.interpolation.beginCaptures["1"].name,
   "punctuation.definition.template-expression.begin.narrava-twee",

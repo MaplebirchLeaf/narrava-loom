@@ -120,7 +120,7 @@ Mod 继续修改 Core 可理解的 Source、AST/IR、资源身份和语义配置
 首个真实 Host 选择 Tauri。Rust 后端把 Surface 转为带 key 的 DTO；WebView 按 key
 协调现有 DOM，不再在每次更新时清空 Passage。Renderer 将语义文本映射为原生 `em`、`strong`、
 `code`、`q`、`mark`、`ins`、`del`、`small` 等元素，将 Region 路由到稳定插槽，将 Image 映射为
-`figure/img/figcaption`。当前原生支持 `meter@1` Component；未知 capability/version 必须渲染
+`figure/img`。当前原生支持 `meter@1` Component；未知 capability/version 必须渲染
 fallback。WebView 的 HTML、CSS 和 DOM 实现始终只属于 Tauri Host。
 
 ## Host 契约

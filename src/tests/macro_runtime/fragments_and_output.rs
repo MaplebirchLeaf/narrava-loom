@@ -428,3 +428,79 @@ fn input_builtins_create_state_bound_semantic_controls() {
         }
     ));
 }
+
+#[test]
+fn image_uses_existing_semantics_and_rejects_non_resource_paths() {
+    let execution: BodyExecution =
+        crate::macro_runtime::image(&[Value::string("images/forest.png")]).unwrap();
+    assert_eq!(
+        execution.output.nodes(),
+        [SemanticNode::Image {
+            resource: String::from("images/forest.png"),
+            alt: TextValue::from(""),
+        }]
+    );
+    for path in [
+        "",
+        "/tmp/forest.png",
+        "../forest.png",
+        "images/../forest.png",
+        "C:/forest.png",
+        "C:\\forest.png",
+        "https://example.com/forest.png",
+    ] {
+        let error: Diagnostic = crate::macro_runtime::image(&[Value::string(path)]).unwrap_err();
+        assert_eq!(error.code, "macro.image.invalid_arguments");
+        assert!(!error.message.contains(path) || path.is_empty());
+    }
+    for arguments in [
+        vec![],
+        vec![Value::Number(1.0)],
+        vec![
+            Value::string("images/a.png"),
+            Value::object(vec![(String::from("alt"), Value::Number(1.0))]),
+        ],
+        vec![
+            Value::string("images/a.png"),
+            Value::object(vec![(String::from("width"), Value::Number(100.0))]),
+        ],
+    ] {
+        assert!(crate::macro_runtime::image(&arguments).is_err());
+    }
+}
+
+#[test]
+fn meter_rejects_invalid_numeric_ranges() {
+    for arguments in [
+        vec![],
+        vec![
+            Value::string("体力"),
+            Value::Number(f64::NAN),
+            Value::Number(0.0),
+            Value::Number(100.0),
+        ],
+        vec![
+            Value::string("体力"),
+            Value::Number(72.0),
+            Value::Number(100.0),
+            Value::Number(0.0),
+        ],
+        vec![
+            Value::string("体力"),
+            Value::Number(72.0),
+            Value::Number(0.0),
+            Value::Number(0.0),
+        ],
+        vec![
+            Value::string("体力"),
+            Value::Number(72.0),
+            Value::Number(0.0),
+            Value::Number(f64::INFINITY),
+        ],
+    ] {
+        assert_eq!(
+            crate::macro_runtime::meter(&arguments).unwrap_err().code,
+            "macro.meter.invalid_arguments"
+        );
+    }
+}

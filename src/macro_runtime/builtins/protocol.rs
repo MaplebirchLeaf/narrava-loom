@@ -20,6 +20,86 @@ use crate::{
     },
 };
 
+/// 使用 Resource 逻辑路径生成现有 Image 语义，资源读取由 Host 完成。
+pub fn image(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
+    let invalid: fn() -> Diagnostic = || {
+        Diagnostic::new(
+            "macro.image.invalid_arguments",
+            DiagnosticSeverity::Error,
+            "`image` 需要 Resource 逻辑路径和可选的 alt 字符串",
+        )
+    };
+    if arguments.is_empty() || arguments.len() > 2 {
+        return Err(invalid());
+    }
+    let Value::String(resource) = &arguments[0] else {
+        return Err(invalid());
+    };
+    let resource: String = resource.to_unicode_string().ok_or_else(invalid)?;
+    let path: crate::resource::ResourcePath =
+        crate::resource::ResourcePath::parse(&resource).map_err(|_| invalid())?;
+    // Resource 逻辑路径不携带盘符或 URI scheme。
+    if resource.contains(':') {
+        return Err(invalid());
+    }
+    let alt: TextValue = match arguments.get(1) {
+        None => TextValue::from(""),
+        Some(Value::String(alt)) => alt.clone(),
+        _ => return Err(invalid()),
+    };
+    Ok(BodyExecution {
+        control: BodyControl::Continue,
+        output: SemanticOutput::from_nodes(vec![SemanticNode::Image {
+            resource: path.as_str().to_owned(),
+            alt,
+        }]),
+    })
+}
+
+/// 原生状态条只提供数值语义，复用已有 meter@1 component。
+pub fn meter(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
+    let invalid: fn() -> Diagnostic = || {
+        Diagnostic::new(
+            "macro.meter.invalid_arguments",
+            DiagnosticSeverity::Error,
+            "`meter` 需要 label、value、min、max；label 必须是字符串，数值必须有限且 min < max",
+        )
+    };
+    let [
+        Value::String(label),
+        Value::Number(value),
+        Value::Number(min),
+        Value::Number(max),
+    ] = arguments
+    else {
+        return Err(invalid());
+    };
+    if !value.is_finite() || !min.is_finite() || !max.is_finite() || min >= max {
+        return Err(invalid());
+    }
+    let label: String = label.to_unicode_string().ok_or_else(invalid)?;
+    let fallback: SemanticOutput = SemanticOutput::from_nodes(vec![SemanticNode::Text(
+        TextValue::from(format!("{label} {value}/{max}")),
+    )]);
+    let properties: std::collections::BTreeMap<String, SemanticValue> = [
+        (String::from("label"), SemanticValue::Text(label)),
+        (String::from("value"), SemanticValue::Number(*value)),
+        (String::from("min"), SemanticValue::Number(*min)),
+        (String::from("max"), SemanticValue::Number(*max)),
+    ]
+    .into_iter()
+    .collect();
+    Ok(BodyExecution {
+        control: BodyControl::Continue,
+        output: SemanticOutput::from_nodes(vec![SemanticNode::Component {
+            capability: crate::semantic::ComponentCapability::parse("meter").expect("固定能力名"),
+            version: 1,
+            properties,
+            fallback,
+        }]),
+    })
+}
+
 /// 从 Twee `<<print value options?>>` 求值并入 Passage 输出；带选项时产生 StyledText。
 ///
 /// 单参数（无样式选项）输出纯 Text，与编译器固有 `<<print expression>>` 一致；

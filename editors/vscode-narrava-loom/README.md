@@ -5,7 +5,8 @@
 关键字、Macro 结构和诊断只依据 Narrava Core 当前已实现契约；TextMate scope 使用通用命名，
 以适配常见 VS Code 主题。
 
-Expression 原生函数和方法支持悬停查看签名与用途。按住 `Ctrl`
+原生宏（包括 `print`、`image`、`slot` 等）支持悬停查看语法与用途，宏名补全同步展示说明。
+Expression 原生函数和方法也支持悬停查看签名与用途。按住 `Ctrl`
 并左键单击（macOS 为 `Cmd+单击`）会跳到扩展随附的
 [`narrava-expression.d.ts`](references/narrava-expression.d.ts) 精确声明。该 DTS 只描述
 Twee Expression，不会把这些名称伪装成 JavaScript 全局 API。
@@ -27,8 +28,8 @@ Twee Expression，不会把这些名称伪装成 JavaScript 全局 API。
 Widget 的规范定义形式是 `<<widget "name">>`：定义位置的 `"name"` 保持字符串色；
 工作区内已定义的 `<<name>>` 会获得紫色语义高亮。扩展会扫描 `.twee` 中的 Widget，
 以及 `.js`/`.ts` 中的 `Macro.add()`、`Macro.update()`；未定义的 Macro 保持中性色并报告错误。
-因此一个文件定义、另一个文件调用也能识别。Macro 的 `<<`、`/`、`>>` 复用 HTML
-标签的 `punctuation.definition.tag` 边界 scope，与 `</...>` 一样渲染为灰色标点；
+因此一个文件定义、另一个文件调用也能识别。Macro 的 `<<`、`/`、`>>` 使用原有的 `punctuation.definition.tag` 标点着色；
+宏名、参数和字符串仍保留各自的高亮。
 反引号字符串内 `${` 的 `$` 使用模板插值起始色，`{`/`}` 使用嵌入区域边界色，
 不再与 `$hero` 混在一起，也不会作为普通运算符显示成白色。
 变量链也按语义拆开：`$hero`、`setup` 是变量根，`.` 是访问符，`profile`、`build`

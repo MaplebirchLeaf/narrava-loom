@@ -74,7 +74,7 @@
 
 :: TextGallery [reference]
 这是由 print Macro 提供的 Twee 内 Surface：内容 + 可选 color + 零到多个 style，<br>
-不需要写脚本。结构化的 Region、Component、图片与 Dialog 仍需在 scripts 中构建。<br>
+不需要写脚本。图片和状态条可用原生 image、meter 宏；Region 与当前 Dialog 示例使用 scripts 构建。<br>
 
 <br>标准调色板是 0..=63：0-7 是默认色与灰阶，8-63 是红到深紫的色谱。<br>
 8-63 是光谱（红8→橙16→黄24→绿32→蓝40→紫48→深紫56→63，每色相 8 级）；0 为正文默认。<br>

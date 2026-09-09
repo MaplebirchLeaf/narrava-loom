@@ -100,7 +100,6 @@ pub enum HostNodeDto {
         key: String,
         resource: String,
         alt: String,
-        caption: Option<String>,
     },
     /// 将子节点路由到具名 Host 区域。
     Region {

@@ -10,7 +10,7 @@ Twee 编译器只负责叙事源码，不处理 State、Macro 注册表、JavaSc
 
 编译器保留普通全局名称及 `$`、`_`、`@`、`setup` 等引用形式；运行时再分别交给 `State.global`、`State.variables`、`State.temporary`、Macro 局部域和 `State.setup` 解析。编译器不会读取脚本模块的 `export` 或 `import` 来推断 Twee 环境。
 
-Macro 结构与 Expression 细节分别见 [/docs/architecture/macro.md](/docs/architecture/macro.md) 和 [/docs/architecture/expression.md](/docs/architecture/expression.md)。
+Macro 结构与 Expression 细节分别见 [Macro 执行与所有权](/docs/architecture/macro-runtime.md) 和 [/docs/architecture/expression.md](/docs/architecture/expression.md)。
 
 ```text
 Twee Source

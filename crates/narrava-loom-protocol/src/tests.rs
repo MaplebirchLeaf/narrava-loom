@@ -175,7 +175,6 @@ fn surface_node_discriminators_match_the_canonical_contract() {
             key: key(),
             resource: text.clone(),
             alt: text.clone(),
-            caption: None,
         },
         HostNodeDto::Region {
             key: key(),

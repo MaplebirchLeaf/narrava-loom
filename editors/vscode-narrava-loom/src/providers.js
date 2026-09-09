@@ -1,10 +1,11 @@
 "use strict"
 
 // VSCode Language Provider：语义着色（已知宏、特殊 Passage）、跳转
-// （链接→Passage、函数调用→函数定义、宏调用→宏定义）与宏名补全。
+// （链接→Passage、函数调用→函数定义、宏调用→宏定义）、悬停与宏名补全。
 
 const vscode = require("vscode")
 const { scanTwee } = require("./catalog")
+const { MACRO_APIS } = require("./macro-api")
 const { readFileSync } = require("node:fs")
 const path = require("node:path")
 const { resolveExpressionApis } = require("./expression-api")
@@ -20,7 +21,7 @@ const legend = new vscode.SemanticTokensLegend(["keyword", "type"])
 function callAt(document, position) {
   const offset = document.offsetAt(position)
   return scanTwee(document.getText()).calls.find(
-    (call) => offset >= call.start && offset <= call.start + call.length,
+    (call) => offset >= call.start && offset < call.start + call.length,
   )
 }
 
@@ -36,7 +37,7 @@ function passageLinkAt(document, position) {
 function functionCallAt(document, position) {
   const offset = document.offsetAt(position)
   return scanTwee(document.getText()).functionCalls.find(
-    (call) => offset >= call.start && offset <= call.start + call.length,
+    (call) => offset >= call.start && offset < call.start + call.length,
   )
 }
 
@@ -56,10 +57,30 @@ function expressionDefinitionOffset(api) {
   return relative === undefined ? -1 : section + relative
 }
 
-/** 为 Twee Expression 原生函数/方法提供签名与用途说明。 */
+/** 悬停与补全使用相同的原生宏说明。 */
+function macroDocumentation(api) {
+  const markdown = new vscode.MarkdownString()
+  markdown.appendCodeblock(api.signature, "narrava-twee")
+  markdown.appendMarkdown(api.description)
+  return markdown
+}
+
+/** 为原生宏及 Expression 函数/方法提供语法与用途说明。 */
 function hoverProvider() {
   return {
     provideHover(document, position) {
+      const macro = callAt(document, position)
+      const macroApi =
+        macro && Object.hasOwn(MACRO_APIS, macro.name) ? MACRO_APIS[macro.name] : undefined
+      if (macroApi) {
+        return new vscode.Hover(
+          macroDocumentation(macroApi),
+          new vscode.Range(
+            document.positionAt(macro.start),
+            document.positionAt(macro.start + macro.length),
+          ),
+        )
+      }
       const call = functionCallAt(document, position)
       if (!call) return undefined
       const apis = resolveExpressionApis(call.name)
@@ -157,9 +178,14 @@ function definitionProvider(workspace) {
 function completionProvider(workspace) {
   return {
     provideCompletionItems() {
-      return [...workspace.known]
-        .toSorted()
-        .map((name) => new vscode.CompletionItem(name, vscode.CompletionItemKind.Function))
+      return [...workspace.known].toSorted().map((name) => {
+        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Function)
+        if (Object.hasOwn(MACRO_APIS, name)) {
+          item.detail = "Narrava 原生宏"
+          item.documentation = macroDocumentation(MACRO_APIS[name])
+        }
+        return item
+      })
     },
   }
 }

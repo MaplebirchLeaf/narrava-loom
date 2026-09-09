@@ -1,8 +1,10 @@
-# Narrava Save
+# Save 格式与恢复事务
 
 > 状态：Core 文档、Host 请求与生命周期边界已实现
 >
 > 更新日期：2026-09-01
+
+本文面向 Core 与 Host 开发者；作者用法见 [Save](../author/save.md)。
 
 ## 边界
 
