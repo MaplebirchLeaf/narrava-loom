@@ -1,94 +1,44 @@
 # Narrava Loom
 
-Narrava Loom 是以 Rust 实现、与宿主平台无关的叙事编译与运行核心。它负责 Twee 编译、
-Expression、Macro、State、Story、I18n、Save、VM 和事务化 Engine；画面、输入、文件选择与
-平台对象由 Tauri、Godot 或其他 Host 负责。官方 Tauri Host 位于 `hosts/narrava-loom-tauri`：
-桌面入口可运行和发行，移动端目前只完成共享入口与布局基础；
-游戏交付物是可移动的 `NarravaGame/` 目录，不要求作者维护 Rust 源码。文档从
-[文档总入口](docs/README.md) 开始。
+Narrava Loom 是以 Rust 实现、与宿主平台无关的叙事编译与运行核心。Core 负责 Twee 编译、
+表达式、状态、历史与事务；官方 Tauri 和 TUI Host 负责画面、输入、音频与平台 IO。
+游戏作者编写 Twee 和 TypeScript/JavaScript，交付可移动的 `NarravaGame/` 目录，无需维护 Rust 源码。
 
-当前版本为 `0.5.3`：可构建、可测试的开发基线。它用于继续完善引擎和 Host，尚不承诺
-面向最终游戏作者的稳定兼容性。版本变化见 [CHANGELOG](CHANGELOG.md)。
+项目处于开发阶段，尚不承诺长期 API 兼容性。版本与变更见 [CHANGELOG](CHANGELOG.md)，
+完成度和待验收范围见[项目状态](docs/development/status.md)。
 
 ## 快速开始
 
-需要支持 Rust 2024 Edition 的稳定 Rust 工具链。
+安装支持 Rust 2024 Edition 的稳定 Rust 工具链，然后检查示例：
 
-```text
+```bash
 cargo run --locked -p narrava-loom-core -- examples
 ```
 
-该命令读取不含 Rust 源码的示例游戏，并完成 Source → Twee → HIR → MIR → LIR → Bytecode 编译。
+该命令完成 Source → Twee → HIR → MIR → LIR → Bytecode 编译。启动游戏使用：
 
-游戏制作入口见
-[Narrava 游戏作者指南](docs/author/guide.md)，可运行示例及其预期行为见
-[examples/README.md](examples/README.md)。
-完整语法/API 清单见
-[作者 API 与语法速查](docs/reference/api-and-syntax.md)；`.twee` 的 VS Code
-高亮扩展位于 [editors/vscode-narrava-loom](editors/vscode-narrava-loom)。
-
-## 工作区
-
-| 路径 | 职责 |
-|---|---|
-| `src/` | `narrava-loom-core` library 与最小 CLI Host |
-| `crates/` | Protocol 与 Script Runtime 等可复用 crate |
-| `hosts/narrava-loom-tauri/` | Tauri Host 与最小前端 |
-| `bindings/typescript/` | Script 与 Tauri 的 TypeScript 契约 |
-| `editors/vscode-narrava-loom/` | `.twee` 的 VS Code 高亮与编辑扩展 |
-| `examples/` | 唯一的完整无 Rust 示例游戏 |
-| `docs/` | 当前有效架构、领域边界与作者文档 |
-| `dist/` | 构建输出与交付物（`NarravaGame/`、`*.vsix`），不入库 |
-| `scripts/` | 仓库级构建/打包脚本 |
-
-核心依赖方向固定为：
-
-```text
-narrava-loom-core + narrava-loom-protocol
-                   ↑
-        Script Runtime / Host
-                   ↑
-              Host Renderer
+```bash
+cargo run --locked -p narrava-loom-tauri -- examples
+# 或终端 Host
+cargo run --locked -p narrava-loom-tui -- examples
 ```
 
-所有构建产物统一输出到 `dist/`（gitignore 忽略）：游戏发行目录为
-`dist/NarravaGame/`，VS Code 扩展包为 `dist/vscode-narrava-loom/*.vsix`。
-`target/` 只保留 cargo 缓存，`cargo clean` 不会影响交付物。
+系统依赖和安装步骤见[第一次运行](docs/author/getting-started.md)，
+全部检查、构建与发行命令见[仓库命令](docs/development/commands.md)。
 
-Core 不依赖 Tauri、DOM、CSS 或具体 Renderer。详细边界见
-[架构纲要](docs/architecture/overview.md)、
-[仓库布局](docs/development/repository-layout.md)和
-[Host 与 Surface](docs/architecture/protocol.md)。
+## 文档入口
 
-## 常用命令
+- [游戏作者手册](docs/author/guide.md)：从写故事到打包。
+- [API 与语法速查](docs/reference/api-and-syntax.md)：当前作者契约。
+- [综合示例](examples/README.md)：可运行场景与预期行为。
+- [Twee 编辑器扩展](editors/vscode-narrava-loom/README.md)：高亮、导航与诊断。
+- [总体架构](docs/architecture/overview.md)：Core、Protocol、Script 与 Host 的边界。
+- [仓库布局](docs/development/repository-layout.md)与[源码规范](docs/development/code-style.md)：源码、测试和文档归属。
+- [文档总入口](docs/README.md)：各领域教程、设计与开发指南。
 
-| 命令 | 用途 |
-|---|---|
-| `cargo run --locked -p narrava-loom-core -- examples` | 检查示例游戏源码和完整编译管线 |
-| `cargo run --locked -p narrava-loom-tauri -- examples` | 启动 Tauri 桌面 Host |
-| `cargo run --locked -p narrava-loom-tui -- examples` | 用根目录示例游戏启动可操作的 TUI Host |
-| `cargo test --workspace --all-targets --locked` | 运行 Rust workspace 测试 |
-| `bun run check` | 检查 TypeScript、前端、格式和 VS Code 扩展 |
+## 修改与验证
 
-参数含义、窄范围命令、格式／Clippy／文档／发行命令统一见
-[仓库命令](docs/development/commands.md)。
-
-## 当前边界
-
-已经闭合的基础链包括 Twee 编译、MIR/Bytecode VM、同步与异步 Macro continuation、
-Host Surface、I18n fallback、Save 数据模型、Resource、Event，以及 Script Bundle 与脚本调用契约。
-
-Core 已建立 `.nar` 的拥有型源码记录、游戏身份、格式版本、内容哈希、可直接反序列化的
-拥有型 Bytecode、Script Bundle 与逐资源哈希边界。更广的平台能力只在出现稳定用例后扩展。
-Tauri Host 已在 Rust Worker 内通过 Boa/Oxc 执行游戏 JS/TS，并提供默认 Renderer、可选作者
-CSS，以及供作者脚本调用的存档、语言和诊断能力；具体管理界面仍由游戏作者定义。模组加载尚未实现，不属于当前 API。当前状态以各领域
-文档为准；当前完成度和下一阶段边界统一记录在
-[项目状态](docs/development/status.md)，不在多个计划文件中重复维护。
-
-## 修改约定
-
-源码和测试布局遵循
-[Narrava 源码规范](docs/development/code-style.md)。提交前至少运行格式检查、
-Clippy、全工作区测试和示例 CLI；工作区包含未提交成果时，不自动覆盖、暂存或提交它们。
-Host 的分层测试步骤见 [TUI 开发测试](docs/development/testing-tui.md)与
-[Tauri 开发测试](docs/development/testing-tauri.md)。
+Core 不依赖 Tauri、DOM、CSS 或具体 Renderer。重构保持公开行为、错误与事务边界；
+保留工作区中已有的未提交成果。完成前运行 Rust 全工作区门禁、`bun run check` 和示例编译，
+具体命令见[仓库命令](docs/development/commands.md)。Host 验收见
+[TUI 开发测试](docs/development/testing-tui.md)与[Tauri 开发测试](docs/development/testing-tauri.md)。

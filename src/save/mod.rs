@@ -18,11 +18,13 @@ use crate::{
     diagnostic::{Diagnostic, DiagnosticSeverity},
     state::{State, StateSnapshot},
     story::{Story, StoryHistoryEntry},
+    world::{World, WorldError, WorldState},
 };
 
 use value::SaveValueGraph;
 
-const SAVE_MAGIC: &[u8; 8] = b"NRSAVE\0\x02";
+const SAVE_MAGIC: &[u8; 7] = b"NRSAVE\0";
+const SAVE_VERSION: u8 = 3;
 
 /// 一份不包含平台对象、脚本函数或临时执行状态的存档。
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -32,6 +34,8 @@ pub struct SaveDocument {
     state: SaveValueGraph,
     story: SaveStory,
     reactions: Vec<crate::reaction::ReactionRuntimeState>,
+    #[serde(default)]
+    world: WorldState,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -54,14 +58,64 @@ struct SaveStoryEntry {
     passage: String,
     had_navigation: bool,
     state: SaveValueGraph,
+    #[serde(default)]
+    world: WorldState,
 }
 
-/// Save 捕获、JSON 边界或恢复阶段的稳定失败原因。
+/// v2 的固定线格式；postcard 不支持给缺失的尾字段补 serde default。
+#[derive(Deserialize)]
+struct SaveDocumentV2 {
+    game: SaveGame,
+    state: SaveValueGraph,
+    story: SaveStoryV2,
+    reactions: Vec<crate::reaction::ReactionRuntimeState>,
+}
+
+#[derive(Deserialize)]
+struct SaveStoryV2 {
+    history: Vec<SaveStoryEntryV2>,
+    position: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct SaveStoryEntryV2 {
+    passage: String,
+    had_navigation: bool,
+    state: SaveValueGraph,
+}
+
+impl From<SaveDocumentV2> for SaveDocument {
+    fn from(document: SaveDocumentV2) -> Self {
+        Self {
+            game: document.game,
+            state: document.state,
+            story: SaveStory {
+                history: document
+                    .story
+                    .history
+                    .into_iter()
+                    .map(|entry: SaveStoryEntryV2| SaveStoryEntry {
+                        passage: entry.passage,
+                        had_navigation: entry.had_navigation,
+                        state: entry.state,
+                        world: WorldState::default(),
+                    })
+                    .collect(),
+                position: document.story.position,
+            },
+            reactions: document.reactions,
+            world: WorldState::default(),
+        }
+    }
+}
+
+/// Save 捕获、编解码或恢复阶段的稳定失败原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveError {
     UnsupportedValue { path: String },
     InvalidValueGraph { message: String },
     InvalidStory { message: String },
+    InvalidWorld { message: String },
     MissingPassage { name: String },
     GameMismatch { expected: String, actual: String },
     Encode { message: String },
@@ -70,12 +124,13 @@ pub enum SaveError {
 }
 
 impl SaveDocument {
-    /// 捕获 `$variables` 与完整 Story 时间线；其他运行环境由启动流程重建。
+    /// 捕获持久变量、世界状态与完整 Story 时间线；地点定义由启动流程重建。
     pub fn capture(
         game: &GameIdentity,
         state: &State,
         story: &Story<'_, '_>,
     ) -> Result<Self, SaveError> {
+        validate_world_state(state.world(), state.world_state())?;
         let graph: SaveValueGraph = SaveValueGraph::encode(state.persistent_variables())?;
         let history: Vec<SaveStoryEntry> = story
             .history()
@@ -90,10 +145,12 @@ impl SaveDocument {
                                 entry.id()
                             ),
                         })?;
+                validate_world_state(state.world(), snapshot.world_state())?;
                 Ok(SaveStoryEntry {
                     passage: entry.passage().name.to_owned(),
                     had_navigation: entry.had_navigation(),
                     state: SaveValueGraph::encode(snapshot.persistent_variables())?,
+                    world: snapshot.world_state().clone(),
                 })
             })
             .collect::<Result<Vec<SaveStoryEntry>, SaveError>>()?;
@@ -108,6 +165,7 @@ impl SaveDocument {
                 position: story.position(),
             },
             reactions: Vec::new(),
+            world: state.world_state().clone(),
         })
     }
 
@@ -127,20 +185,31 @@ impl SaveDocument {
         let payload: Vec<u8> = postcard::to_allocvec(self).map_err(|error| SaveError::Encode {
             message: error.to_string(),
         })?;
-        let mut bytes: Vec<u8> = Vec::with_capacity(SAVE_MAGIC.len() + payload.len());
+        let mut bytes: Vec<u8> = Vec::with_capacity(SAVE_MAGIC.len() + 1 + payload.len());
         bytes.extend_from_slice(SAVE_MAGIC);
+        bytes.push(SAVE_VERSION);
         bytes.extend_from_slice(&payload);
         Ok(bytes)
     }
 
     /// 解码正式 `.nsave`；未知 magic/schema 在反序列化前即被拒绝。
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
-        let payload: &[u8] = bytes
+        let (&version, payload): (&u8, &[u8]) = bytes
             .strip_prefix(SAVE_MAGIC)
+            .and_then(<[u8]>::split_first)
             .ok_or_else(|| SaveError::Decode {
                 message: String::from("存档 magic 或 schema version 不受支持"),
             })?;
-        postcard::from_bytes(payload).map_err(|error| SaveError::Decode {
+        let document: Result<Self, postcard::Error> = match version {
+            SAVE_VERSION => postcard::from_bytes(payload),
+            2 => postcard::from_bytes::<SaveDocumentV2>(payload).map(Self::from),
+            _ => {
+                return Err(SaveError::Decode {
+                    message: format!("存档 schema version 不受支持：{version}"),
+                });
+            }
+        };
+        document.map_err(|error| SaveError::Decode {
             message: error.to_string(),
         })
     }
@@ -154,15 +223,21 @@ impl SaveDocument {
     ) -> Result<(), SaveError> {
         self.validate_game(game)?;
         self.validate_story(story)?;
+        validate_world_state(state.world(), &self.world)?;
         let variables: BTreeMap<String, crate::expression::value::Value> = self.state.decode()?;
         let history_states: Vec<StateSnapshot> = self
             .story
             .history
             .iter()
-            .map(|entry: &SaveStoryEntry| entry.state.decode().map(StateSnapshot::from_variables))
+            .map(|entry: &SaveStoryEntry| {
+                validate_world_state(state.world(), &entry.world)?;
+                let variables: BTreeMap<String, crate::expression::value::Value> =
+                    entry.state.decode()?;
+                Ok(StateSnapshot::from_parts(variables, entry.world.clone()))
+            })
             .collect::<Result<Vec<StateSnapshot>, SaveError>>()?;
         self.restore_story(story, history_states)?;
-        state.restore(StateSnapshot::from_variables(variables));
+        state.restore(StateSnapshot::from_parts(variables, self.world.clone()));
         Ok(())
     }
 
@@ -231,6 +306,7 @@ impl SaveError {
             Self::UnsupportedValue { .. } => "save.unsupported_value",
             Self::InvalidValueGraph { .. } => "save.invalid_value_graph",
             Self::InvalidStory { .. } => "save.invalid_story",
+            Self::InvalidWorld { .. } => "save.invalid_world",
             Self::MissingPassage { .. } => "save.missing_passage",
             Self::GameMismatch { .. } => "save.game_mismatch",
             Self::Encode { .. } => "save.encode",
@@ -249,6 +325,7 @@ impl fmt::Display for SaveError {
                 write!(formatter, "存档 Value 图无效：{message}")
             }
             Self::InvalidStory { message } => write!(formatter, "存档 Story 无效：{message}"),
+            Self::InvalidWorld { message } => write!(formatter, "存档 World 无效：{message}"),
             Self::MissingPassage { name } => write!(formatter, "存档 Passage 不存在：{name}"),
             Self::GameMismatch { expected, actual } => {
                 write!(formatter, "存档属于 {expected}，当前游戏是 {actual}")
@@ -261,3 +338,11 @@ impl fmt::Display for SaveError {
 }
 
 impl Error for SaveError {}
+
+fn validate_world_state(world: &World, state: &WorldState) -> Result<(), SaveError> {
+    world
+        .validate_state(state)
+        .map_err(|error: WorldError| SaveError::InvalidWorld {
+            message: error.to_string(),
+        })
+}

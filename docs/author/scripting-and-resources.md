@@ -7,8 +7,6 @@
 创建 `contents/scripts/main.ts`：
 
 ```ts
-/// <reference path="../../../bindings/typescript/narrava.d.ts" />
-
 function greeting(name: string): string {
   return `欢迎，${name}！`
 }
@@ -30,6 +28,25 @@ State.global.set("greeting", greeting)
 - 当前执行环境是 Rust Worker，不提供浏览器或 Tauri API；
 - 可保存数据只能是 Narrava 数据，函数句柄不能进入存档变量图。
 
+### 编辑器类型配置
+
+游戏根目录的 [`tsconfig.json`](../../examples/tsconfig.json) 统一加载 Narrava 声明，覆盖
+`contents/` 下的 TS/JS 脚本。在仓库内复制 `examples/` 时保留该文件，仓库根目录运行
+`bun install` 后即可使用；新增脚本不需要逐文件添加三斜线引用。
+
+这份配置只加载 `@narrava-loom/types` 和 ECMAScript 标准库，并关闭自动类型获取。
+若 `setup` 被识别为 `Mocha.HookFunction`，或 `Event` 被识别为浏览器事件，说明编辑器加载了
+游戏运行环境以外的类型。确认游戏根目录保留上述配置；在 VS Code 中可用“TypeScript: Go to
+Project Configuration”检查当前脚本所属的配置。
+
+把游戏移到仓库外且没有安装类型包时，保留该配置并完成两步：
+
+1. 将 `bindings/typescript/narrava.d.ts` 和 `narrava-contract.generated.d.ts` 一起复制到游戏的
+   `types/` 目录。
+2. 将 `compilerOptions.types` 改为 `[]`，并在 `include` 中增加 `"types/**/*.d.ts"`。
+
+`tsconfig.json` 只服务编辑器和类型检查，不参与 Host 的脚本加载或执行。
+
 ### 为什么游戏脚本直接使用顶层单例
 
 游戏脚本在 Rust 内的 ECMAScript Runtime 中执行。
@@ -49,17 +66,13 @@ Event.emit("game:ready", { coins: 10 })
 
 WebView DevTools（F12）只属于开发模式调试桥，不是游戏脚本 API，发布模式不会注入。
 
-上面的三斜线声明路径取决于脚本文件与仓库 `bindings/` 的相对位置。复制 `examples/` 时无需
-修改；如果把游戏移到仓库外，编辑器可能找不到声明文件，但这不影响 Host 运行。可把
-`narrava.d.ts` 复制到自己的类型目录，并调整 reference 路径。
-
 ## State 脚本 API
 
 日常变量操作直接使用属性语法：
 
 ```ts
-V.coins = 3                 // State.variables：进入存档
-T.result = "ok"             // State.temporary：读档时清空
+V.coins = 3 // State.variables：进入存档
+T.result = "ok" // State.temporary：读档时清空
 setup.difficulty = "normal" // State.setup：启动配置
 
 const coins = V.coins
@@ -136,18 +149,19 @@ Macro.add("statusCard", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
-  handler: () => Surface.fragment(
-    Surface.text("体力不足", {
-      key: "stamina-warning",
-      styles: ["strong"],
-      color: 40,
-    }),
-    Surface.text("角色状态", { key: "status-title", heading: 2 }),
-    Surface.image("hero.png", {
-      key: "hero",
-      alt: "站在森林入口的主角",
-    }),
-  ),
+  handler: () =>
+    Surface.fragment(
+      Surface.text("体力不足", {
+        key: "stamina-warning",
+        styles: ["strong"],
+        color: 40,
+      }),
+      Surface.text("角色状态", { key: "status-title", heading: 2 }),
+      Surface.image("hero.png", {
+        key: "hero",
+        alt: "站在森林入口的主角",
+      }),
+    ),
 })
 ```
 
@@ -164,13 +178,9 @@ Macro.add("statusCard", {
 版本化组件必须有 fallback：
 
 ```ts
-Surface.component(
-  "meter",
-  1,
-  { label: "体力", value: 42, min: 0, max: 100 },
-  ["体力：42 / 100"],
-  { key: "stamina-meter" },
-)
+Surface.component("meter", 1, { label: "体力", value: 42, min: 0, max: 100 }, ["体力：42 / 100"], {
+  key: "stamina-meter",
+})
 ```
 
 Tauri 将 `meter@1` 显示为图形状态条，TUI 显示字符状态条。未知能力或版本显示 fallback。`properties` 只能包含有限纯数据，

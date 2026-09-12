@@ -1,4 +1,4 @@
-//! State 的游戏变量命名空间。
+//! 游戏变量、世界状态与事务快照。
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -11,6 +11,7 @@ use crate::expression::{
     value::Value,
 };
 use crate::script::ScriptCallDispatcher;
+use crate::world::{World, WorldState};
 
 /// Twee 与 scripts 共用的受控游戏变量存储。
 pub struct State {
@@ -18,20 +19,25 @@ pub struct State {
     setup: Value,
     variables: HashMap<String, Value>,
     temporary: HashMap<String, Value>,
+    world: Rc<World>,
+    world_state: WorldState,
     script_dispatcher: Option<Rc<dyn ScriptCallDispatcher>>,
 }
 
-/// 一次与活动 State 引用图隔离的 `$variables` 快照。
+/// 与活动变量引用图隔离的持久状态快照；地点定义由启动环境持有。
 pub struct StateSnapshot {
     variables: BTreeMap<String, Value>,
+    world_state: WorldState,
 }
 
-/// 一次覆盖全部 State 命名空间的短期运行事务检查点。
+/// 覆盖变量、世界定义及位置的短期运行事务检查点。
 pub struct StateCheckpoint {
     global: HashMap<String, Value>,
     setup: Value,
     variables: HashMap<String, Value>,
     temporary: HashMap<String, Value>,
+    world: Rc<World>,
+    world_state: WorldState,
 }
 
 /// 一次新游戏重置实际移除的游戏状态数量。
@@ -49,9 +55,17 @@ pub struct GlobalImportReport {
 }
 
 impl StateSnapshot {
-    /// 由已分离的 `$variables` 表构造快照；仅 crate 内部使用。
-    pub(crate) fn from_variables(variables: BTreeMap<String, Value>) -> Self {
-        Self { variables }
+    /// 从已解码并校验的持久数据构造快照。
+    pub(crate) fn from_parts(variables: BTreeMap<String, Value>, world_state: WorldState) -> Self {
+        Self {
+            variables,
+            world_state,
+        }
+    }
+
+    /// 历史位置与环境，不包含地点定义。
+    pub fn world_state(&self) -> &WorldState {
+        &self.world_state
     }
 
     /// 存档编码器借用历史快照中的持久变量。
@@ -115,6 +129,8 @@ impl State {
             setup: Value::object(Vec::new()),
             variables: HashMap::new(),
             temporary: HashMap::new(),
+            world: Rc::new(World::default()),
+            world_state: WorldState::default(),
             script_dispatcher: None,
         }
     }
@@ -137,6 +153,26 @@ impl State {
     /// 解除 Binding 的瞬时函数路由；之后脚本调用以 `Unavailable` 失败。
     pub fn detach_script_dispatcher(&mut self) {
         self.script_dispatcher = None;
+    }
+
+    /// 启动环境注册的世界地点定义。
+    pub fn world(&self) -> &World {
+        self.world.as_ref()
+    }
+
+    /// 写入时与事务快照、辅助视图分离，避免修改污染其他所有者。
+    pub fn world_mut(&mut self) -> &mut World {
+        Rc::make_mut(&mut self.world)
+    }
+
+    /// 可保存、回溯的世界运行状态。
+    pub fn world_state(&self) -> &WorldState {
+        &self.world_state
+    }
+
+    /// 供受控 World 操作修改运行状态；外部存档必须先完成校验。
+    pub fn world_state_mut(&mut self) -> &mut WorldState {
+        &mut self.world_state
     }
 
     /// 查询 scripts 与 Twee 共用的普通全局名称。
@@ -254,26 +290,28 @@ impl State {
         std::mem::replace(&mut self.setup, value)
     }
 
-    /// 只捕获可保存的 `$variables`，并与活动 Value 图完全脱离。
+    /// 捕获持久变量与世界状态，并与活动 Value 图完全脱离。
     pub fn snapshot(&self) -> StateSnapshot {
         let names: Vec<String> = self.variables.keys().cloned().collect();
         let values: Vec<Value> = self.variables.values().cloned().collect();
         let detached: Vec<Value> = Value::detached_clone_many(&values);
         let variables: BTreeMap<String, Value> = names.into_iter().zip(detached).collect();
-        StateSnapshot { variables }
+        StateSnapshot::from_parts(variables, self.world_state.clone())
     }
 
-    /// 恢复 `$variables` 并丢弃不属于快照的 `_temporary`。
+    /// 恢复持久变量和世界位置，并清空 `_temporary`。
     ///
-    /// `global` 与 `setup` 由当前启动环境管理，因此保持不变。
+    /// `global`、`setup` 与地点定义由当前启动环境管理，保持不变。
     pub fn restore(&mut self, snapshot: StateSnapshot) {
         self.variables = snapshot.variables.into_iter().collect();
+        self.world_state = snapshot.world_state;
         let _removed: usize = self.temporary_clear();
     }
 
-    /// 从可复用的历史快照恢复 `$variables`；快照自身保持不可变且不与活动值图共享。
+    /// 从历史快照恢复持久状态；快照保持不可变且不与活动值图共享。
     pub fn restore_snapshot(&mut self, snapshot: &StateSnapshot) {
         self.variables = snapshot.detached_variables().into_iter().collect();
+        self.world_state = snapshot.world_state.clone();
         let _removed: usize = self.temporary_clear();
     }
 
@@ -314,6 +352,8 @@ impl State {
             setup,
             variables,
             temporary,
+            world: Rc::clone(&self.world),
+            world_state: self.world_state.clone(),
         }
     }
 
@@ -323,13 +363,16 @@ impl State {
         self.setup = checkpoint.setup;
         self.variables = checkpoint.variables;
         self.temporary = checkpoint.temporary;
+        self.world = checkpoint.world;
+        self.world_state = checkpoint.world_state;
     }
 
-    /// 开始新游戏时清空 `$` 与 `_`，保留启动环境提供的 global/setup。
+    /// 清空游戏变量与世界位置，保留启动环境的 global/setup 和地点定义。
     pub fn reset_game(&mut self) -> StateReset {
         let variables_removed: usize = self.variables.len();
         self.variables.clear();
         let temporary_removed: usize = self.temporary_clear();
+        self.world_state = WorldState::default();
         StateReset {
             variables_removed,
             temporary_removed,

@@ -4,11 +4,8 @@
     "module": "ESNext",
     "noEmit": true,
     "strict": true,
-    "target": "ES2022"
+    "target": "ES2022",
+    "types": []
   },
-  "files": [
-    "narrava-contract.generated.d.ts",
-    "narrava.d.ts",
-    "../../examples/contents/scripts/main.ts"
-  ]
+  "include": ["*.typecheck.ts"]
 }

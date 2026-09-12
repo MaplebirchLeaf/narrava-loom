@@ -13,6 +13,17 @@ Host 处理窗口、输入和文件 IO，Renderer 只解释拥有型 Protocol �
 
 目录与依赖约束见[仓库布局](../development/repository-layout.md)。
 
+## 宿主目标
+
+| 宿主  | 目标                                           |
+| ----- | ---------------------------------------------- |
+| TUI   | 纯文字和终端交互                               |
+| Tauri | 由 Semantic/Protocol 控制的完整 HTML5 图文交互 |
+| Godot | 像素沙盒、2D/3D 空间呈现与原生输入、音频       |
+
+宿主共享领域状态与运行规则，各自实现呈现能力。图形目标不要求把 DOM、Godot 节点或播放器
+放入 Core；具体完成度见[项目状态](../development/status.md)。
+
 ## 内容管线
 
 ```text
@@ -21,59 +32,32 @@ Host 处理窗口、输入和文件 IO，Renderer 只解释拥有型 Protocol �
 .ts → .js ─┐
 .js ─────└→ Script Bundle → ECMAScript Runtime
 
-assets → resources → Resource API → Host
+resources → Resource API → Host
 ```
 
 Bytecode 是 VM 的唯一叙事指令输入。Script Bundle 由 `narrava-loom-script` 通过 Boa 执行，
 Oxc 只用于移除 TypeScript 类型语法。脚本通过受控 Adapter 访问 State、Story、Event、
-Reaction、Macro、Resource、I18n 和 Save。
+Reaction、World、Macro、Resource、I18n 和 Save。
 
 Twee 的 Parser、IR 与 VM 边界见 [Twee 编译器](twee.md)；Expression 与 Macro 分别见
 [Expression](expression.md) 和 [Macro](macro-runtime.md)。
 
 ## 项目输入
 
-开发项目的最小结构为：
-
-```text
-NarravaProject/
-├─ config.toml
-├─ contents/
-│  ├─ story/
-│  └─ scripts/
-└─ assets/
-```
-
-`config.toml` 定义游戏身份和源语言：
-
-```toml
-[game]
-id = "example.forest"
-name = "Forest"
-version = "1.0.0"
-default_locale = "zh-CN"
-```
+`config.toml` 定义游戏身份和源语言；`contents/` 保存故事与脚本，`resources/` 保存资源。
+创建步骤见[作者配置](../author/configuration.md)。
 
 `SourceList` 递归扫描 `contents/`，按平台无关的相对路径排序，并识别 `.twee`、`.ts`
-和 `.js`。保存路径不包含 `contents/` 前缀。Source 记录、路径校验和发布存档见
-[源码记录](source-record.md)。
+和 `.js`。`SourcePath` 使用不含 `contents/` 前缀的相对路径与 `/`，拒绝绝对路径、`..` 和
+反斜杠。`.css` 由具体 Host 管理。模块位置见[源码记录](source-record.md)。
 
 ## 发布边界
 
-桌面发布目录为：
-
-```text
-NarravaGame/
-├─ narrava
-├─ game.nar
-├─ languages/
-├─ resources/
-└─ save/
-```
+可移动发行目录的结构见[仓库布局](../development/repository-layout.md#构建输出)。
 
 `game.nar` 包含游戏清单、拥有型 Bytecode、Script Bundle、Source 记录、资源索引和内容
 哈希。容器使用 `NAR1` 魔数头与确定性 ZIP 负载；Host 校验包类型、格式版本和
-哈希后才运行。玩家目录不携带开发期 `contents/` 或 `assets/`。
+哈希后才运行。玩家目录不携带开发期 `contents/` 或未打包的资源。
 
 `.nlang` 是单语言安装包，由 `manifest.json`、`translations.nmsg` 和 `dictionary.json`
 组成。译文可调整 placeholder 顺序，不能添加表达式或改变控制流。详细见
@@ -84,13 +68,14 @@ NarravaGame/
 
 ## Crate 边界
 
-| Crate | 职责 |
-|---|---|
-| `narrava-loom-core` | Source、编译、Bytecode、VM、Engine 与领域状态 |
-| `narrava-loom-protocol` | 零 Core 依赖的 Runtime/Host 命令、更新与 Surface DTO |
-| `narrava-loom-script` | ECMAScript、RuntimeSession 与 Core/Protocol 适配 |
-| `narrava-loom-tauri` | 桌面 Host、Worker、资源 IO 与 WebView Renderer |
-| `narrava-loom-tui` | 终端 Host 与 Protocol 语义验证 |
+| Crate                   | 职责                                                            |
+| ----------------------- | --------------------------------------------------------------- |
+| `narrava-loom-core`     | Source、编译、Bytecode、VM、Engine 与领域状态                   |
+| `narrava-loom-world`    | 纯领域地点、二维多边形、包含查询与位置校验；不依赖 Core 或 Host |
+| `narrava-loom-protocol` | 零 Core 依赖的 Runtime/Host 命令、更新与 Surface DTO            |
+| `narrava-loom-script`   | ECMAScript、RuntimeSession 与 Core/Protocol 适配                |
+| `narrava-loom-tauri`    | 桌面 Host、Worker、资源 IO 与 WebView Renderer                  |
+| `narrava-loom-tui`      | 终端 Host 与 Protocol 语义验证                                  |
 
 Protocol 不引用 Core；Script Runtime 显式转换两侧类型。Host 不得越过 RuntimeSession
 直接修改 State、Story 或 VM frame。
@@ -115,15 +100,12 @@ Surface 只表达文本、语义样式、区域、交互、稳定 Key 和替换�
 
 ## 领域所有权
 
-- State 持有持久、临时、setup 与 Macro 局部值。
+- State 持有变量、`Rc<World>` 地点定义与 `WorldState` 位置；Macro 局部值由调用帧管理。
 - Story 持有 Passage 索引、历史和当前光标。
 - Save 只序列化稳定领域状态，不序列化 Host handle、continuation 或脚本函数。
 - Logger 保存结构化运行记录；Diagnostic 表达可定位的失败，两者不代替彼此。
 - I18n 选择属于 Runtime 执行上下文，不写入 State。
 
-Save 格式与恢复事务见 [Save](save-format.md)。
-
-## 未实现范围
-
-模组加载、Android/iOS 平台工程、云存档和通用存档迁移不属于当前 API。
-不为这些范围保留空 crate、配置段或占位类型。
+World 的几何与位置规则由独立 crate 提供，Core 将 Passage Tag 绑定到 State，Script 提供
+受控适配。作者行为见 [World](../author/world.md)，快照与恢复边界见
+[Runtime Session](runtime-session.md) 和 [Save](save-format.md)。

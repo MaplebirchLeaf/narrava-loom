@@ -1,38 +1,35 @@
 # Save 格式与恢复事务
 
-> 状态：Core 文档、Host 请求与生命周期边界已实现
->
-> 更新日期：2026-09-01
-
 本文面向 Core 与 Host 开发者；作者用法见 [Save](../author/save.md)。
 
 ## 边界
 
 Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当前执行栈：
 
-| 保存 | 不保存 |
-| --- | --- |
-| `State.variables`（`$name`） | `State.global` |
-| Story 完整导航时间线 | `State.setup` |
-| Story 当前游标 | `State.temporary`（`_name`） |
-| 各历史项进入前的 `$variables` | `State.global`／`State.setup` 的历史版本 |
-| 每次 Passage 是否产生作者导航 | Macro `@locals`、`@args` |
-| Reaction 启用、次数与销毁状态 | Reaction Definition 与 `cond` 函数 |
-| 精确游戏 ID 与版本 | Function、Macro Handler、Promise |
-| Narrava Array/Object 引用图 | VM frame、Pending、Host/Renderer 对象 |
+| 保存                                     | 不保存                                   |
+| ---------------------------------------- | ---------------------------------------- |
+| `State.variables`（`$name`）             | `State.global`                           |
+| 当前地点 ID、坐标与环境                  | World 地点定义、多边形、父子索引         |
+| Story 完整导航时间线                     | `State.setup`                            |
+| Story 当前游标                           | `State.temporary`（`_name`）             |
+| 各历史项进入前的 `$variables` 与世界位置 | `State.global`／`State.setup` 的历史版本 |
+| 每次 Passage 是否产生作者导航            | Macro `@locals`、`@args`                 |
+| Reaction 启用、次数与销毁状态            | Reaction Definition 与 `cond` 函数       |
+| 精确游戏 ID 与版本                       | Function、Macro Handler、Promise         |
+| Narrava Array/Object 引用图              | VM frame、Pending、Host/Renderer 对象    |
 
 `global` 与 `setup` 属于启动环境，由配置、StoryInit 和 scripts 重新建立。`temporary` 与 Macro Local 只服务当前执行范围，加载后清空。
 
 ## 二进制文档结构
 
 `.nsave` 是正式二进制协议，不是 Rust 内存布局、JSON 或 ZIP。文件以 `NRSAVE\0` magic 和单字节
-schema version 开始，当前版本为 `2`；payload 使用确定性的 tagged value、varint 长度、节点 ID 和
-长度前缀数据。未知 magic/version 在解析 payload 前直接拒绝，不提供未发布 JSON 草案的兼容分支。
+schema version 开始，当前写入版本为 `3`；payload 使用 postcard 编码稳定字段、Value 图节点 ID
+和长度前缀数据。v3 为当前状态与每个历史项增加世界位置；读取 v2 时将两处位置补为未定位，
+不根据当前 Passage 猜测旧位置。未知 magic/version 在解析 payload 前拒绝。
 
-Core 通过 `SaveDocument::to_bytes()`／`from_bytes()` 编解码，Host 只读写 `Vec<u8>`。导出不再建立
-pretty JSON `String`，导入也不再同时保留文件 bytes、UTF-8 String 与解析文档。
+Core 通过 `SaveDocument::to_bytes()`／`from_bytes()` 编解码，Host 只读写 `Vec<u8>`。
 
-游戏身份使用精确 `id + version`。当前不提供隐式迁移，不允许另一游戏或另一版本直接恢复。未来迁移必须是独立、显式的输入转换，不进入正常 `restore()`。
+游戏身份仍要求精确 `id + version`；v2 格式兼容不放宽游戏版本匹配。通用游戏存档迁移尚未实现。
 
 ## Value 图
 
@@ -49,72 +46,45 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 
 ## Story 与恢复事务
 
-时间线按顺序保存 PassageName、导航标记、当前游标，以及进入每个历史项前的 `$variables` 图；不保存进程内 `StoryHistoryId`。加载时使用当前有效 HIR 逐项验证并重建时间线和状态关联，因此 PassageName 仍区分大小写，`StoryInit` 不得进入历史。Host 执行 back／forward 时先恢复目标项的进入前状态，再重放该 Passage；页面上的变量修改因此与原导航一致。
+时间线按顺序保存 PassageName、导航标记、当前游标，以及每项进入前的 `$variables` 图与世界
+位置；不保存进程内 `StoryHistoryId`。加载时使用当前 HIR 重建时间线，PassageName 区分大小写，
+`StoryInit` 不得进入历史。Back/Forward 恢复目标项的进入前状态，再重放 Passage。
 
 恢复顺序固定为：
 
 1. 校验精确游戏身份；
 2. 校验 Story history 与当前 HIR；
-3. 完整解码当前及逐历史项的 Value 图；
-4. 在临时所有权中建立完整的新 `$variables`、Story 时间线与历史状态关联；
-5. 校验全部通过后一次性替换 `$variables`、清空 `_temporary` 并提交 Story；
+3. 完整解码当前及逐历史项的 Value 图，并以本次启动定义校验所有地点 ID、坐标与环境；
+4. 在临时所有权中建立新 `$variables`、世界位置、Story 时间线与历史快照；
+5. 校验全部通过后一次性提交 State 与 Story，并清空 `_temporary`；
 6. RuntimeSession 根据当前启动脚本已注册的 ID 恢复 Reaction 状态；
 7. RuntimeSession 使用 Resume 命令事务恢复 State/Story/Reaction；Import 或 Save.after 失败时统一回滚，脚本直接读取活动 Rust State。
 
 捕获直接借用活动 `$variables` 和已经隔离的历史快照进行 ValueGraph 编码。Story history 在运行期
 保存 Passage 引用及进入前的持久状态，只有可移植存档边界写入 PassageName；因此 Save 大小取决于
-实际 history 与其 `$variables`，而不是 Story 总 Passage 数。
+实际 history 与其持久状态，而不是 Story 总 Passage 数。当前或任一历史项的未知地点、越界坐标
+等错误都以 `save.invalid_world` 原子拒绝，不留下部分恢复的状态。
 
-这条入口只恢复稳定领域状态，不自动执行 Passage 生命周期或渲染。Host 后续应明确决定加载完成后从当前 Passage 的哪个生命周期阶段重新进入 Engine。
+Core `restore()` 只恢复稳定领域状态；官方 RuntimeSession 随后通过 `RefreshCurrent` 重绘当前
+Passage。刷新所有权见 [Runtime Session](runtime-session.md#pending-与-host)，
+作者可见的位置行为见 [World](../author/world.md#刷新历史与存档)。
 
-## Controller、Host 与生命周期
+## 请求与平台 IO
 
-`SaveController` 不直接访问文件系统。它把游戏侧调用转换为有序
-`SaveRequest`，每项包含进程内请求 ID、`Export`／`Import` 操作与不透明
-`target`。Tauri 可以把 target 解释为槽位、相对文件或云端键；Godot 与其他
-Host 可以采用自己的持久化方式。Core 不接受绝对路径语义。
+Core 的 `SaveController` 提供有序请求与 `before/after` 订阅，供 Rust 调用方使用，
+本身不访问文件系统。脚本侧的 Hook 与待处理请求由 `bootstrap/save.ts` 持有，经
+`EcmaBinding::take_save()` 交给 `RuntimeSession`，不共享 Rust Controller 队列。
 
-调用顺序固定为：
+Script Export/Import 的执行链为：
 
-1. `before(operation, hook)` 按注册顺序运行，可修改 target；
-2. 非空 target 进入请求队列，游戏侧立即得到请求 ID；
-3. Host 使用 `take()` 取得请求，执行平台 I/O，并调用 capture／restore；
-4. Host 使用 `complete()` 回报 `Succeeded` 或带 Diagnostic 的 `Failed`；
-5. 对应 `after` Hook 按注册顺序观察只读完成结果。
+1. Bootstrap 顺序运行 before Hook，并记录最终 target；
+2. Session 取走请求，为 Export 编码存档，或为 Import 请求字节；
+3. Host 消费 PendingOperation，完成文件 IO 后发送 Resume；
+4. Session 完成恢复或导出结算，再通过 `complete_save()` 通知 after Hook。
 
-after 不能修改已导出文档或把失败伪装成成功。Hook 身份只在当前进程内有效，
-不进入存档。`off(id)` 取消一条 before 或 after 订阅。
+Hook 身份和队列只在当前进程有效，不进入存档。after 不能修改已导出的文档；
+失败与取消的命令事务见 [Runtime Session](runtime-session.md)。脚本用法及临时
+`Save.capture/restore` 与正式存档的区别见[作者 Save 指南](../author/save.md)。
 
-`.twee` 表达式由 Core 求值，不能直接访问 Worker 的 `Save` 全局。游戏作者在
-`.ts/.js` 里把导出/导入封装成普通函数，再经 `State.global.extend` 暴露后即可在
-`.twee` 中调用：
-
-```ts
-function exportSave(slot = "manual-1"): void {
-  Save.export(slot)
-}
-```
-
-```twee
-<<run exportSave("manual-1")>>
-```
-
-`run` 会丢弃请求 ID，但导出请求仍进入 Host 队列；需要跟踪结果时应在 scripts
-中保存 ID 并登记 after。该调用不等于“Core 写入 manual-1 文件”。Tauri
-Binding 必须把全局 `Save` 对象连接到同一个 Rust `SaveController`。
-
-## 当前限制
-
-当前 Rust API：
-
-- `SaveDocument::capture()`；
-- `to_bytes()` / `from_bytes()`；
-- `restore()`；
-- `SaveError::diagnostic()`；
-- `SaveController::export()` / `import()` / `take()` / `complete()`；
-- `SaveLifecycleSubscriptions::before()` / `after()` / `off()`。
-
-Tauri 与 TUI Host 已实现命名槽位与 `save/<target>.nsave` 落盘，脚本请求复用同一 Runtime 保存
-边界。两者在成功进入另一 Passage 后写入 `autosave` 槽位；这是官方 Host 的一致策略，不改变
-`.nsave` 格式，也不会因语言刷新、历史回溯或侧栏切换触发。仍未实现的是文件选择器、压缩/加密、
-缩略图、可配置自动存档策略、云同步与迁移。
+Tauri 与 TUI 使用命名槽位 `save/<target>.nsave`。成功进入另一 Passage 后写入 `autosave`；
+语言刷新、历史回溯和侧栏切换不触发自动保存。文件选择、云同步与存档迁移尚未实现。

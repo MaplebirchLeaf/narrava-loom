@@ -1,6 +1,6 @@
 # Audio 生命周期与 Host effect
 
-> 本轮实现；取代显式停止宏和可见播放器提案。作者入口见 [Audio](../author/audio.md)。
+作者入口见 [Audio](../author/audio.md)。
 
 Audio 是声明驱动的背景音能力，不属于 SemanticNode 或 Surface。
 原生宏仅有 resource、可选 channel、可选 tag 三个位置参数；复杂配置由 Script Audio 接收。
@@ -11,7 +11,7 @@ Audio 是声明驱动的背景音能力，不属于 SemanticNode 或 Surface。
 Twee audio / Script Audio → Bootstrap 作用域声明 → Runtime 命令成功后计算差异 →
 Protocol AudioEffect(play/stop) → TUI 命令循环 / Tauri Worker → rodio 本地播放。
 
-Runtime Protocol 版本升级为 2，以明确区分新增 Audio 结果的边界，旧客户端不能按版本 1 接收新结果。
+Runtime Protocol 版本为 2，Host 在接收 Audio 结果前校验协议版本。
 Protocol 仅有 resource、channel、loop、volume，以及 stop 的 channel。
 tag 匹配、作用域与回滚留在 Runtime；Host 不读取 Passage tag，不实现规则引擎。
 
@@ -31,9 +31,9 @@ Audio 有自己的轻量声明检查点，随 Runtime 命令跨 Pending 保留�
 ## Host 实现与验证
 
 两个现有 Host crate 通过普通 Rust 模块复用 `hosts/audio.rs`，该模块实际拥有 rodio 设备及
-每 channel 的播放器。没有新增工作区 crate、Manager、Service 或 trait。Tauri 不经过 WebView。
+每 channel 的播放器。Tauri 音频不经过 WebView。
 字节来自 ResourceCatalog，发行包资源无需解包为文件；设备首次 play 时打开，退出时释放。
-Linux 构建需要 `libasound2-dev`，CI/release 工作流已同步。
+构建依赖见[仓库命令](../development/commands.md)，共享离线用例位于 `hosts/tests/audio.rs`。
 播放 API 依据 [rodio 0.22.2](https://docs.rs/rodio/0.22.2/rodio/)。
 
 验收覆盖位置参数、tag、Header/Footer、相邻页面连续播放、正文覆盖、离开自动停止、历史回退、

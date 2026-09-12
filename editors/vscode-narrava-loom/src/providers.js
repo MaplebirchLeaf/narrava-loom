@@ -14,7 +14,7 @@ const expressionReferencePath = path.join(__dirname, "../references/narrava-expr
 const expressionReference = readFileSync(expressionReferencePath, "utf8")
 const expressionReferenceUri = vscode.Uri.file(expressionReferencePath)
 
-// 语义 token 图例：0 = keyword（宏），1 = type（特殊 Passage）。
+// 编号须与 semanticProvider 的 builder.push 一致；scope 名交给编辑器主题解释。
 const legend = new vscode.SemanticTokensLegend(["keyword", "type"])
 
 /** 返回 position 命中的宏调用记录；无则 undefined。 */
@@ -43,6 +43,7 @@ function functionCallAt(document, position) {
 
 /** 找到原生 Expression API 在随扩展发布的 DTS 参考中的精确位置。 */
 function expressionDefinitionOffset(api) {
+  // 同名数组/字符串方法分别定位到各自接口，避免跳到第一处同名声明。
   const sections = {
     global: "interface Globals",
     namespace: "interface ObjectNamespace",
@@ -90,7 +91,10 @@ function hoverProvider() {
         markdown.appendCodeblock(api.signature, "typescript")
         markdown.appendMarkdown(`${api.description}\n\n`)
       }
-      markdown.appendMarkdown("_Narrava Twee Expression API；不是 JavaScript 全局值。_")
+      markdown.appendMarkdown(
+        "_Narrava Twee 表达式 API；不属于 JavaScript 全局值。_\n\n" +
+          "_Narrava Twee Expression API; these are not JavaScript globals._",
+      )
       return new vscode.Hover(markdown)
     },
   }
@@ -135,6 +139,7 @@ function definitionProvider(workspace) {
       }
       const functionCall = functionCallAt(document, position)
       if (functionCall) {
+        // 项目函数优先；只有未找到定义时才跳转到随扩展提供的原生 API 参考。
         const locations = await Promise.all(
           workspace.functions
             .filter((item) => item.name === functionCall.name)
@@ -181,7 +186,7 @@ function completionProvider(workspace) {
       return [...workspace.known].toSorted().map((name) => {
         const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Function)
         if (Object.hasOwn(MACRO_APIS, name)) {
-          item.detail = "Narrava 原生宏"
+          item.detail = "Narrava 原生宏 · Native macro"
           item.documentation = macroDocumentation(MACRO_APIS[name])
         }
         return item

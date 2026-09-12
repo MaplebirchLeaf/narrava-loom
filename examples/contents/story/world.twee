@@ -1,0 +1,43 @@
+:: WorldGallery [reference]
+世界示例使用统一整数坐标：小镇包含医院和商店。<br>
+这是没有地点 Tag 的说明页：首次进入时尚无位置，从地点返回时保留当前位置。<br>
+<<worldCurrent>><br>
+点击导航进入地点；地点内按钮修改坐标，同地点刷新保留修改结果。<br>
+<<link [[进入小镇|WorldTown]]>><</link>><br>
+<<link [[返回大厅|Hall]]>><</link>>
+
+:: WorldTown [town outside]
+小镇范围为 [0, 0] 到 [100, 100]，入口为 [10, 10]。<br>
+<<worldCurrent>><br>
+<<button [[走到广场（50, 50）|WorldTown]]>>
+  <<run worldMoveTo(50, 50)>>
+<</button>>
+<br>
+<<link [[进入医院|WorldHospital]]>><</link>><br>
+<<link [[进入商店|WorldShop]]>><</link>><br>
+<<link [[返回世界说明（保留位置）|WorldGallery]]>><</link>>
+
+:: WorldHospital [hospital inside]
+医院属于小镇，范围为 [20, 20] 到 [40, 40]，入口为 [30, 30]。<br>
+<<worldCurrent>><br>
+<<button [[走到接待处（35, 30）|WorldHospital]]>>
+  <<run worldMoveTo(35, 30)>>
+<</button>>
+<br>
+<<link [[走到医院室外（同地点、保留坐标）|WorldHospitalOutside]]>><</link>><br>
+<<link [[返回小镇入口|WorldTown]]>><</link>>
+
+:: WorldHospitalOutside [hospital outside]
+inside/outside 表示当前环境，不创建楼层或另一套坐标。<br>
+<<worldCurrent>><br>
+<<link [[返回医院室内|WorldHospital]]>><</link>><br>
+<<link [[返回小镇入口|WorldTown]]>><</link>>
+
+:: WorldShop [shop inside]
+商店属于小镇，范围为 [60, 20] 到 [80, 40]。未指定 entry，首次进入使用首顶点 [60, 20]。<br>
+<<worldCurrent>><br>
+<<button [[走到货架（70, 30）|WorldShop]]>>
+  <<run worldMoveTo(70, 30)>>
+<</button>>
+<br>
+<<link [[返回小镇入口|WorldTown]]>><</link>>

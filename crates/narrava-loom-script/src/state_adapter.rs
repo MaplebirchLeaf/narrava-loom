@@ -148,7 +148,10 @@ fn state_replace(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> J
 }
 
 /// 在活动 State 上执行操作；未在调用期内访问则报错。
-fn with_active<T>(context: &Context, operation: impl FnOnce(&mut State) -> T) -> JsResult<T> {
+pub(super) fn with_active<T>(
+    context: &Context,
+    operation: impl FnOnce(&mut State) -> T,
+) -> JsResult<T> {
     let slot = context
         .get_data::<ActiveState>()
         .expect("State adapter 在调用脚本前安装");

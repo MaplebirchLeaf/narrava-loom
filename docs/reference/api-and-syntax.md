@@ -1,7 +1,7 @@
 # Narrava Loom 作者 API 与语法速查
 
 本页只列当前源码已经实现并接受测试的作者接口。详细解释和教程仍看
-[/docs/author/guide.md](/docs/author/guide.md)。
+[游戏作者手册](../author/guide.md)。
 
 > `.twee` 中的 Expression 由 Core 求值，不是 JavaScript；`contents/**/*.ts` 和 `*.js` 才在
 > Rust Worker 的 ECMAScript 环境运行。两者的函数和操作不能混用。
@@ -10,40 +10,43 @@
 
 Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独使用。
 
-| Macro | 形式 | 作用 |
-|---|---|---|
-| `if` | `<<if condition>>...<</if>>` | 条件分支容器 |
-| `elseif` | `<<elseif condition>>` | `if` 内的附加条件分支 |
-| `else` | `<<else>>` | `if` 内的最终分支 |
-| `switch` | `<<switch value>>...<</switch>>` | 严格相等的多分支容器 |
-| `case` | `<<case value>>` | `switch` 的匹配分支 |
-| `default` | `<<default>>` | `switch` 的最终分支 |
-| `for` | `<<for $x of collection>>...<</for>>` | 遍历集合值 |
-| `for` | `<<for $key in collection>>...<</for>>` | 遍历集合键或索引 |
-| `for` | `<<for $x range start to end step step>>...<</for>>` | 数字范围循环，`step` 可省略 |
-| `while` | `<<while condition>>...<</while>>` | 条件循环 |
-| `break` | `<<break>>` | 结束当前循环 |
-| `continue` | `<<continue>>` | 进入当前循环下一轮 |
-| `set` | `<<set $name = value>>` | 赋值；也接受 `to` 写法 |
-| `unset` | `<<unset $name>>` | 删除可写目标 |
-| `run` | `<<run expression>>` | 求值并丢弃结果，保留副作用 |
-| `print` | `<<print expression [color] [style...]>>` 或 `<<print expression {color, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、color、delay 与结构性标题的 StyledText |
-| `meter` | `<<meter "体力" $stamina 0 100>>` | label、value、min、max；有限数值且 min < max；复用 meter@1 component，TUI 字符条、Tauri 图形条 |
-| `image` | `<<image "tree.png" "树">>` | 用 Resource 逻辑路径输出图片；alt 为可选字符串，路径支持 Expression；Tauri 显示图片，TUI 将 alt 显示在方框中 |
-| `include` | `<<include "Passage">>` | 在当前位置执行另一 Passage，不发生导航 |
-| `goto` | `<<goto "Passage">>` | 请求导航并停止当前 Passage |
-| `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
-| `button` | `<<button [[文本\|Passage]]>>...<</button>>` | 与 link 共享事务语义，但由 Host 呈现为按钮 |
-| `replace` | `<<replace "header">>...<</replace>>` | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Surface key |
-| `slot` | `<<slot "status">>...<</slot>>` 或 `<<slot "status" "panel" "row">>...<</slot>>` | 建立稳定内容槽；`panel` 请求面板，`stack`／`row` 选择上下或同行排列 |
-| `silently` | `<<silently>>...<</silently>>` | 执行正文但抑制其直接输出 |
-| `exit` | `<<exit>>` | 停止当前执行正文 |
-| `return` | `<<return expression>>` | 从可返回的 Macro/Widget 正文返回，可省略值 |
-| `capture` | `<<capture @name @index>>...<</capture>>` | 把列出的局部变量捕获进延迟正文 |
-| `widget` | `<<widget "name">>...<</widget>>` | 在带 `[widget]` Tag 的 Passage 中定义 Inline Macro；调用写作 `<<name ...>>`，不带调用侧闭合标签 |
-| `checkbox` | `<<checkbox "$name" unchecked checked>>` | 勾选时写入 `checked`，取消时写入 `unchecked` |
-| `radiobutton` | `<<radiobutton "$name" value>>` | 选中时把 `value` 写入同一 receiver |
-| `textbox` | `<<textbox "$name" default>>` | 编辑完成时写入文字；receiver 未定义时先写默认值 |
+| Macro         | 形式                                                                                                | 作用                                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `if`          | `<<if condition>>...<</if>>`                                                                        | 条件分支容器                                                                                                 |
+| `elseif`      | `<<elseif condition>>`                                                                              | `if` 内的附加条件分支                                                                                        |
+| `else`        | `<<else>>`                                                                                          | `if` 内的最终分支                                                                                            |
+| `switch`      | `<<switch value>>...<</switch>>`                                                                    | 严格相等的多分支容器                                                                                         |
+| `case`        | `<<case value>>`                                                                                    | `switch` 的匹配分支                                                                                          |
+| `default`     | `<<default>>`                                                                                       | `switch` 的最终分支                                                                                          |
+| `for`         | `<<for $x of collection>>...<</for>>`                                                               | 遍历集合值                                                                                                   |
+| `for`         | `<<for $key in collection>>...<</for>>`                                                             | 遍历集合键或索引                                                                                             |
+| `for`         | `<<for $x range start to end step step>>...<</for>>`                                                | 数字范围循环，`step` 可省略                                                                                  |
+| `while`       | `<<while condition>>...<</while>>`                                                                  | 条件循环                                                                                                     |
+| `break`       | `<<break>>`                                                                                         | 结束当前循环                                                                                                 |
+| `continue`    | `<<continue>>`                                                                                      | 进入当前循环下一轮                                                                                           |
+| `set`         | `<<set $name = value>>`                                                                             | 赋值；也接受 `to` 写法                                                                                       |
+| `unset`       | `<<unset $name>>`                                                                                   | 删除可写目标                                                                                                 |
+| `run`         | `<<run expression>>`                                                                                | 求值并丢弃结果，保留副作用                                                                                   |
+| `print`       | `<<print expression [color] [style...]>>` 或 `<<print expression {color, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、color、delay 与结构性标题的 StyledText                        |
+| `meter`       | `<<meter "体力" $stamina 0 100>>`                                                                   | label、value、min、max；有限数值且 min < max；复用 meter@1 component，TUI 字符条、Tauri 图形条               |
+| `audio`       | `<<audio resource channel? tag?>>`                                                                  | 声明当前 Passage 所需背景音；默认 bgm，按 tag 匹配                                                           |
+| `dialog`      | `<<dialog "默认页">>...<</dialog>>`                                                                 | 打开单个弹窗，默认页标题必须存在                                                                             |
+| `page`        | `<<page "页标题">>正文`                                                                             | dialog 的直接子句；页标题非空且唯一，不写闭合标签                                                            |
+| `image`       | `<<image "tree.png" "树">>`                                                                         | 用 Resource 逻辑路径输出图片；alt 为可选字符串，路径支持 Expression；Tauri 显示图片，TUI 将 alt 显示在方框中 |
+| `include`     | `<<include "Passage">>`                                                                             | 在当前位置执行另一 Passage，不发生导航                                                                       |
+| `goto`        | `<<goto "Passage">>`                                                                                | 请求导航并停止当前 Passage                                                                                   |
+| `link`        | `<<link [[文本\|Passage]]>>...<</link>>` 或 `<<link "文本">>...<</link>>`                           | 点击后执行正文；字符串形式不导航                                                                             |
+| `button`      | `<<button [[文本\|Passage]]>>...<</button>>`                                                        | 与 link 共享事务语义，但由 Host 呈现为按钮                                                                   |
+| `replace`     | `<<replace "header">>...<</replace>>`                                                               | 用正文替换 `header/main/footer/bar/bar-stowed/dialog` 固定区域或稳定 Surface key                             |
+| `slot`        | `<<slot "status">>...<</slot>>` 或 `<<slot "status" "panel" "row">>...<</slot>>`                    | 建立稳定内容槽；`panel` 请求面板，`stack`／`row` 选择上下或同行排列                                          |
+| `silently`    | `<<silently>>...<</silently>>`                                                                      | 执行正文但抑制其直接输出                                                                                     |
+| `exit`        | `<<exit>>`                                                                                          | 停止当前执行正文                                                                                             |
+| `return`      | `<<return expression>>`                                                                             | 从可返回的 Macro/Widget 正文返回，可省略值                                                                   |
+| `capture`     | `<<capture @name @index>>...<</capture>>`                                                           | 把列出的局部变量捕获进延迟正文                                                                               |
+| `widget`      | `<<widget "name">>...<</widget>>`                                                                   | 在带 `[widget]` Tag 的 Passage 中定义 Inline Macro；调用写作 `<<name ...>>`，不带调用侧闭合标签              |
+| `checkbox`    | `<<checkbox "$name" unchecked checked>>`                                                            | 勾选时写入 `checked`，取消时写入 `unchecked`                                                                 |
+| `radiobutton` | `<<radiobutton "$name" value>>`                                                                     | 选中时把 `value` 写入同一 receiver                                                                           |
+| `textbox`     | `<<textbox "$name" default>>`                                                                       | 编辑完成时写入文字；receiver 未定义时先写默认值                                                              |
 
 其他名称会作为自定义 Macro 解析。它必须已经由 `widget` 或脚本 `Macro.add()` 注册。
 
@@ -63,36 +66,74 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 其他名称按稳定 Surface key 解析。当前正文支持静态文本与 Core 逻辑节点；嵌套动态 `print`
 的 I18n 身份和动态／异步脚本 Macro 尚未接通，遇到时会报错而不是忽略。
 
-> **书写约束**：结构容器（`if`/  `switch`/  `for`/  `while` 及其子句 `elseif`/  `else`/  `case`/  `default` 与
+> **书写约束**：结构容器（`if`/ `switch`/ `for`/ `while` 及其子句 `elseif`/ `else`/ `case`/ `default` 与
 > 各闭合标签）必须独占一行且从行首开始（顶格、无缩进）；缩进的容器行不会被识别为结构，可能被当作
-> 内联调用求值或直接泄漏为文本。`link`/  `button`/  `replace`/  `slot`/  `silently`/  `capture` 既可顶格
-> 跨行书写，也可单行内联（`<<silently>><<set $x to 1>><</silently>>`）。`set`/  `unset`/  `print`/  `run`/
-> `include`/  `goto`/  `break`/  `continue`/  `exit`/  `return` 等内联 Macro 可出现在行内任意位置。
+> 内联调用求值或直接泄漏为文本。`link`/ `button`/ `replace`/ `slot`/ `silently`/ `capture` 既可顶格
+> 跨行书写，也可单行内联（`<<silently>><<set $x to 1>><</silently>>`）。`set`/ `unset`/ `print`/ `run`/
+> `include`/ `goto`/ `break`/ `continue`/ `exit`/ `return` 等内联 Macro 可出现在行内任意位置。
+
+### 原生图片 Macro
+
+```twee
+<<image "tree.png" "树">>
+<<image $portrait $name>>
+```
+
+路径相对于 `resources/img/`；`tree.png` 与 `img/tree.png` 指向同一资源。
+不接受绝对路径、父目录跳转、盘符或 URL。alt 为可选字符串，默认为空。
+Tauri 通过现有 Resource 协议显示图片；TUI 将 alt 放进方框，不显示路径。
+图片不提供 caption 字段，说明正文可单独使用 `print`。
+
+### 原生状态条 Macro
+
+```twee
+<<meter "体力" $stamina 0 100>>
+```
+
+四个参数都必填，label 必须是字符串，其余参数必须是有限数值，且 min < max。
+值可以超出量程：保留原值，Host 将填充限制在空条与满条之间。
+宏复用 `Surface.component("meter", 1, {label, value, min, max}, fallback)` 的现有语义链，
+不另设 Meter 类型。TUI 使用十格字符条；Tauri 使用图形条，外观由 Host/CSS 决定。
+
+### 音频声明
+
+`<<audio resource channel? tag?>>` 声明循环背景音，默认 channel 为 `bgm`。
+Script 使用 `Audio.play(resource, { channel?, tags?, loop?, volume? })` 和 `Audio.stop(channel)`。
+按当前主 Passage 的 tag 计算所需音频；Header/Footer 可提供公共规则；同音频续播，离开自动停止。
+Audio 通过 RuntimeUpdate effect 交付，不属于 SemanticNode、Surface 或 Save。
+完整规则见 [Audio](../author/audio.md)。
+
+音频路径相对于 `resources/audio/`，保留 `audio/` 前缀也会归一到同一资源。
+
+### 弹窗与页面
+
+所有页面正文在打开时执行一次，Host 负责切页与关闭；重开重新执行正文。
+无导航 link 不创建历史项；其独立正文不支持 include/goto。完整规则见[弹窗与页面](../author/dialog.md)。
 
 ## 2. Twee Expression 内置函数
 
-| 函数 | 参数 | 结果 |
-|---|---:|---|
-| `abs(value)` | 1 | 绝对值 |
-| `boolean(value)` | 1 | 转换为布尔值 |
-| `ceil(value)` | 1 | 向上取整 |
-| `clamp(value, min, max)` | 3 | 限制数值范围 |
-| `clone(value)` | 1 | 深拷贝值图，断开原 Array/Object 引用并保留拷贝内部共享和循环 |
-| `defined(value)` | 1 | 是否不是 `undefined` |
-| `empty(value)` | 1 | 字符串、Array 或 Object 是否为空 |
-| `entries(value)` | 1 | Array/Object 的键值对 |
-| `either(...values)` | 至少 1 | 随机返回一个参数 |
-| `floor(value)` | 1 | 向下取整 |
-| `keys(value)` | 1 | Array/Object 的键 |
-| `max(...values)` | 至少 1 | 最大数值 |
-| `min(...values)` | 至少 1 | 最小数值 |
-| `number(value)` | 1 | 转换为数值 |
-| `random()` | 0 | `[0, 1)` 随机数 |
-| `round(value)` | 1 | Web 语义四舍五入 |
-| `string(value)` | 1 | 转换为字符串 |
-| `values(value)` | 1 | Array/Object 的值 |
-| `Object.assign(target, ...sources)` | 至少 1 | 按顺序写入 Object |
-| `Object.hasOwn(target, key)` | 2 | 是否有自身属性 |
+| 函数                                |   参数 | 结果                                                         |
+| ----------------------------------- | -----: | ------------------------------------------------------------ |
+| `abs(value)`                        |      1 | 绝对值                                                       |
+| `boolean(value)`                    |      1 | 转换为布尔值                                                 |
+| `ceil(value)`                       |      1 | 向上取整                                                     |
+| `clamp(value, min, max)`            |      3 | 限制数值范围                                                 |
+| `clone(value)`                      |      1 | 深拷贝值图，断开原 Array/Object 引用并保留拷贝内部共享和循环 |
+| `defined(value)`                    |      1 | 是否不是 `undefined`                                         |
+| `empty(value)`                      |      1 | 字符串、Array 或 Object 是否为空                             |
+| `entries(value)`                    |      1 | Array/Object 的键值对                                        |
+| `either(...values)`                 | 至少 1 | 随机返回一个参数                                             |
+| `floor(value)`                      |      1 | 向下取整                                                     |
+| `keys(value)`                       |      1 | Array/Object 的键                                            |
+| `max(...values)`                    | 至少 1 | 最大数值                                                     |
+| `min(...values)`                    | 至少 1 | 最小数值                                                     |
+| `number(value)`                     |      1 | 转换为数值                                                   |
+| `random()`                          |      0 | `[0, 1)` 随机数                                              |
+| `round(value)`                      |      1 | Web 语义四舍五入                                             |
+| `string(value)`                     |      1 | 转换为字符串                                                 |
+| `values(value)`                     |      1 | Array/Object 的值                                            |
+| `Object.assign(target, ...sources)` | 至少 1 | 按顺序写入 Object                                            |
+| `Object.hasOwn(target, key)`        |      2 | 是否有自身属性                                               |
 
 ## 3. Array、String 属性与方法
 
@@ -144,6 +185,13 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 - `State.global/variables/temporary.extend(values)`
 - `State.setup.get()`、`State.setup.set(value)`
 
+### `World`
+
+- 注册与查询：`add`、`get`、`places`、`locate`。
+- 玩家位置：`current`、`move`。
+
+参数、返回值以及坐标、导航和恢复规则统一见 [World](../author/world.md)。
+
 ### `Macro`
 
 - 定义：`add`、`update`、`del`、`get`、`has`
@@ -160,6 +208,9 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 
 - 写日志：`trace`、`debug`、`info`、`warn`、`error`
 - 读取订阅：`subscribe(filter?)`、`take(subscription)`、`unsubscribe(subscription)`
+
+订阅签名已声明，但当前脚本实现尚未接通；Core Logger 与游戏内控制台的差距见
+[项目状态](../development/status.md)。
 
 ### `Event`
 
@@ -242,16 +293,16 @@ Tauri 默认 Renderer 会计算并验证 0..63 的全部映射，游戏作者无
 
 ### `print` 的 style：8 个语义字形
 
-| style | 含义 | 渲染提示 |
-|---|---|---|
-| `emphasis` | 语气强调 | 斜体 |
-| `strong` | 重要 | 加粗 |
-| `code` | 代码/标识符/键位 | 等宽 |
-| `quote` | 引文/信件/留言 | 引用块 |
-| `marked` | 需要玩家注意 | 半透明高亮底色；与 color 文字颜色相互独立 |
-| `small` | 注释/脚注/次要信息 | 小字 |
-| `inserted` | 新增内容 | 下划线/加号（TUI `++…++`） |
-| `deleted` | 删除/废弃内容 | 删除线（TUI `~~…~~`） |
+| style      | 含义               | 渲染提示                                  |
+| ---------- | ------------------ | ----------------------------------------- |
+| `emphasis` | 语气强调           | 斜体                                      |
+| `strong`   | 重要               | 加粗                                      |
+| `code`     | 代码/标识符/键位   | 等宽                                      |
+| `quote`    | 引文/信件/留言     | 引用块                                    |
+| `marked`   | 需要玩家注意       | 半透明高亮底色；与 color 文字颜色相互独立 |
+| `small`    | 注释/脚注/次要信息 | 小字                                      |
+| `inserted` | 新增内容           | 下划线/加号（TUI `++…++`）                |
+| `deleted`  | 删除/废弃内容      | 删除线（TUI `~~…~~`）                     |
 
 Tauri 默认主题已经实现全部 8 种字形及 heading 排版；作者 CSS 只负责可选的品牌覆盖。
 
@@ -290,37 +341,3 @@ Tag、Macro、Expression 函数、变量、注释、链接和插值，并提供�
 
 语言服务会从内置表、跨文件 Widget 和脚本 `Macro.add/update()` 的 `body` 字段区分 Inline 与
 Container：Inline 出现闭合标签、Container 缺少或错配闭合标签都会产生诊断。
-
-### 原生图片 Macro
-
-```twee
-<<image "tree.png" "树">>
-<<image $portrait $name>>
-```
-
-路径相对于 Resource 目录，例如 `resources/img/tree.png`。
-不接受绝对路径、父目录跳转、盘符或 URL。alt 为可选字符串，默认为空。
-Tauri 通过现有 Resource 协议显示图片；TUI 将 alt 放进方框，不显示路径。
-图片不提供 caption 字段，说明正文可单独使用 `print`。
-
-### 原生状态条 Macro
-
-```twee
-<<meter "体力" $stamina 0 100>>
-```
-
-四个参数都必填，label 必须是字符串，其余参数必须是有限数值，且 min < max。
-值可以超出量程：保留原值，Host 将填充限制在空条与满条之间。
-宏复用 `Surface.component("meter", 1, {label, value, min, max}, fallback)` 的现有语义链，
-不另设 Meter 类型。TUI 使用十格字符条；Tauri 使用图形条，外观由 Host/CSS 决定。
-
-## Audio effect
-
-`<<audio resource channel? tag?>>` 声明循环背景音，默认 channel 为 `bgm`。
-Script 使用 `Audio.play(resource, { channel?, tags?, loop?, volume? })` 和 `Audio.stop(channel)`。
-按当前主 Passage 的 tag 计算所需音频；Header/Footer 可提供公共规则；同音频续播，离开自动停止。
-Audio 通过 RuntimeUpdate effect 交付，不属于 SemanticNode、Surface 或 Save。
-完整规则见 [Audio](../author/audio.md)。
-
-图片作者路径相对于 `resources/img/`：`<<image "tree.png" "树">>`；
-音频相对于 `resources/audio/`。保留对应根前缀也会归一到同一 Resource。

@@ -154,6 +154,7 @@
       "V",
       "T",
       "setup",
+      "World",
       "Reaction",
       "Macro",
       "Logger",
@@ -636,8 +637,21 @@
     });
   }
 
+  // crates/narrava-loom-script/bootstrap/world.ts
+  function world() {
+    scriptGlobals.World = Object.freeze({
+      add: (place) => __narravaWorldAdd(place),
+      get: (id) => __narravaWorldGet(id),
+      places: () => __narravaWorldPlaces(),
+      locate: (point) => __narravaWorldLocate(point),
+      current: () => __narravaWorldCurrent(),
+      move: (point) => __narravaWorldMove(point)
+    });
+  }
+
   // crates/narrava-loom-script/bootstrap/index.ts
   state();
+  world();
   reaction();
   macro();
   logger();

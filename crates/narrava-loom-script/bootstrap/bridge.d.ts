@@ -6,6 +6,13 @@ declare function __narravaStateDel(namespace: string, key: string): unknown
 declare function __narravaStateSnapshot(namespace: string): Record<string, unknown>
 declare function __narravaStateReplace(namespace: string, values: Record<string, unknown>): void
 
+declare function __narravaWorldAdd(place: NarravaPlaceDefinition): void
+declare function __narravaWorldGet(id: string): NarravaPlace | undefined
+declare function __narravaWorldPlaces(): readonly NarravaPlace[]
+declare function __narravaWorldLocate(point: NarravaWorldPoint): readonly NarravaPlace[]
+declare function __narravaWorldCurrent(): NarravaWorldPosition | null
+declare function __narravaWorldMove(point: NarravaWorldPoint): NarravaWorldPosition
+
 declare function __narravaReactionAdd(definition: string): string
 declare function __narravaReactionGet(id: string): string | undefined
 declare function __narravaReactionEnable(id: string): boolean

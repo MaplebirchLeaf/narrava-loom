@@ -23,6 +23,12 @@ pub(crate) fn apply_lifecycle_reactions<'hir, 'source>(
     state: &mut State,
     requests: &mut StoryRuntimeRequests<'_, 'hir, 'source>,
 ) -> Result<narrava_loom_core::runtime::BodyExecution, Diagnostic> {
+    // 地点先于条件求值更新；include/widget 复用正文，不经过此主导航入口。
+    if let Some(world) = script.enter_world_refresh() {
+        *state.world_state_mut() = world;
+    } else {
+        narrava_loom_core::world::enter_passage(state, passage)?;
+    }
     let reactions = script
         .resolve_lifecycle_reactions(passage, state)
         .map_err(|error| reaction_error(&error.code, error.message))?;

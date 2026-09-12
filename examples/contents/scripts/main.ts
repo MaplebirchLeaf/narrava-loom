@@ -1,4 +1,3 @@
-/// <reference types="@narrava-loom/types" />
 // 综合示例脚本：先定义供 Twee 调用的函数，再注册 Surface Macro，最后统一公开函数。
 
 // setup 是启动配置，不进入存档；脚本模块加载时建立本示例需要的稳定字段。

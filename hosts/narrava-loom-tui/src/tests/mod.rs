@@ -1,5 +1,8 @@
 //! `narrava-loom-tui` 的集中测试入口。
 //!
-//! 遵循仓库源码规范：所有 `#[test]` 只放在本目录，业务源码不声明测试模块。
+//! 本地用例与共享 Host 用例统一由此挂载。
 
 mod render;
+
+#[path = "../../../tests/audio.rs"]
+mod audio;

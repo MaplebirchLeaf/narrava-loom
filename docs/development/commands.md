@@ -20,7 +20,7 @@
 |---|---|
 | `cargo fmt --all -- --check` | 检查 Rust 格式，不修改文件 |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | 检查整个 workspace，并把警告视为错误 |
-| `cargo test --workspace --all-targets --locked` | 运行 Core、Protocol、Tauri 与 TUI 的 Rust 测试 |
+| `cargo test --workspace --all-targets --locked` | 运行 Core、Protocol、Script、Tauri 与 TUI 的 Rust 测试 |
 | `cargo doc --workspace --no-deps --locked` | 生成 workspace API 文档，不构建依赖文档 |
 
 只修改一个 crate 时可把 workspace 命令缩窄为 `-p <crate>`；完成前仍应运行全工作区门禁。
@@ -31,18 +31,19 @@
 
 | 命令 | 作用 |
 |---|---|
-| `bun run check` | 依次检查 canonical contract、TypeScript、Oxlint、Oxfmt、Tauri 前端和 VS Code 扩展 |
+| `bun run check` | 依次检查版本、契约生成物、Bootstrap、TypeScript、Oxlint、Oxfmt 和前端/编辑器测试 |
 | `bun run bootstrap:build` | 将 Script Runtime 的内部 TypeScript bootstrap 打包为 Rust 编译期嵌入的单文件 JS |
 | `bun run bootstrap:check` | 检查 bootstrap 生成物同步并严格检查内部 bridge 类型；不改文件 |
 | `bun run vsix` | 测试并打包 Twee 扩展到 `dist/vscode-narrava-loom/`；可追加 `--install` |
-| `bun run contract:generate` | 从 `bindings/script-contract.json` 更新 Rust 与 TypeScript 生成目录 |
-| `bun run contract:check` | 检查生成目录与 canonical contract 完全同步，不写文件 |
+| `bun run contract:generate` | 从 Protocol Rust DTO 与 `bindings/script-contract.json` 更新 Rust/TypeScript 生成文件 |
+| `bun run contract:check` | 检查生成文件与两处契约来源同步，不写文件 |
 | `bun run typecheck` | 只检查 TypeScript 声明与示例脚本 |
 | `bun run lint` | 只运行 Oxlint |
 | `bun run format:check` | 检查 JS、TS、JSON 格式 |
 | `bun run format` | 写入 JS、TS、JSON 格式化结果 |
-| `bun run test:frontend` | 验证 Tauri Renderer 的 64 级 color 等纯前端契约 |
+| `bun run test:frontend` | 验证 Tauri Renderer 的文本、颜色、图片、状态条与弹窗契约 |
 | `bun run test:vscode` | 验证 Twee 语法目录、grammar 与编辑器契约 |
+| `bun run test:types` | 验证编辑器作者项目隔离，以及独立游戏完整加载类型包 |
 
 不要再使用 `npx tsc` 作为本仓库标准命令；根脚本已经固定 workspace、配置和 Bun 工具链。
 

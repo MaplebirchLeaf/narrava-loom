@@ -1,27 +1,27 @@
 # 公开 API 与依赖锁定
 
-## 三种“公开”不是一回事
+## 公开边界
 
 | 边界 | 面向谁 | 稳定性依据 |
 |---|---|---|
 | Twee、Expression、Macro | 游戏作者 | `docs/reference/` |
 | `narrava.d.ts` 详细全局签名与说明 | TS/JS 游戏脚本 | `bindings/typescript/narrava.d.ts`（人工维护、由契约覆盖测试校验） |
-| Script/Runtime 名称与 tagged union | Binding、Host、跨语言调用方 | `bindings/script-contract.json` 生成 `narrava-contract.generated.d.ts` 与 Rust 常量 |
+| Script/Runtime 名称与 tagged union | Binding、Host、跨语言调用方 | Protocol Rust DTO 与 `bindings/script-contract.json` 共同生成类型和名称目录 |
 | Rust `pub` 项 | Host 和工具作者 | Rustdoc 与语义化版本 |
 
 Rust 中的 `pub` 只表示当前 crate 外可访问，不代表游戏作者需要 Rust，也不自动
-代表 `0.5.x` 期间已承诺长期兼容。公开 Rust 项应有文档注释；编译器内部结构不应为了
+代表 `0.x` 期间已承诺长期兼容。公开 Rust 项应有文档注释；编译器内部结构不应为了
 方便调用而无条件扩大。缩小已有 `pub` 是破坏性变更，需要单独评审，不在文档整理中暗改。
 
 ## 异步边界
 
-Core 已有 Pending/Resume/Cancel 的所有权模型。Tauri ECMAScript Binding 会立即排空 Boa
+Core 已有 Pending/Resume/Cancel 的所有权模型。ECMAScript Binding 会立即排空 Boa
 microtask；`Host.delay(ms)` 则建立真实 Core suspension，由 Rust Worker 到期后恢复原事务。
 没有等待受管 Host 操作的未决 Promise 返回
 `script.macro_unmanaged_promise`，不得伪装成 `undefined` 或普通 JSON 值。
 
-当前只有 delay capability。文件选择、网络等能力需要各自的权限、输入输出与取消契约，不能
-借一个“任意 Host 回调”绕过边界验证。
+Script Macro 的受管等待为 `Host.delay`；Session 另用 Pending 处理 Save 和语言请求。
+新增平台操作必须定义各自的输入、输出与取消契约。
 
 ## 依赖锁定
 
@@ -33,7 +33,7 @@ microtask；`Host.delay(ms)` 则建立真实 Core suspension，由 Rust Worker �
 
 ## 统一版本与提交
 
-根 `Cargo.toml` 的 package.version 是项目版本来源。五个 Rust crate、根 package.json、
+根 `Cargo.toml` 的 package.version 是项目版本来源。各 Rust crate、根 package.json、
 作者 TypeScript 包、VS Code 扩展与 Tauri 配置保持相同版本；`bun run check` 会检查一致性。
 
 每次提交前按变更性质递增语义化版本：修复用 patch，新增兼容能力用 minor；

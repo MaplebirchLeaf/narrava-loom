@@ -182,6 +182,10 @@ interface NarravaReactionStatus {
 - `reset` 把次数与启用状态恢复到定义初值，但不能复活已经被 `once` 销毁的规则。
 - `limit` 达到后 `enable` 返回 `false` 且规则保持禁用；只有 `reset` 清零次数后才能重新启用。
 
+`cond` 与动态 `emit.payload` 内可以调用 `get`，读取本轮解析开始时的只读状态；同轮前面规则
+新增的次数、禁用或销毁在解析结束后才对查询可见。两个回调内调用 `add`、`enable`、`disable`
+或 `reset` 会抛出可捕获的 `reaction.resolving` 错误。需要管理规则时，请在回调之外执行。
+
 ## 执行顺序与事务
 
 字段在对象中的书写顺序不影响执行。Runtime 固定使用两个阶段：

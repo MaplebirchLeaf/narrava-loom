@@ -539,7 +539,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     )));
     assert_eq!(
         &fs::read(root_path.join("save/manual-1.nsave")).expect("示例应实际导出存档")[..8],
-        b"NRSAVE\0\x02"
+        b"NRSAVE\0\x03"
     );
     let language_buttons: Vec<String> = author_tools
         .nodes

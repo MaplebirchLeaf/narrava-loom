@@ -5,10 +5,10 @@
 关键字、Macro 结构和诊断只依据 Narrava Core 当前已实现契约；TextMate scope 使用通用命名，
 以适配常见 VS Code 主题。
 
-原生宏（包括 `print`、`image`、`slot` 等）支持悬停查看语法与用途，宏名补全同步展示说明。
+原生宏（包括 `print`、`image`、`slot` 等）支持悬停查看语法与用途，宏名补全同步展示说明；说明使用中文在前、英文在后的双语。
 Expression 原生函数和方法也支持悬停查看签名与用途。按住 `Ctrl`
 并左键单击（macOS 为 `Cmd+单击`）会跳到扩展随附的
-[`narrava-expression.d.ts`](references/narrava-expression.d.ts) 精确声明。该 DTS 只描述
+[`narrava-expression.d.ts`](https://github.com/MaplebirchLeaf/narrava-loom/blob/HEAD/editors/vscode-narrava-loom/references/narrava-expression.d.ts) 精确声明。该 DTS 只描述
 Twee Expression，不会把这些名称伪装成 JavaScript 全局 API。
 
 高亮范围包括金色 Passage 名、独立颜色的 Passage tag、HTML 标签与属性、内置及自定义 Macro、

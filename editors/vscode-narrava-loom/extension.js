@@ -16,9 +16,10 @@ const {
 /** 激活扩展：创建工作区索引、注册 Provider 与文件事件，并做首次刷新。 */
 async function activate(context) {
   const workspace = new MacroWorkspace()
+  // TS/JS 类型由游戏 tsconfig 和内置语言服务管理；本扩展只为 Twee 注册 Provider。
   const selector = { language: "narrava-twee", scheme: "file" }
   let refreshTimer
-  /** 防抖 120ms 后刷新工作区索引，合并连续编辑触发。 */
+  // 合并连续编辑，避免每次击键都重扫跨文件定义。
   const scheduleRefresh = () => {
     clearTimeout(refreshTimer)
     refreshTimer = setTimeout(() => workspace.refresh(), 120)

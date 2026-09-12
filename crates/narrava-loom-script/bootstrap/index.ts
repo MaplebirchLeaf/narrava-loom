@@ -11,8 +11,10 @@ import runtime from "./runtime"
 import save from "./save"
 import state from "./state"
 import surface from "./surface"
+import world from "./world"
 
 state()
+world()
 reaction()
 macro()
 logger()

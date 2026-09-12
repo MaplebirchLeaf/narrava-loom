@@ -1,0 +1,7 @@
+[package]
+name = "narrava-loom-world"
+version = "0.8.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

@@ -1,7 +1,7 @@
 // Generated from Protocol Rust declarations and bindings/script-contract.json. Do not edit by hand.
 
 pub const RUNTIME_PROTOCOL_VERSION: u16 = 2;
-pub const GLOBALS: &[&str] = &["State", "V", "T", "setup", "Reaction", "Macro", "Logger", "Event", "Host", "Engine", "Story", "Save", "Resource", "Audio", "I18n", "Surface"];
+pub const GLOBALS: &[&str] = &["State", "V", "T", "setup", "World", "Reaction", "Macro", "Logger", "Event", "Host", "Engine", "Story", "Save", "Resource", "Audio", "I18n", "Surface"];
 pub const BUILTIN_EVENTS: &[&str] = &["passage:init", "passage:start", "passage:render", "passage:display", "passage:end"];
 pub const SURFACE_BUILDERS: &[&str] = &["text", "hardBreak", "image", "region", "component", "action", "fragment"];
 pub const RUNTIME_COMMANDS: &[&str] = &["start", "back", "forward", "activate", "input", "save", "selectLanguage", "resume", "cancel"];

@@ -13,7 +13,8 @@ use crate::{
     },
     source::Source,
     state::State,
-    story::Story,
+    story::{Story, StoryHistoryId},
+    world::{Environment, Place, WorldPosition},
 };
 
 #[test]
@@ -38,10 +39,167 @@ fn save_document_binary_has_a_versioned_header_and_round_trips() {
         }])
         .to_bytes()
         .expect("存档应可编码");
-    assert_eq!(&encoded[..8], b"NRSAVE\0\x02");
+    assert_eq!(&encoded[..8], b"NRSAVE\0\x03");
     let decoded: SaveDocument = SaveDocument::from_bytes(&encoded).expect("存档应可解码");
     assert_eq!(decoded.reactions()[0].id, "quest.once");
     assert_eq!(decoded.to_bytes().expect("应可再次编码"), encoded);
+}
+
+#[test]
+fn save_version_two_restores_variables_and_history() {
+    // 已发布 v2 协议：score=true、一次 Start 导航、空的进入前变量图。
+    let bytes: &[u8] = b"NRSAVE\0\x02\x0cexample.save\x051.2.3\x01\x05score\x02\x01\0\x01\x05Start\x01\0\0\x01\0\0";
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .expect("测试 Source 应可读取");
+    let compiled: HirStory<'_> = test_story(&source);
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = world_test_state();
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
+    let saved: SaveDocument = SaveDocument::from_bytes(bytes).expect("v2 存档仍应可解码");
+
+    saved.restore(&game, &mut state, &mut story).unwrap();
+
+    assert_eq!(state.variables_get("score"), Some(&Value::Boolean(true)));
+    assert_eq!(story.current().map(|passage| passage.name), Some("Start"));
+    assert_eq!(story.history().len(), 1);
+    assert!(state.world_state().position.is_none());
+    assert!(state.world().get("town").is_some());
+    let history_id: StoryHistoryId = story.current_entry().unwrap().id();
+    assert_eq!(story.state_snapshot(history_id).unwrap().variables_len(), 0);
+    assert!(
+        story
+            .state_snapshot(history_id)
+            .unwrap()
+            .world_state()
+            .position
+            .is_none()
+    );
+    assert_eq!(&saved.to_bytes().unwrap()[..8], b"NRSAVE\0\x03");
+}
+
+#[test]
+fn save_world_round_trip_restores_current_and_history_positions() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .unwrap();
+    let compiled: HirStory<'_> = test_story(&source);
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = world_test_state();
+    let start_id: StoryHistoryId = story.goto("Start").unwrap().id();
+    story.record_state_snapshot(start_id, state.snapshot());
+    state.world_state_mut().position.as_mut().unwrap().point = [4, 5];
+    let map_id: StoryHistoryId = story.goto("Map").unwrap().id();
+    story.record_state_snapshot(map_id, state.snapshot());
+    state.world_state_mut().position.as_mut().unwrap().point = [8, 9];
+    let end_id: StoryHistoryId = story.goto("End").unwrap().id();
+    story.record_state_snapshot(end_id, state.snapshot());
+    state.world_state_mut().position.as_mut().unwrap().point = [9, 9];
+    state
+        .world_state_mut()
+        .position
+        .as_mut()
+        .unwrap()
+        .environment = None;
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
+    let bytes: Vec<u8> = SaveDocument::capture(&game, &state, &story)
+        .and_then(|document: SaveDocument| document.to_bytes())
+        .unwrap();
+    let saved: SaveDocument = SaveDocument::from_bytes(&bytes).unwrap();
+    state.world_state_mut().position = None;
+
+    saved.restore(&game, &mut state, &mut story).unwrap();
+
+    let position: &WorldPosition = state.world_state().position.as_ref().unwrap();
+    assert_eq!(position.point, [9, 9]);
+    assert_eq!(position.environment, None);
+    assert!(state.world().get("town").is_some());
+    let restored_map_id: StoryHistoryId = story.back().unwrap().id();
+    state.restore_snapshot(story.state_snapshot(restored_map_id).unwrap());
+    assert_eq!(state.world_state().position.as_ref().unwrap().point, [4, 5]);
+    assert_eq!(
+        state.world_state().position.as_ref().unwrap().environment,
+        Some(Environment::Outside)
+    );
+}
+
+#[test]
+fn save_rejects_invalid_world_positions_before_replacing_any_runtime_state() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .unwrap();
+    let compiled: HirStory<'_> = test_story(&source);
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = world_test_state();
+    let start_id: StoryHistoryId = story.goto("Start").unwrap().id();
+    story.record_state_snapshot(start_id, state.snapshot());
+    let _old: Option<Value> = state.variables_set("score", Value::Number(5.0));
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
+    let saved: SaveDocument = SaveDocument::capture(&game, &state, &story).unwrap();
+    let original: serde_json::Value = serde_json::to_value(&saved).unwrap();
+    let _old: Option<Value> = state.variables_set("score", Value::Number(99.0));
+    let _old: Option<Value> = state.temporary_set("selection", Value::string("active"));
+    story.goto("Map").unwrap();
+    record_missing_history_states(&mut story, &state);
+    let before: Vec<u8> = SaveDocument::capture(&game, &state, &story)
+        .and_then(|document: SaveDocument| document.to_bytes())
+        .unwrap();
+
+    for history in [false, true] {
+        for position in [
+            serde_json::json!({"place":"missing", "point":[2,3], "environment":null}),
+            serde_json::json!({"place":"town", "point":[20,30], "environment":null}),
+        ] {
+            let mut altered: serde_json::Value = original.clone();
+            let world: &mut serde_json::Value = if history {
+                &mut altered["story"]["history"][0]["world"]
+            } else {
+                &mut altered["world"]
+            };
+            world["position"] = position;
+            let altered: SaveDocument = serde_json::from_value(altered).unwrap();
+            let bytes: Vec<u8> = altered.to_bytes().unwrap();
+            let invalid: SaveDocument = SaveDocument::from_bytes(&bytes).unwrap();
+
+            let error: SaveError = invalid.restore(&game, &mut state, &mut story).unwrap_err();
+
+            assert_eq!(error.diagnostic().code, "save.invalid_world");
+            let after: Vec<u8> = SaveDocument::capture(&game, &state, &story)
+                .and_then(|document: SaveDocument| document.to_bytes())
+                .unwrap();
+            assert_eq!(after, before);
+            assert_eq!(
+                state.temporary_get("selection"),
+                Some(&Value::string("active"))
+            );
+        }
+    }
+}
+
+fn world_test_state() -> State {
+    let mut state: State = State::new();
+    state
+        .world_mut()
+        .add(Place {
+            id: String::from("town"),
+            name: None,
+            parent: None,
+            bounds: vec![[0, 0], [10, 0], [10, 10], [0, 10]],
+            entry: None,
+        })
+        .unwrap();
+    state.world_state_mut().position = Some(WorldPosition {
+        place: String::from("town"),
+        point: [2, 3],
+        environment: Some(Environment::Outside),
+    });
+    state
 }
 
 #[test]

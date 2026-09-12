@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["@narrava-loom/types"]
+  },
+  "include": ["contents/**/*.ts", "contents/**/*.js"],
+  "typeAcquisition": { "enable": false }
+}

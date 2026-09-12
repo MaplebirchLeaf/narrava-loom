@@ -6,8 +6,7 @@
 
 - **完全没经验**：按下面分册顺序从头做到尾；
 - **已经成功打开 `examples/`**：直接从 `config.toml` 与第一个 Passage 开始；
-- **只想查"现在能写什么"**：直接打开 [作者 API 与语法速查](../reference/api-and-syntax.md)，
-  那里集中列出了所有当前内置 Macro、Expression 函数/方法、操作符、Worker ECMAScript API 和基础事件。
+- **只想查“现在能写什么”**：直接打开 [API 与语法速查](../reference/api-and-syntax.md)。
 
 ## 分册
 
@@ -20,8 +19,9 @@
 7. [Save](save.md)：保存范围、读写存档和处理结果；
 8. [Macro](macro.md)：原生宏、点击正文与内容复用；
 9. [Reaction](reaction.md)：Event、State 与 lifecycle 的声明式叙事反应；
-10. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错。
+10. [弹窗与页面](dialog.md)：无导航打开、默认页与关闭；
+11. [Audio](audio.md)：背景音、tag 匹配与播放生命周期；
+12. [World](world.md)：地点、坐标、移动与位置恢复；
+13. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错。
 
-精确的宏、内置函数、运算符和公开脚本 API 不在教程里重复维护，统一见
-[作者 API 与语法速查](../reference/api-and-syntax.md)。
 架构、Host 和仓库开发文档见[文档总入口](../README.md)。

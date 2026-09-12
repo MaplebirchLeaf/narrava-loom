@@ -4,78 +4,186 @@
 // .twee 的悬停说明、补全与定义跳转，签名须与 Core evaluator 保持一致。
 
 const globals = [
-  ["abs", "abs(value: number): number", "返回数值的绝对值。"],
-  ["boolean", "boolean(value: unknown): boolean", "按 Narrava Expression 真值规则转为布尔值。"],
-  ["ceil", "ceil(value: number): number", "向上取整。"],
+  ["abs", "abs(value: number): number", "返回数值的绝对值。\n\nReturn the absolute value."],
+  [
+    "boolean",
+    "boolean(value: unknown): boolean",
+    "按 Narrava Expression 真值规则转为布尔值。\n\nConvert using Narrava Expression truthiness rules.",
+  ],
+  ["ceil", "ceil(value: number): number", "向上取整。\n\nRound up to an integer."],
   [
     "clamp",
     "clamp(value: number, minimum: number, maximum: number): number",
-    "把数值限制在闭区间内。",
+    "把数值限制在闭区间内。\n\nClamp a number to the inclusive range.",
   ],
   [
     "clone",
     "clone<T>(value: T): T",
-    "深拷贝完整值图：断开与原 Array/Object 的引用，保留拷贝内部的共享引用和循环。",
+    "深拷贝完整值图：断开与原 Array/Object 的引用，保留拷贝内部的共享引用和循环。\n\nDeep-copy the value graph, detaching original Array/Object references while preserving shared references and cycles within the copy.",
   ],
-  ["defined", "defined(value: unknown): boolean", "判断值是否不为 undefined。"],
-  ["empty", "empty(value: unknown): boolean", "判断值是否为空值、空字符串或空集合。"],
-  ["entries", "entries(value: object): [string, unknown][]", "按属性顺序返回对象键值对。"],
-  ["either", "either<T>(first: T, ...rest: T[]): T", "使用 Runtime 随机源等概率选择一个参数。"],
-  ["floor", "floor(value: number): number", "向下取整。"],
-  ["keys", "keys(value: object): string[]", "按属性顺序返回对象键。"],
-  ["max", "max(first: number, ...rest: number[]): number", "返回最大数值。"],
-  ["min", "min(first: number, ...rest: number[]): number", "返回最小数值。"],
-  ["number", "number(value: unknown): number", "按 Narrava Expression 规则转为数值。"],
-  ["random", "random(): number", "使用 Runtime 随机源返回 0（含）到 1（不含）的数值。"],
-  ["round", "round(value: number): number", "按 Web 数值语义四舍五入。"],
-  ["string", "string(value: unknown): string", "按 Narrava Expression 规则转为字符串。"],
-  ["values", "values(value: object): unknown[]", "按属性顺序返回对象值。"],
+  [
+    "defined",
+    "defined(value: unknown): boolean",
+    "判断值是否不为 undefined。\n\nReturn whether the value is not undefined.",
+  ],
+  [
+    "empty",
+    "empty(value: unknown): boolean",
+    "判断值是否为空值、空字符串或空集合。\n\nCheck for a nullish value, empty string, or empty collection.",
+  ],
+  [
+    "entries",
+    "entries(value: object): [string, unknown][]",
+    "按属性顺序返回对象键值对。\n\nReturn object entries in property order.",
+  ],
+  [
+    "either",
+    "either<T>(first: T, ...rest: T[]): T",
+    "使用 Runtime 随机源等概率选择一个参数。\n\nChoose an argument uniformly using the Runtime random source.",
+  ],
+  ["floor", "floor(value: number): number", "向下取整。\n\nRound down to an integer."],
+  [
+    "keys",
+    "keys(value: object): string[]",
+    "按属性顺序返回对象键。\n\nReturn object keys in property order.",
+  ],
+  [
+    "max",
+    "max(first: number, ...rest: number[]): number",
+    "返回最大数值。\n\nReturn the largest number.",
+  ],
+  [
+    "min",
+    "min(first: number, ...rest: number[]): number",
+    "返回最小数值。\n\nReturn the smallest number.",
+  ],
+  [
+    "number",
+    "number(value: unknown): number",
+    "按 Narrava Expression 规则转为数值。\n\nConvert to a number using Narrava Expression rules.",
+  ],
+  [
+    "random",
+    "random(): number",
+    "使用 Runtime 随机源返回 0（含）到 1（不含）的数值。\n\nUse the Runtime random source to return a number in [0, 1).",
+  ],
+  [
+    "round",
+    "round(value: number): number",
+    "按 Web 数值语义四舍五入。\n\nRound to the nearest integer using Web number semantics.",
+  ],
+  [
+    "string",
+    "string(value: unknown): string",
+    "按 Narrava Expression 规则转为字符串。\n\nConvert to a string using Narrava Expression rules.",
+  ],
+  [
+    "values",
+    "values(value: object): unknown[]",
+    "按属性顺序返回对象值。\n\nReturn object values in property order.",
+  ],
 ]
 
 const namespace = [
   [
     "Object.assign",
     "Object.assign<T extends object>(target: T, ...sources: object[]): T",
-    "把源对象的自有属性按顺序写入可变目标。",
+    "把源对象的自有属性按顺序写入可变目标。\n\nCopy own properties from each source into a mutable target, in order.",
   ],
   [
     "Object.hasOwn",
     "Object.hasOwn(value: object, key: unknown): boolean",
-    "判断对象是否拥有指定自有属性。",
+    "判断对象是否拥有指定自有属性。\n\nCheck whether an object has the specified own property.",
   ],
 ]
 
 const arrays = [
-  ["at", "at(index: number): T | undefined", "按 Web 索引规则读取元素，负数从末尾计算。"],
-  ["concat", "concat(...values: (T | T[])[]): T[]", "返回一层展开后的新数组。"],
-  ["includes", "includes(value: T): boolean", "判断数组是否包含指定值。"],
+  [
+    "at",
+    "at(index: number): T | undefined",
+    "按 Web 索引规则读取元素，负数从末尾计算。\n\nRead an element using Web index rules; negative indices count from the end.",
+  ],
+  [
+    "concat",
+    "concat(...values: (T | T[])[]): T[]",
+    "返回一层展开后的新数组。\n\nReturn a new array, flattening array arguments by one level.",
+  ],
+  [
+    "includes",
+    "includes(value: T): boolean",
+    "判断数组是否包含指定值。\n\nCheck whether the array contains a value.",
+  ],
   [
     "indexOf",
     "indexOf(value: T, fromIndex?: number): number",
-    "返回指定值的首个索引，未找到时为 -1。",
+    "返回指定值的首个索引，未找到时为 -1。\n\nReturn the first matching index, or -1 if absent.",
   ],
-  ["join", "join(separator?: string): string", "把数组元素连接为字符串。"],
-  ["pop", "pop(): T | undefined", "删除并返回末尾元素；需要可写引用。"],
-  ["push", "push(...values: T[]): number", "在末尾追加元素并返回新长度；需要可写引用。"],
-  ["shift", "shift(): T | undefined", "删除并返回首元素；需要可写引用。"],
-  ["slice", "slice(start?: number, end?: number): T[]", "返回指定区间的新数组。"],
+  [
+    "join",
+    "join(separator?: string): string",
+    "把数组元素连接为字符串。\n\nJoin array elements into a string.",
+  ],
+  [
+    "pop",
+    "pop(): T | undefined",
+    "删除并返回末尾元素；需要可写引用。\n\nRemove and return the last element; requires a writable reference.",
+  ],
+  [
+    "push",
+    "push(...values: T[]): number",
+    "在末尾追加元素并返回新长度；需要可写引用。\n\nAppend elements and return the new length; requires a writable reference.",
+  ],
+  [
+    "shift",
+    "shift(): T | undefined",
+    "删除并返回首元素；需要可写引用。\n\nRemove and return the first element; requires a writable reference.",
+  ],
+  [
+    "slice",
+    "slice(start?: number, end?: number): T[]",
+    "返回指定区间的新数组。\n\nReturn a new array for the specified range.",
+  ],
   [
     "splice",
     "splice(start: number, deleteCount?: number, ...values: T[]): T[]",
-    "原地删除或插入元素，返回被删除项；需要可写引用。",
+    "原地删除或插入元素，返回被删除项；需要可写引用。\n\nRemove or insert elements in place and return removed items; requires a writable reference.",
   ],
-  ["unshift", "unshift(...values: T[]): number", "在开头插入元素并返回新长度；需要可写引用。"],
+  [
+    "unshift",
+    "unshift(...values: T[]): number",
+    "在开头插入元素并返回新长度；需要可写引用。\n\nPrepend elements and return the new length; requires a writable reference.",
+  ],
 ]
 
 const strings = [
-  ["endsWith", "endsWith(search: string): boolean", "判断字符串是否以指定文本结尾。"],
-  ["includes", "includes(search: string): boolean", "判断字符串是否包含指定文本。"],
-  ["slice", "slice(start?: number, end?: number): string", "按 UTF-16 码元返回指定区间。"],
-  ["split", "split(separator?: string, limit?: number): string[]", "按分隔符拆分字符串。"],
-  ["startsWith", "startsWith(search: string): boolean", "判断字符串是否以指定文本开头。"],
-  ["toLowerCase", "toLowerCase(): string", "返回小写字符串。"],
-  ["toUpperCase", "toUpperCase(): string", "返回大写字符串。"],
-  ["trim", "trim(): string", "删除首尾空白。"],
+  [
+    "endsWith",
+    "endsWith(search: string): boolean",
+    "判断字符串是否以指定文本结尾。\n\nCheck whether the string ends with the specified text.",
+  ],
+  [
+    "includes",
+    "includes(search: string): boolean",
+    "判断字符串是否包含指定文本。\n\nCheck whether the string contains the specified text.",
+  ],
+  [
+    "slice",
+    "slice(start?: number, end?: number): string",
+    "按 UTF-16 码元返回指定区间。\n\nReturn the specified range of UTF-16 code units.",
+  ],
+  [
+    "split",
+    "split(separator?: string, limit?: number): string[]",
+    "按分隔符拆分字符串。\n\nSplit a string by the separator.",
+  ],
+  [
+    "startsWith",
+    "startsWith(search: string): boolean",
+    "判断字符串是否以指定文本开头。\n\nCheck whether the string starts with the specified text.",
+  ],
+  ["toLowerCase", "toLowerCase(): string", "返回小写字符串。\n\nReturn a lowercase string."],
+  ["toUpperCase", "toUpperCase(): string", "返回大写字符串。\n\nReturn an uppercase string."],
+  ["trim", "trim(): string", "删除首尾空白。\n\nRemove leading and trailing whitespace."],
 ]
 
 const make = (name, signature, description, kind) =>

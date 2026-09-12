@@ -35,7 +35,13 @@
           "__narravaStateHas",
           "__narravaStateReplace",
           "__narravaStateSet",
-          "__narravaStateSnapshot"
+          "__narravaStateSnapshot",
+          "__narravaWorldAdd",
+          "__narravaWorldGet",
+          "__narravaWorldPlaces",
+          "__narravaWorldLocate",
+          "__narravaWorldCurrent",
+          "__narravaWorldMove"
         ]
       }
     ],

@@ -12,18 +12,14 @@ TUI command loop ───────┘         ↕                        ↕
                       SemanticOutput → Protocol DTO → Host Renderer
 ```
 
-## 所有权与源码入口
+## 所有权
 
-- `session.rs` 持有 State、Story、交互、上一帧、continuation 和命令事务；
-- `session/state_io.rs` 处理 Save 与语言选择；`RuntimeData` 只保存游戏身份、I18n 目录和已验证语言包；
-- `dispatch.rs` 分派 Macro，`reaction_runtime.rs` 执行 Reaction 效果；
-- `state_adapter.rs`、`resource_adapter.rs`、`reaction_adapter.rs` 是 Boa 与 Core 类型/API 的适配边界；
-- `protocol_adapter/script_output.rs` 校验作者 `Surface` builder 数据，直接生成 Core `SemanticOutput`；
-- `protocol_adapter/host_update.rs` 将 Core 输出转换为 owned Host DTO；
-- `narrava-loom-protocol` 只定义 owned、serializable 数据，不依赖 Core、Script 或 Host。
+Session 持有 State、Story、交互、上一帧、continuation 和命令事务。`RuntimeData` 只保存游戏
+身份、I18n 目录和已验证语言包。Protocol 定义 owned、serializable 数据；Adapter 负责转换
+Core 与 Script、Host 的类型。实现入口统一见[源码索引](source-record.md#script-runtime)。
 
 官方 Host 没有 Native Session registry。`RuntimeSessionId`、request/response envelope 是
-Protocol 数据契约，不再对应另一层 Handle/Driver 执行对象。`EcmaBinding` 直接持有实际
+Protocol 数据契约，不对应独立的 Handle/Driver 执行对象。`EcmaBinding` 直接持有实际
 ECMAScript 实现；Core 通过 `ScriptCallDispatcher` 调回脚本，避免依赖 Script crate。
 
 ## 命令与事务
@@ -39,8 +35,9 @@ command → checkpoint → execute → pending / commit / rollback
 交互表、上一帧，以及 Reaction 比较基线和未完成输出。Pending 期间保留同一事务；
 Reaction 导航延续它，结算完成后一次释放。执行错误或取消恢复整个事务。
 
-State 的两种快照有不同内容：`StateCheckpoint` 覆盖全部命名空间，用于短期回滚；
-`StateSnapshot` 只包含持久变量，用于历史、Save 和 Reaction 变化比较。
+State 的两种快照有不同内容：`StateCheckpoint` 覆盖全部命名空间、World 定义与位置，用于
+短期回滚；`StateSnapshot` 保存持久变量与 `WorldState`，用于历史、Save 和 Reaction 变化比较。
+地点定义在脚本装载结束后固定，不复制进持久快照。
 Story 快照恢复时间线，但不回退身份分配高水位。
 
 Core Engine 的检查点负责单条执行链；Session 事务还覆盖执行链完成后的 Reaction、
@@ -59,13 +56,16 @@ Save Import 使用 Resume 的命令事务。失败先回滚，再通知 `Save.af
 
 Protocol 只公开 operation ID、请求和完成结果。Tauri facade 异步等待 timer 或文件 IO，
 完成后向 Worker 发送 Resume；TUI 同步完成相同操作。两端都不直接恢复 VM 或修改 State。
-语言刷新和 Import 重绘统一使用 `RefreshCurrent`，不增加同名历史重访。
+
+语言刷新和 Import 重绘统一使用 `RefreshCurrent`，不新增历史项。World Adapter 的只读视图
+跨 Pending 保留；完成、错误或取消时清除。刷新途中发生新导航时立即解除，包括同名导航。
+作者可见的位置行为及与历史重放的区别见 [World](../author/world.md#刷新历史与存档)。
 
 ## 信任边界与验证
 
 用户交互身份和值、Host 完成结果、Script 返回值、Save 内容、资源路径与语言包仍严格校验。
 Session ID 的构造与反序列化使用同一规则。已安装 Boa slot、私有事务和已登记 continuation
-属于内部不变量；不再以可恢复错误重复检查。语言包格式校验与绑定当前 I18n 目录的校验保留，
+属于内部不变量。语言包格式校验与绑定当前 I18n 目录的校验保留，
 因为它们验证不同约束。
 
 状态机测试使用真实 ECMAScript、编译管线和 RuntimeCommand，覆盖多次挂起、特殊区域、

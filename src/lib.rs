@@ -31,6 +31,7 @@ pub mod state;
 pub mod story;
 pub mod twee;
 pub mod vm;
+pub mod world;
 
 pub use config::{
     ConfigError, GameCompatibility, GameCompatibilityError, GameConfig, GameIdentity,

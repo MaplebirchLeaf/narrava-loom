@@ -2,6 +2,7 @@
 
 use std::{
     cell::{Ref, RefCell},
+    collections::HashMap,
     rc::Rc,
 };
 
@@ -24,6 +25,42 @@ use super::json_to_value;
 pub(super) struct ActiveReactions {
     #[unsafe_ignore_trace]
     pub(super) registry: Rc<RefCell<ReactionRegistry<ScriptCallable>>>,
+    #[unsafe_ignore_trace]
+    read_view: ReactionReadView,
+}
+
+type ReactionReadView = Rc<RefCell<Option<HashMap<String, String>>>>;
+
+/// 解析器独占 Registry 时，脚本查询读取本轮开始时的状态；退出或失败均释放视图。
+pub(super) struct ReactionReadGuard {
+    view: ReactionReadView,
+}
+
+impl Drop for ReactionReadGuard {
+    fn drop(&mut self) {
+        self.view.borrow_mut().take();
+    }
+}
+
+pub(super) fn begin_resolution(context: &Context) -> JsResult<ReactionReadGuard> {
+    let registry: Ref<'_, ReactionRegistry<ScriptCallable>> = active_registry(context)
+        .try_borrow()
+        .map_err(|_| resolving_error())?;
+    let mut statuses: HashMap<String, String> = HashMap::new();
+    for status in registry.runtime_state() {
+        if let Some(serialized) = serialize_registry_status(&registry, &status.id)? {
+            statuses.insert(status.id, serialized);
+        }
+    }
+    let view: ReactionReadView = Rc::clone(&active_reactions(context).read_view);
+    {
+        let mut current = view.try_borrow_mut().map_err(|_| resolving_error())?;
+        if current.is_some() {
+            return Err(resolving_error());
+        }
+        *current = Some(statuses);
+    }
+    Ok(ReactionReadGuard { view })
 }
 
 #[derive(Deserialize)]
@@ -113,6 +150,7 @@ pub(super) fn install(
         Rc::new(RefCell::new(ReactionRegistry::new()));
     context.insert_data(ActiveReactions {
         registry: registry.clone(),
+        read_view: Rc::new(RefCell::new(None)),
     });
     register_bridge_function(context, "__narravaReactionAdd", reaction_add)?;
     register_bridge_function(context, "__narravaReactionGet", reaction_get)?;
@@ -141,7 +179,8 @@ fn reaction_add(_: &JsValue, arguments: &[JsValue], context: &mut Context) -> Js
         decode_definition(dto)?;
     let id: String = definition.id.as_str().to_owned();
     active_registry(context)
-        .borrow_mut()
+        .try_borrow_mut()
+        .map_err(|_| resolving_error())?
         .add(definition, callbacks)
         .map_err(bridge_error)?;
     Ok(JsValue::new(JsString::from(
@@ -181,7 +220,10 @@ fn mutate_reaction(
     ) -> Result<bool, narrava_loom_core::reaction::ReactionError>,
 ) -> JsResult<JsValue> {
     let id: String = string_argument(arguments, context)?;
-    operation(&mut active_registry(context).borrow_mut(), &id)
+    let mut registry = active_registry(context)
+        .try_borrow_mut()
+        .map_err(|_| resolving_error())?;
+    operation(&mut registry, &id)
         .map(JsValue::new)
         .map_err(bridge_error)
 }
@@ -287,7 +329,21 @@ fn decode_passage_matcher(dto: MatcherDto) -> JsResult<PassageMatcher> {
 }
 
 fn serialize_status(context: &Context, id: &str) -> JsResult<Option<String>> {
-    let reactions: Ref<'_, ReactionRegistry<ScriptCallable>> = active_registry(context).borrow();
+    if let Ok(registry) = active_registry(context).try_borrow() {
+        return serialize_registry_status(&registry, id);
+    }
+    let view = active_reactions(context)
+        .read_view
+        .try_borrow()
+        .map_err(|_| resolving_error())?;
+    let statuses = view.as_ref().ok_or_else(resolving_error)?;
+    Ok(statuses.get(id).cloned())
+}
+
+fn serialize_registry_status(
+    reactions: &ReactionRegistry<ScriptCallable>,
+    id: &str,
+) -> JsResult<Option<String>> {
     let Some(entry) = reactions.get(id) else {
         return Ok(None);
     };
@@ -302,10 +358,19 @@ fn serialize_status(context: &Context, id: &str) -> JsResult<Option<String>> {
 }
 
 fn active_registry(context: &Context) -> &Rc<RefCell<ReactionRegistry<ScriptCallable>>> {
+    &active_reactions(context).registry
+}
+
+fn active_reactions(context: &Context) -> &ActiveReactions {
     context
         .get_data::<ActiveReactions>()
-        .map(|active: &ActiveReactions| &active.registry)
         .expect("Reaction adapter 在调用脚本前安装")
+}
+
+fn resolving_error() -> boa_engine::JsError {
+    bridge_error(
+        "reaction.resolving: cond 与动态 emit.payload 求值期间不能修改 Reaction 注册或状态",
+    )
 }
 
 fn string_argument(arguments: &[JsValue], context: &mut Context) -> JsResult<String> {

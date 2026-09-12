@@ -1,6 +1,6 @@
 # 弹窗执行与 Host 边界
 
-状态：已实现。作者语法见[弹窗与页面](../author/dialog.md)。
+作者语法见[弹窗与页面](../author/dialog.md)。
 
 ## 数据流
 
@@ -9,7 +9,7 @@ Semantic Dialog（initial、pages）→ Protocol Dialog → TUI/Tauri。
 
 页面只有 title 与已有语义正文；Core 不持有 DOM、终端几何或视觉属性。
 VM 在原执行帧内暂存页面输出，异步 Macro 暂停时一起保留；EndDialog 校验默认页后一次提交。
-Bytecode 格式升级为 2，旧编译产物需要重新编译。
+Bytecode 格式为 2；不兼容版本的编译产物需重新编译。
 
 无导航 link 使用原有 MacroInteractions、捕获域、BytecodeMacroBody 和 MacroSuspension。
 RuntimeSession 的命令检查点负责失败与取消回滚；动作正文不创建 Story Entry，不触发 Passage
@@ -20,7 +20,7 @@ RuntimeSession 的命令检查点负责失败与取消回滚；动作正文不�
 
 每次打开分配新的节点 key，同一弹窗重绘沿用该 key。Tauri 保留选中页与关闭状态，
 按 title 复用页内容容器；TUI 用独立页索引管理纯文字页，按钮焦点不决定当前页面。
-关闭和切页不发送 Runtime 命令。普通 heading 不再划分页签。
+关闭和切页不发送 Runtime 命令；页面只由显式 page 子句划分。
 
 ## 验证边界
 

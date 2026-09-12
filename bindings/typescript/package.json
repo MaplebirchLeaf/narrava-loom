@@ -4,7 +4,8 @@
   "private": true,
   "description": "TypeScript declarations for Narrava Loom game scripts",
   "files": [
-    "narrava.d.ts"
+    "narrava.d.ts",
+    "narrava-contract.generated.d.ts"
   ],
   "types": "narrava.d.ts"
 }

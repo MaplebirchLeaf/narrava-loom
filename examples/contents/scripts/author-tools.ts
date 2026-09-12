@@ -1,5 +1,3 @@
-/// <reference types="@narrava-loom/types" />
-
 // Twee 只调用明确暴露给 State.global 的作者函数，不直接依赖 Worker 全局对象。
 
 function exportSave(slot = "manual-1"): string {

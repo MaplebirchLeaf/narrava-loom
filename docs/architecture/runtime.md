@@ -90,7 +90,7 @@ Pending/Resume/Cancel 链运行，不得伪装成普通值。作者契约在
 ## Surface
 
 Runtime 以 `BodyExecution` 同时返回控制信号和有序 Surface。节点包含 Text、HardBreak、
-StyledText、Image、Region、Container、Replace、Component、Input、Navigation 与
+StyledText、Image、Dialog、Region、Container、Replace、Component、Input、Navigation 与
 SafeReturn。
 
 Twee 普通正文整体是字面文本；`$name` 和 `${expression}` 不自动求值。`print` 显式
