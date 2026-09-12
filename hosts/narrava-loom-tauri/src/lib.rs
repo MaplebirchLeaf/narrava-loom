@@ -5,6 +5,8 @@
 //! 输出为 WebView JSON；转换 Core Surface 不属于 Host。
 
 mod assets;
+#[path = "../../audio.rs"]
+mod audio;
 mod config;
 mod package;
 mod resource_protocol;
@@ -423,6 +425,7 @@ fn ready_update(
             "tauri_host.update_expected",
             "Runtime 命令没有产生可展示更新",
         )),
+        RuntimeUpdate::Audio { .. } => unreachable!("Worker consumes audio effects"),
         RuntimeUpdate::Pending { .. } => Err(HostErrorDto::new(
             "tauri_host.pending_update",
             "Host facade 返回了未处理的 PendingOperation",

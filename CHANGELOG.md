@@ -2,6 +2,15 @@
 
 本文件只记录使用者能够观察到的版本变化，不复制提交日志。
 
+## 0.8.0 - 2026-09-12
+
+- 原生 `dialog/page` 支持单页与多页、按标题选择默认页；无导航 `link "文本"` 点击执行正文，不新增 Story 历史。支持异步恢复、取消和错误回滚。
+- Tauri 页签支持键盘操作、窄窗口滚动与同一弹窗保持选中页；TUI 纯文字页也可独立切换、滚动和关闭。普通 heading 不再划分页面。
+- Audio 通过 Runtime effect 交给 TUI/Tauri 本地播放；宏使用资源、channel、tag 位置参数，支持 Header/Footer 声明、Passage 生命周期、连续播放与自动停止；复杂配置使用 Script Audio.play/stop。
+- Image/Audio 路径分别相对于 `resources/img/`、`resources/audio/`，兼容省略或带一次根前缀。
+- Protocol 更新至 2；Navigation/Button 的 target 可为空。Bytecode 格式更新至 2，已有编译产物需要重新编译。
+- 删除旧的标题推断分页示例与渲染逻辑，补充作者弹窗/音频文档、原生示例和 VS Code 悬停说明；统一 Cargo/package.json/Tauri 版本。
+
 ## 0.7.0 - 2026-09-09
 
 - Twee 新增原生 `image` Macro，复用 Resource 与 Image 语义链，支持表达式路径与位置参数 alt；Tauri 显示图片，TUI 将 alt 显示在方框内。

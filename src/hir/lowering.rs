@@ -451,7 +451,7 @@ fn lower_macro_arguments<'source>(
     macro_node: &twee::MacroNode<'source>,
 ) -> Result<HirMacroArguments<'source>, HirError> {
     match macro_node.name {
-        "if" | "elseif" | "while" | "run" => {
+        "if" | "elseif" | "while" | "run" | "dialog" | "page" => {
             let expression: Expression<'source> =
                 parse_expression(macro_node.arguments).map_err(|error| HirError {
                     diagnostic: map_macro_expression_error(passage, macro_node, error),

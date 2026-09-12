@@ -47,6 +47,13 @@ pub fn emit_passage_event(
         PassageLifecyclePhase::End => "passage:end",
     };
     let passage = context.entry().passage();
+    if phase == PassageLifecyclePhase::Init {
+        script
+            .audio_control("audioPassage", serde_json::json!([passage.tags]))
+            .map_err(|error| {
+                Diagnostic::new("audio.scope", DiagnosticSeverity::Error, &error.message)
+            })?;
+    }
     script
         .emit_builtin_event(
             name,
@@ -86,7 +93,7 @@ pub fn dispatch_macro<'hir, 'source>(
             });
         }
     };
-    if matches!(call.name, "print" | "image" | "meter") {
+    if matches!(call.name, "print" | "image" | "meter" | "audio") {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
             error: format!("{} 参数无效：{error:?}", call.name),
             scopes: scopes.clone(),
@@ -101,6 +108,24 @@ pub fn dispatch_macro<'hir, 'source>(
                 scopes: scopes.clone(),
             })?
         };
+        if call.name == "audio" {
+            script
+                .request_audio(&arguments)
+                .map_err(|error| EngineMirMacroCallbackFailure {
+                    error: error.to_string(),
+                    scopes: scopes.clone(),
+                })?;
+            return Ok(MacroResumeOutcome::Complete {
+                output: RuntimeMacroExecution {
+                    execution: BodyExecution {
+                        control: BodyControl::Continue,
+                        output: SemanticOutput::default(),
+                    },
+                    includes_entered: 0,
+                },
+                scopes,
+            });
+        }
         let execution: BodyExecution = (if call.name == "image" {
             image(&arguments)
         } else if call.name == "meter" {
@@ -440,13 +465,16 @@ pub fn dispatch_macro<'hir, 'source>(
         error: format!("link 参数无效：{error:?}"),
         scopes: scopes.clone(),
     })?;
-    let arguments: Vec<Value> =
-        prepare_argument_values(&parsed, |_expression| Err::<Value, ()>(())).map_err(|error| {
-            EngineMirMacroCallbackFailure {
-                error: format!("link 参数不能求值：{error:?}"),
-                scopes: scopes.clone(),
-            }
-        })?;
+    let arguments: Vec<Value> = {
+        let mut context = MacroLogicContext::new(state, requests, &mut scopes);
+        prepare_argument_values(&parsed, |expression| {
+            evaluate_with_mut(expression, &mut context)
+        })
+    }
+    .map_err(|error| EngineMirMacroCallbackFailure {
+        error: format!("link 参数不能求值：{error:?}"),
+        scopes: scopes.clone(),
+    })?;
     let source_call: &'hir HirMacro<'source> =
         find_hir_macro(hir, invocation.call).ok_or_else(|| EngineMirMacroCallbackFailure {
             error: format!("无法从原始 HIR 找回 {} 容器正文", call.name),

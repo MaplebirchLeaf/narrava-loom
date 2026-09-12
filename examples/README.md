@@ -25,7 +25,7 @@ examples/
 │   └── scripts/author-tools.ts   # Save、Logger、I18n 与语言切换封装
 ├── resources/
 │   ├── data/guide.txt
-│   └── images/loom.svg
+│   └── img/loom.svg
 ├── languages/en/             # 开发态语言包输入
 └── save/                     # Tauri 首次导出时创建 schema 2 存档
 ```
@@ -38,7 +38,7 @@ Twee 源码中的普通换行只用于排版；游戏内换行一律显式写 `<
 从 `Start` 进入 `Hall` 后可以逐项打开：
 
 - `SurfaceGallery`：Region、Component、Resource 图片、语义文字和未知组件 fallback；
-- `DialogGallery`：WebView Dialog 页签、TUI 独立页面边框及按页分组的四种动作角色；
+- `DialogGallery`：原生 dialog/page、默认第二页、四页与单页、图片和状态条、关闭后重开；
 - `FormGallery`：checkbox、radiobutton、textbox 与 State 写回；
 - `ReplaceGallery`：透明 plain slot、有间距的显式 `row` 相邻 panel、后续正文换行、Region 与稳定 key 替换；
 - `StateGallery`：scripts 的 `V/T/setup` 与 Twee `$/_/setup` 共享状态；
@@ -72,3 +72,5 @@ Macro 调用帧中的 `@` 状态。`replace` 接受固定 Region 或稳定 Surfa
 
 完整教程见[游戏作者手册](../docs/author/guide.md)，精确接口见
 [API 与语法速查](../docs/reference/api-and-syntax.md)。
+
+- `AudioGallery` → `AudioForest` → `Hall`：Header 按 tag 声明背景音，连续页面不中断，离开自动停止；`resources/audio/chime.wav` 是仓库生成的 440 Hz 短音，无第三方媒体素材。

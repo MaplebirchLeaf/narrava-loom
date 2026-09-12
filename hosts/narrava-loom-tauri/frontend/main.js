@@ -58,8 +58,10 @@ function renderHostUpdate(update) {
 
   const regions = new Map()
   const main = []
+  let dialogNode = null
   for (const node of update.nodes) {
-    if (node.type === "region") regions.set(node.region, node.nodes)
+    if (node.type === "dialog") dialogNode = node
+    else if (node.type === "region") regions.set(node.region, node.nodes)
     else main.push(node)
   }
   const standardRegions = new Set(["header", "main", "footer", "bar", "bar-stowed", "dialog"])
@@ -79,18 +81,9 @@ function renderHostUpdate(update) {
     barSurface,
     bar.classList.contains("stowed") ? barRegions.stowed : barRegions.expanded,
   )
-  unwrapDialogPages()
-  reconcileSurfaceNodes(dialogSurface, regions.get("dialog") ?? [])
+  renderDialog(dialogNode, regions.get("dialog") ?? [])
   applySurfaceReplacements()
   wrapPanelRows(passage)
-  if (dialogSurface.childElementCount > 0) {
-    const panels = mountDialogPages()
-    showDialogPage(0, panels)
-    dialogMessage.hidden = true
-    if (!dialog.open) dialog.showModal()
-  } else if (dialog.open && dialogMessage.hidden) {
-    dialog.close()
-  }
 
   status.textContent = update.nodes.length === 0 ? "当前 Passage 没有可显示内容" : ""
   story.setAttribute("aria-busy", "false")
@@ -98,7 +91,16 @@ function renderHostUpdate(update) {
     focusedKey === undefined
       ? null
       : story.querySelector(`[data-surface-key="${CSS.escape(focusedKey)}"]`)
-  if (restoredFocus instanceof HTMLElement) restoredFocus.focus({ preventScroll: true })
+  if (dialog.open) {
+    if (
+      restoredFocus instanceof HTMLElement &&
+      dialog.contains(restoredFocus) &&
+      !restoredFocus.closest("[hidden]")
+    )
+      restoredFocus.focus({ preventScroll: true })
+    else if (!dialog.contains(document.activeElement))
+      dialogTabs.querySelector('[aria-selected="true"]')?.focus()
+  } else if (restoredFocus instanceof HTMLElement) restoredFocus.focus({ preventScroll: true })
   else if (!passageRoot.contains(document.activeElement)) passageRoot.focus({ preventScroll: true })
 }
 
@@ -137,57 +139,81 @@ function colorForPaletteIndex(index) {
   return ""
 }
 
-/** 重绘前把 Dialog 页面里的原节点放回 keyed reconcile 容器。 */
-function unwrapDialogPages() {
-  for (const panel of dialogSurface.querySelectorAll(":scope > .dialog-panel")) {
-    panel.querySelector(".dialog-heading-source")?.classList.remove("dialog-heading-source")
-    panel.replaceWith(...panel.childNodes)
-  }
-  dialogTabs.replaceChildren()
-}
-
-/** 顶层语义标题划分页签，标题之后的节点归入对应页面。 */
-function mountDialogPages() {
-  const headings = [...dialogSurface.children].filter((element) => element.matches("h1, h2"))
-  const pageHeadings = headings.length > 0 ? headings : [null]
-  const panels = pageHeadings.map(() => {
-    const panel = document.createElement("section")
+/** 显式页只按 Protocol title 分组；关闭状态在同一 key 的重绘中保持。 */
+function renderDialog(node, fallback) {
+  const key = node?.key ?? (fallback.length ? "dialog-region" : "")
+  const fresh = dialogSurface.dataset.dialogKey !== key
+  const selected = fresh ? node?.initial : dialogSurface.dataset.selectedPage
+  const pages = node?.pages ?? (fallback.length ? [{ title: "消息", nodes: fallback }] : [])
+  const existing = new Map(
+    [...dialogSurface.children].map((panel) => [panel.dataset.pageTitle, panel]),
+  )
+  const panels = pages.map((page, index) => {
+    const panel = existing.get(page.title) ?? document.createElement("section")
     panel.className = "dialog-panel"
+    panel.dataset.pageTitle = page.title
+    panel.id = `dialog-page-${index}`
     panel.setAttribute("role", "tabpanel")
+    panel.setAttribute("aria-labelledby", `dialog-tab-${index}`)
+    reconcileSurfaceNodes(panel, page.nodes)
     return panel
   })
-  let panelIndex = 0
-  for (const node of Array.from(dialogSurface.childNodes)) {
-    const headingIndex = headings.indexOf(node)
-    if (headingIndex >= 0) {
-      panelIndex = headingIndex
-      node.classList.add("dialog-heading-source")
-    }
-    panels[panelIndex].append(node)
-  }
-  panels.forEach((panel, index) => {
+  dialogSurface.replaceChildren(...panels)
+  dialogSurface.dataset.dialogKey = key
+  dialogSurface.hidden = false
+  dialogTabs.replaceChildren()
+  pages.forEach((page, index) => {
     const tab = document.createElement("button")
     tab.type = "button"
-    tab.className = `dialog-tab${index === 0 ? " active" : ""}`
-    tab.textContent = pageHeadings[index]?.textContent?.trim() || "消息"
+    tab.className = "dialog-tab"
+    tab.id = `dialog-tab-${index}`
+    tab.textContent = page.title
     tab.setAttribute("role", "tab")
-    tab.setAttribute("aria-selected", String(index === 0))
-    panel.hidden = index !== 0
+    tab.setAttribute("aria-controls", panels[index].id)
     tab.addEventListener("click", () => showDialogPage(index, panels))
+    tab.addEventListener("keydown", (event) => {
+      let next = index
+      if (event.key === "ArrowRight") next = (index + 1) % panels.length
+      else if (event.key === "ArrowLeft") next = (index + panels.length - 1) % panels.length
+      else if (event.key === "Home") next = 0
+      else if (event.key === "End") next = panels.length - 1
+      else return
+      event.preventDefault()
+      showDialogPage(next, panels)
+      dialogTabs.children[next].focus()
+    })
     dialogTabs.append(tab)
   })
-  dialogSurface.append(...panels)
-  return panels
+  showDialogPage(
+    Math.max(
+      0,
+      pages.findIndex((page) => page.title === selected),
+    ),
+    panels,
+  )
+  if (pages.length > 0) {
+    dialogMessage.hidden = true
+    if (fresh) {
+      if (!dialog.open) dialog.showModal()
+      const index = Math.max(
+        0,
+        pages.findIndex((page) => page.title === selected),
+      )
+      dialogTabs.children[index]?.focus()
+    }
+  } else if (dialog.open && dialogMessage.hidden) dialog.close()
 }
 
-/** 切换活动页签：更新按钮的 active/aria-selected 与对应面板的 hidden。 */
+/** 切页只改变 Host 可见性，不调用 Runtime 或重执行正文。 */
 function showDialogPage(activeIndex, panels) {
   ;[...dialogTabs.children].forEach((tab, index) => {
     const active = index === activeIndex
     tab.classList.toggle("active", active)
     tab.setAttribute("aria-selected", String(active))
+    tab.tabIndex = active ? 0 : -1
     panels[index].hidden = !active
   })
+  dialogSurface.dataset.selectedPage = panels[activeIndex]?.dataset.pageTitle ?? ""
 }
 
 /** 重绘前拆回 Host panel row 包装，保证 keyed reconcile 仍直接面对 Surface 节点。 */
@@ -542,8 +568,8 @@ function setHostBusy(isBusy, message = "") {
 function showHostError(error) {
   const code = typeof error?.code === "string" ? error.code : "tauri_host.unknown"
   const message = typeof error?.message === "string" ? error.message : String(error)
-  unwrapDialogPages()
-  reconcileSurfaceNodes(dialogSurface, [])
+  dialogSurface.replaceChildren()
+  delete dialogSurface.dataset.dialogKey
   dialogSurface.hidden = true
   dialogTabs.replaceChildren()
   const errorTab = document.createElement("button")

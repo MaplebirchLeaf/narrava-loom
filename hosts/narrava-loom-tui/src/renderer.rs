@@ -83,7 +83,6 @@ struct TuiBlock {
     presentation: TuiBlockPresentation,
     flow: TuiBlockFlow,
     lines: Vec<String>,
-    page_title: Option<String>,
     inline: bool,
 }
 
@@ -156,65 +155,17 @@ impl TuiSurface {
         lines
     }
 
-    /// Tauri 用页签切换 Dialog；TUI 没有页签，因此把每个标题页呈现为独立面板。
+    /// 旧式 dialog Region 仍可显示普通单页；分页仅由显式 Dialog 指定。
     fn dialog_lines(&self) -> Vec<String> {
-        let mut pages: Vec<&[TuiBlock]> = Vec::new();
-        let mut start: usize = 0;
-        for index in 1..self.blocks.len() {
-            if self.blocks[index].page_title.is_some() {
-                pages.push(&self.blocks[start..index]);
-                start = index;
-            }
-        }
-        if start < self.blocks.len() {
-            pages.push(&self.blocks[start..]);
-        }
-        let mut lines: Vec<String> = Vec::new();
-        for page in pages {
-            if !lines.is_empty() {
-                lines.push(String::new());
-            }
-            lines.extend(panel_lines(Self::lines_for(page)));
-        }
-        lines
+        panel_lines(self.lines())
     }
 
     fn dialog_pages(&self) -> Vec<TuiDialogPage> {
-        let mut pages: Vec<&[TuiBlock]> = Vec::new();
-        let mut start: usize = 0;
-        for index in 1..self.blocks.len() {
-            if self.blocks[index].page_title.is_some() {
-                pages.push(&self.blocks[start..index]);
-                start = index;
-            }
-        }
-        if start < self.blocks.len() {
-            pages.push(&self.blocks[start..]);
-        }
-        pages
-            .into_iter()
-            .map(|page: &[TuiBlock]| {
-                let title: String = page
-                    .first()
-                    .and_then(|block: &TuiBlock| block.page_title.clone())
-                    .unwrap_or_default();
-                let content: &[TuiBlock] =
-                    if page.first().is_some_and(|block| block.page_title.is_some()) {
-                        &page[1..]
-                    } else {
-                        page
-                    };
-                TuiDialogPage {
-                    group: if title.is_empty() {
-                        String::from("弹窗")
-                    } else {
-                        format!("弹窗 · {title}")
-                    },
-                    title,
-                    lines: Self::lines_for(content),
-                }
-            })
-            .collect()
+        vec![TuiDialogPage {
+            title: String::from("消息"),
+            group: String::from("弹窗"),
+            lines: self.lines(),
+        }]
     }
 
     /// 用新行替换首个匹配 key 的块；找不到匹配时返回 `false`。
@@ -288,6 +239,8 @@ pub struct TuiFrame {
     pub dialog: Vec<String>,
     /// Dialog 的结构化页面；避免完整屏幕层二次解析字符边框。
     pub dialog_pages: Vec<TuiDialogPage>,
+    pub dialog_key: Option<String>,
+    pub dialog_initial: String,
     /// Host 不认识的开放区域；按逻辑 RegionId 原名保留，绝不静默丢弃。
     pub custom: BTreeMap<String, Vec<String>>,
     /// 玩家可触发的动作列表。
@@ -308,6 +261,9 @@ pub struct TuiRenderer {
     delayed: Vec<TuiDelayedText>,
     /// TUI 本地侧栏状态，不进入 Core 或 Protocol。
     sidebar_mode: TuiSidebarMode,
+    dialog_key: Option<String>,
+    dialog_initial: String,
+    page_regions: Vec<(String, String)>,
 }
 
 impl TuiRenderer {
@@ -319,6 +275,9 @@ impl TuiRenderer {
     /// 直接渲染 Runtime Protocol DTO；Native Host 不需要回借 Core `HostUpdate`。
     pub fn render_update(&mut self, update: &HostUpdateDto) -> TuiFrame {
         self.surfaces.clear();
+        self.dialog_key = None;
+        self.dialog_initial.clear();
+        self.page_regions.clear();
         self.interactions.clear();
         self.delayed.clear();
         self.render_dto_nodes("main", &update.nodes, 0);
@@ -326,19 +285,28 @@ impl TuiRenderer {
     }
 
     fn render_dto_nodes(&mut self, region: &str, nodes: &[HostNodeDto], elapsed_ms: u64) {
-        let mut interaction_group: String = region_group(region);
+        let interaction_group: String = region_group(region);
         for node in nodes {
-            if region == "dialog"
-                && let HostNodeDto::StyledText {
-                    text,
-                    heading: Some(_),
-                    ..
-                } = node
-            {
-                interaction_group = format!("弹窗 · {}", text.trim());
-            }
             let interaction_start: usize = self.interactions.len();
             match node {
+                HostNodeDto::Dialog {
+                    key,
+                    initial,
+                    pages,
+                } => {
+                    self.dialog_key = Some(key.clone());
+                    self.dialog_initial.clone_from(initial);
+                    self.page_regions.clear();
+                    for page in pages {
+                        let page_region: String = format!("dialog-page:{}", page.title);
+                        let start: usize = self.interactions.len();
+                        self.render_dto_nodes(&page_region, &page.nodes, elapsed_ms);
+                        for item in &mut self.interactions[start..] {
+                            item.group = format!("弹窗 · {}", page.title);
+                        }
+                        self.page_regions.push((page.title.clone(), page_region));
+                    }
+                }
                 HostNodeDto::Region { region, nodes, .. } => {
                     self.render_dto_nodes(region, nodes, elapsed_ms);
                 }
@@ -352,7 +320,7 @@ impl TuiRenderer {
                                     presentation: TuiBlockPresentation::Plain,
                                     flow: TuiBlockFlow::Stack,
                                     lines,
-                                    page_title: None,
+
                                     inline: false,
                                 }];
                         }
@@ -420,7 +388,7 @@ impl TuiRenderer {
                                 presentation,
                                 flow,
                                 lines,
-                                page_title: dto_page_title(node),
+
                                 inline: matches!(
                                     node,
                                     HostNodeDto::Text { .. } | HostNodeDto::StyledText { .. }
@@ -447,6 +415,9 @@ impl TuiRenderer {
         elapsed_ms: u64,
     ) -> TuiFrame {
         self.surfaces.clear();
+        self.dialog_key = None;
+        self.dialog_initial.clear();
+        self.page_regions.clear();
         self.interactions.clear();
         self.delayed.clear();
         self.render_output(RegionId::main(), output, elapsed_ms);
@@ -455,20 +426,30 @@ impl TuiRenderer {
 
     /// 递归渲染输出树：Region 下钻、Replace 就地覆盖、未到时的延迟文本停放。
     fn render_output(&mut self, region: RegionId, output: &SemanticOutput, elapsed_ms: u64) {
-        let mut interaction_group: String = region_group(region.as_str());
+        let interaction_group: String = region_group(region.as_str());
         for (index, node) in output.nodes().iter().enumerate() {
-            if region == RegionId::dialog()
-                && let SemanticNode::StyledText {
-                    text,
-                    heading: Some(_),
-                    ..
-                } = node
-            {
-                interaction_group = format!("弹窗 · {}", unicode(text).trim());
-            }
             let interaction_start: usize = self.interactions.len();
             let key = output.key(index).map(|key| key.as_str().to_owned());
             match node {
+                SemanticNode::Dialog { initial, pages } => {
+                    self.dialog_key =
+                        Some(key.clone().unwrap_or_else(|| format!("dialog:{index}")));
+                    self.dialog_initial.clone_from(initial);
+                    self.page_regions.clear();
+                    for page in pages {
+                        let page_region: String = format!("dialog-page:{}", page.title);
+                        let start: usize = self.interactions.len();
+                        self.render_output(
+                            RegionId::parse(&page_region).expect("nonempty region"),
+                            &page.content,
+                            elapsed_ms,
+                        );
+                        for item in &mut self.interactions[start..] {
+                            item.group = format!("弹窗 · {}", page.title);
+                        }
+                        self.page_regions.push((page.title.clone(), page_region));
+                    }
+                }
                 SemanticNode::Region { region, content } => {
                     self.render_output(region.clone(), content, elapsed_ms)
                 }
@@ -481,7 +462,7 @@ impl TuiRenderer {
                                 presentation: TuiBlockPresentation::Plain,
                                 flow: TuiBlockFlow::Stack,
                                 lines,
-                                page_title: None,
+
                                 inline: false,
                             }];
                         }
@@ -544,7 +525,7 @@ impl TuiRenderer {
                             presentation,
                             flow,
                             lines,
-                            page_title: surface_page_title(node),
+
                             inline: matches!(
                                 node,
                                 SemanticNode::Text(_) | SemanticNode::StyledText { .. }
@@ -600,18 +581,49 @@ impl TuiRenderer {
                 .get(RegionId::bar_stowed().as_str())
                 .map_or_else(Vec::new, TuiSurface::stowed_lines),
             sidebar_mode: self.sidebar_mode,
-            dialog: self
-                .surfaces
-                .get(RegionId::dialog().as_str())
-                .map_or_else(Vec::new, TuiSurface::dialog_lines),
-            dialog_pages: self
-                .surfaces
-                .get(RegionId::dialog().as_str())
-                .map_or_else(Vec::new, TuiSurface::dialog_pages),
+            dialog: if self.dialog_key.is_some() {
+                self.page_regions
+                    .iter()
+                    .flat_map(|(title, region)| {
+                        let mut lines: Vec<String> = vec![title.clone()];
+                        lines.extend(
+                            self.surfaces
+                                .get(region)
+                                .map_or_else(Vec::new, TuiSurface::lines),
+                        );
+                        panel_lines(lines)
+                    })
+                    .collect()
+            } else {
+                self.surfaces
+                    .get(RegionId::dialog().as_str())
+                    .map_or_else(Vec::new, TuiSurface::dialog_lines)
+            },
+            dialog_key: self.dialog_key.clone(),
+            dialog_initial: self.dialog_initial.clone(),
+            dialog_pages: if self.dialog_key.is_some() {
+                self.page_regions
+                    .iter()
+                    .map(|(title, region)| TuiDialogPage {
+                        title: title.clone(),
+                        group: format!("弹窗 · {title}"),
+                        lines: self
+                            .surfaces
+                            .get(region)
+                            .map_or_else(Vec::new, TuiSurface::lines),
+                    })
+                    .collect()
+            } else {
+                self.surfaces
+                    .get(RegionId::dialog().as_str())
+                    .map_or_else(Vec::new, TuiSurface::dialog_pages)
+            },
             custom: self
                 .surfaces
                 .iter()
-                .filter(|(region, _)| !is_standard_region(region))
+                .filter(|(region, _)| {
+                    !is_standard_region(region) && !region.starts_with("dialog-page:")
+                })
                 .map(|(region, surface)| (region.clone(), surface.lines()))
                 .collect(),
             interactions,
@@ -633,6 +645,7 @@ fn dto_key(node: &HostNodeDto) -> &str {
         | HostNodeDto::HardBreak { key }
         | HostNodeDto::StyledText { key, .. }
         | HostNodeDto::Image { key, .. }
+        | HostNodeDto::Dialog { key, .. }
         | HostNodeDto::Region { key, .. }
         | HostNodeDto::Container { key, .. }
         | HostNodeDto::Component { key, .. }
@@ -700,6 +713,7 @@ fn render_dto_node(node: &HostNodeDto, interactions: &mut Vec<TuiInteraction>) -
         | HostNodeDto::Replace {
             nodes: fallback, ..
         } => render_dto_content(fallback, interactions),
+        HostNodeDto::Dialog { .. } => Vec::new(),
         HostNodeDto::Action { label, action, .. } => {
             interactions.push(TuiInteraction {
                 group: String::new(),
@@ -992,6 +1006,7 @@ fn render_node(node: &SemanticNode, interactions: &mut Vec<TuiInteraction>) -> V
             let presentation: TuiBlockPresentation = (*presentation).into();
             presentation.render(render_content(content, interactions))
         }
+        SemanticNode::Dialog { .. } => Vec::new(),
         SemanticNode::Action { label, action, .. } => {
             interactions.push(TuiInteraction {
                 group: String::new(),
@@ -1169,27 +1184,5 @@ fn region_group(region: &str) -> String {
         "bar-stowed" => String::from("收起侧栏"),
         "dialog" => String::from("弹窗"),
         custom => format!("区域 · {custom}"),
-    }
-}
-
-fn dto_page_title(node: &HostNodeDto) -> Option<String> {
-    match node {
-        HostNodeDto::StyledText {
-            text,
-            heading: Some(_),
-            ..
-        } => Some(text.trim().to_owned()),
-        _ => None,
-    }
-}
-
-fn surface_page_title(node: &SemanticNode) -> Option<String> {
-    match node {
-        SemanticNode::StyledText {
-            text,
-            heading: Some(_),
-            ..
-        } => Some(unicode(text).trim().to_owned()),
-        _ => None,
     }
 }

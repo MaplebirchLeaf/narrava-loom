@@ -113,7 +113,7 @@ declare global {
         readonly color?: NarravaTextColor
         /** 可见延迟（毫秒）；具体动画由 Host 决定。 */
         readonly delay?: number
-        /** 结构性标题级别（1 或 2）：用于页面划分（如弹窗页签的页面标题），不是字形样式。 */
+        /** 结构性标题级别（1 或 2）：用于正文标题，不是字形样式。 */
         readonly heading?: 1 | 2
       },
     ): NarravaSurfaceNode
@@ -481,4 +481,13 @@ declare global {
     export(): string
   }
   const I18n: NarravaI18n
+
+  /** 一次性 Host 音频 effect；不进入 Surface、State 或 Save。 */
+  const Audio: {
+    play(
+      resource: string,
+      options?: { channel?: string; loop?: boolean; volume?: number; tags?: readonly string[] },
+    ): void
+    stop(channel: string): void
+  }
 }

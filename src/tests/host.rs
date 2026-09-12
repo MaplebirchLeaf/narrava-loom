@@ -51,7 +51,7 @@ fn host_update_with_navigation(id: InteractionId, target: &str) -> HostUpdate {
             role: crate::semantic::NavigationRole::Link,
             id,
             label: TextValue::from("前往"),
-            target: target.to_owned(),
+            target: Some(target.to_owned()),
         }]),
     )
 }

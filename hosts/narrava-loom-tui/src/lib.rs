@@ -2,6 +2,8 @@
 //!
 //! 稳定导出保留在此 facade；命令、终端循环和 SemanticOutput 渲染分别由命名子模块负责。
 
+#[path = "../../audio.rs"]
+mod audio;
 mod command;
 mod platform;
 mod renderer;

@@ -1,51 +1,29 @@
-# 弹窗作者 API 提案
+# 弹窗执行与 Host 边界
 
-> 状态：默认页与关闭行为已确认，尚未实现；不属于当前 API。
+状态：已实现。作者语法见[弹窗与页面](../author/dialog.md)。
 
-## 当前实现与缺口
+## 数据流
 
-Tauri 已按 Dialog Region 的顶层 h1/h2 标题生成任意数量的页签，并非仅支持一页或两页。
-但这个规则把内容标题与页面结构混在一起，不能指定默认页，重绘会回到第一页，
-也没有原生 Twee 宏来组合“点击打开 → 分页内容 → 关闭”。现有关闭按钮和
-`Surface.action(label, "dismiss")` 属于 Host Action。
+`dialog/page` → MIR BeginDialog/BeginDialogPage/EndDialog → Bytecode VM →
+Semantic Dialog（initial、pages）→ Protocol Dialog → TUI/Tauri。
 
-当前 link 参数需要目标 Passage；要完成只打开弹窗的点击，还必须明确无导航 link 的行为。
-不能为了显示弹窗偷偷插入一次同名 Passage 导航。
+页面只有 title 与已有语义正文；Core 不持有 DOM、终端几何或视觉属性。
+VM 在原执行帧内暂存页面输出，异步 Macro 暂停时一起保留；EndDialog 校验默认页后一次提交。
+Bytecode 格式升级为 2，旧编译产物需要重新编译。
 
-## 建议语法
+无导航 link 使用原有 MacroInteractions、捕获域、BytecodeMacroBody 和 MacroSuspension。
+RuntimeSession 的命令检查点负责失败与取消回滚；动作正文不创建 Story Entry，不触发 Passage
+生命周期。导航 link 保留原有导航入口。无导航正文成功后合并当前输出；新 Dialog 替换旧 Dialog，
+已不可见的动作 ID 从表中释放。无导航 Macro Body 仍不支持 include/goto。
 
-dialog/page 与默认页行为已确认；外层无导航 link 的参数仍需收口：
+## Host 状态
 
-```twee
-<<link "查看角色">>
-<<dialog "装备">>
-<<page "属性">>
-属性正文。
-<<page "装备">>
-装备正文。
-<<page "经历">>
-经历正文。
-<</dialog>>
-<</link>>
-```
+每次打开分配新的节点 key，同一弹窗重绘沿用该 key。Tauri 保留选中页与关闭状态，
+按 title 复用页内容容器；TUI 用独立页索引管理纯文字页，按钮焦点不决定当前页面。
+关闭和切页不发送 Runtime 命令。普通 heading 不再划分页签。
 
-`dialog` 参数是默认打开的 page 标题，不是独立弹窗标题。上例打开第二页“装备”。
-单页也通过一个 `page` 明确标题与正文。page 是类似 case 的子句，不要求单独闭合。
-页数不硬编码，切换页签不重复执行正文。指定的默认页必须存在，否则报错；重复页标题的处理仍需明确。
+## 验证边界
 
-## 必须明确的语义
-
-- page 明确页面标题，不再从普通正文标题猜测结构；dialog 引用默认页标题。
-- 页面具有稳定身份；同一弹窗局部更新保留当前页，重新打开进入 dialog 指定的默认页。
-- 打开与关闭不改变 Story 历史，不新增同名导航；失败与取消仍受当前事务约束。
-- 图片、文字和交互使用现有 Semantic/Protocol；Core 不创建 HTML 或终端坐标。
-- 先支持一个活动弹窗；本阶段不引入弹窗栈或嵌套弹窗管理器。
-- Tauri 用可滚动的页签显示，TUI 保持文字操作，但也必须能选择页面和关闭。
-
-## 实施顺序与验收
-
-1. 明确无导航 link、重复页标题与 page 子句的校验规则。
-2. 打通单页打开与关闭，再用同一路径验证三页以上。
-3. 验证页内变量、image、交互及错误回滚，不把只显示静态文字当作完成。
-4. 验证局部刷新保留选中页、关闭后再次打开、长标题和窄窗口。
-5. 通过 Host 测试与真实窗口验收后，再移入作者手册及 API 速查。
+回归覆盖四页、单页、非首页默认页、图片/meter/脚本正文、重复打开、异步恢复和取消、
+失败回滚，以及 Host 页选择与重绘。浏览器渲染验收与真实 Tauri 窗口、音频设备验收分别记录，
+不以 DTO 测试代替真实设备结论。

@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 const source = await readFile(new URL("main.js", import.meta.url), "utf8")
 const styles = await readFile(new URL("main.css", import.meta.url), "utf8")
 const paletteFunctionStart = source.indexOf("function colorForPaletteIndex(index) {")
-const paletteFunctionEnd = source.indexOf("\n}\n\n/** 重绘前", paletteFunctionStart) + 2
+const paletteFunctionEnd = source.indexOf("\n}\n", paletteFunctionStart) + 2
 assert.notEqual(paletteFunctionStart, -1, "Renderer 应定义 colorForPaletteIndex")
 assert.notEqual(paletteFunctionEnd, 1, "colorForPaletteIndex 应保持可独立验证的函数边界")
 
@@ -115,3 +115,91 @@ assert.equal(meterElement.value, 72)
 assert.equal(meterElement.min, 0)
 assert.equal(meterElement.max, 100)
 assert.equal(meterElement["aria-label"], "体力")
+
+// 执行 Dialog 的 Host 状态转换；页面内容继续交给已有 keyed renderer。
+class DialogElement {
+  dataset = {}
+  children = []
+  attributes = new Map()
+  listeners = new Map()
+  classList = { toggle() {} }
+  setAttribute(name, value) {
+    this.attributes.set(name, value)
+  }
+  addEventListener(name, handler) {
+    this.listeners.set(name, handler)
+  }
+  replaceChildren(...nodes) {
+    this.children = nodes
+  }
+  append(node) {
+    this.children.push(node)
+  }
+  focus() {
+    this.focused = true
+  }
+}
+const dialogSurface = new DialogElement()
+const dialogTabs = new DialogElement()
+const dialogMessage = { hidden: true }
+const dialog = {
+  open: false,
+  showModal() {
+    this.open = true
+  },
+  close() {
+    this.open = false
+  },
+}
+const dialogStart = source.indexOf("function renderDialog(node, fallback) {")
+const dialogEnd = source.indexOf("/** 重绘前拆回 Host panel", dialogStart)
+const renderDialog = Function(
+  "document",
+  "dialogSurface",
+  "dialogTabs",
+  "dialogMessage",
+  "dialog",
+  "reconcileSurfaceNodes",
+  `${source.slice(dialogStart, dialogEnd)}; return renderDialog`,
+)(
+  { createElement: () => new DialogElement() },
+  dialogSurface,
+  dialogTabs,
+  dialogMessage,
+  dialog,
+  (panel, nodes) => {
+    panel.nodes = nodes
+  },
+)
+const dialogNode = {
+  key: "open:1",
+  initial: "装备",
+  pages: ["属性", "装备", "经历", "说明"].map((title) => ({
+    title,
+    nodes: [{ type: "styledText", heading: 2, text: "普通标题" }],
+  })),
+}
+renderDialog(dialogNode, [])
+assert.equal(dialog.open, true)
+assert.equal(dialogTabs.children.length, 4, "普通标题不增加页面")
+assert.equal(dialogSurface.dataset.selectedPage, "装备")
+assert.equal(dialogSurface.children[1].hidden, false)
+dialogTabs.children[2].listeners.get("click")()
+const retainedPanel = dialogSurface.children[2]
+renderDialog(dialogNode, [])
+assert.equal(dialogSurface.dataset.selectedPage, "经历", "同一弹窗刷新保留选中页")
+assert.equal(dialogSurface.children[2], retainedPanel, "同页复用内容容器")
+dialogTabs.children[2].listeners.get("keydown")({ key: "End", preventDefault() {} })
+assert.equal(dialogSurface.dataset.selectedPage, "说明")
+assert.equal(dialogTabs.children[3].focused, true)
+dialog.close()
+renderDialog(dialogNode, [])
+assert.equal(dialog.open, false, "普通重绘不能重新打开已关闭弹窗")
+renderDialog({ ...dialogNode, key: "open:2" }, [])
+assert.equal(dialog.open, true)
+assert.equal(dialogSurface.dataset.selectedPage, "装备", "重新打开恢复作者默认页")
+renderDialog({ key: "single", initial: "提示", pages: [{ title: "提示", nodes: [] }] }, [])
+assert.equal(dialogTabs.children.length, 1)
+renderDialog(null, [])
+assert.equal(dialog.open, false)
+console.log("Narrava Tauri explicit dialog pages, keyboard, refresh and reopen verified")

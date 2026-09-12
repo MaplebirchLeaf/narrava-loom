@@ -65,6 +65,20 @@ fn convert_output(output: &SemanticOutput, scope: &str) -> Vec<HostNodeDto> {
                     resource: resource.clone(),
                     alt: unicode(alt),
                 },
+                SemanticNode::Dialog { initial, pages } => HostNodeDto::Dialog {
+                    pages: pages
+                        .iter()
+                        .map(|page| narrava_loom_protocol::HostDialogPageDto {
+                            title: page.title.clone(),
+                            nodes: convert_output(
+                                &page.content,
+                                &format!("{key}:page:{}", page.title),
+                            ),
+                        })
+                        .collect(),
+                    key,
+                    initial: initial.clone(),
+                },
                 SemanticNode::Region { region, content } => HostNodeDto::Region {
                     nodes: convert_output(content, &key),
                     key,
@@ -197,6 +211,7 @@ fn node_kind(node: &SemanticNode) -> &'static str {
         SemanticNode::StyledText { .. } => "styled-text",
         SemanticNode::Image { .. } => "image",
         SemanticNode::Region { .. } => "region",
+        SemanticNode::Dialog { .. } => "dialog",
         SemanticNode::Container { .. } => "container",
         SemanticNode::Component { .. } => "component",
         SemanticNode::Replace { .. } => "replace",

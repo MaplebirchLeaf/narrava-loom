@@ -19,6 +19,7 @@ pub fn lower_body<'hir, 'source>(
         iterator_slot_count: 0,
         loops: Vec::new(),
         silence_depth: 0,
+        in_dialog: false,
         captures: Vec::new(),
     };
     lower_nodes(body, &mut context)?;
@@ -147,6 +148,7 @@ struct MirLoweringContext<'hir, 'source> {
     iterator_slot_count: usize,
     loops: Vec<MirLoopFrame>,
     silence_depth: usize,
+    in_dialog: bool,
     captures: Vec<&'source str>,
 }
 
@@ -235,6 +237,67 @@ fn lower_nodes<'hir, 'source>(
                     .push(MirInstruction::RequestGoto(target));
             }
             HirBodyKind::Exit => context.instructions.push(MirInstruction::ExitPassage),
+            HirBodyKind::Macro(call) if call.name == "dialog" => {
+                if context.in_dialog {
+                    return Err(MirLowerError {
+                        kind: "nested dialog",
+                        span: node.span,
+                    });
+                }
+                let crate::hir::HirMacroArguments::Expression(initial) = &call.arguments else {
+                    return Err(MirLowerError {
+                        kind: "dialog requires initial page title",
+                        span: node.span,
+                    });
+                };
+                context.instructions.push(MirInstruction::BeginDialog {
+                    initial,
+                    output: context.output_mode(),
+                });
+                context.in_dialog = true;
+                let outer_loops: Vec<MirLoopFrame> = std::mem::take(&mut context.loops);
+                let mut has_page: bool = false;
+                for child in &call.body {
+                    if let HirBodyKind::Macro(page) = &child.kind
+                        && page.name == "page"
+                    {
+                        let crate::hir::HirMacroArguments::Expression(title) = &page.arguments
+                        else {
+                            return Err(MirLowerError {
+                                kind: "page requires title",
+                                span: child.span,
+                            });
+                        };
+                        context
+                            .instructions
+                            .push(MirInstruction::BeginDialogPage(title));
+                        has_page = true;
+                    } else if has_page {
+                        lower_nodes(std::slice::from_ref(child), context)?;
+                    } else if !matches!(&child.kind, HirBodyKind::Text(text) if text.trim().is_empty())
+                    {
+                        return Err(MirLowerError {
+                            kind: "dialog content must follow page",
+                            span: child.span,
+                        });
+                    }
+                }
+                if !has_page {
+                    return Err(MirLowerError {
+                        kind: "dialog requires at least one page",
+                        span: node.span,
+                    });
+                }
+                context.in_dialog = false;
+                context.loops = outer_loops;
+                context.instructions.push(MirInstruction::EndDialog);
+            }
+            HirBodyKind::Macro(call) if call.name == "page" => {
+                return Err(MirLowerError {
+                    kind: "page must be a direct dialog clause",
+                    span: node.span,
+                });
+            }
             HirBodyKind::Macro(call) => context.instructions.push(MirInstruction::InvokeMacro {
                 call,
                 captures: context.captures.clone(),

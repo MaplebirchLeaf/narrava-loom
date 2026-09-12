@@ -1,9 +1,10 @@
 [package]
 name = "narrava-loom-tui"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 
 [dependencies]
+rodio = "0.22.2" # Host 本地音频播放与解码
 crossterm = "0.29" # 原始模式、方向键、终端恢复与 resize 事件
 narrava-loom-core = { path = "../.." }
 narrava-loom-protocol = { path = "../../crates/narrava-loom-protocol" } # Runtime/Host 拥有型消息

@@ -133,7 +133,7 @@ fn link_builtin_converts_prepared_interaction_into_navigation_semantics() {
         [SemanticNode::Navigation { id, label, target, .. }]
             if !id.as_str().is_empty()
                 && label.as_units() == TextValue::from("进入森林").as_units()
-                && target == "Forest"
+                && target.as_deref() == Some("Forest")
     ));
 }
 
@@ -432,13 +432,17 @@ fn input_builtins_create_state_bound_semantic_controls() {
 #[test]
 fn image_uses_existing_semantics_and_rejects_non_resource_paths() {
     let execution: BodyExecution =
-        crate::macro_runtime::image(&[Value::string("images/forest.png")]).unwrap();
+        crate::macro_runtime::image(&[Value::string("forest.png")]).unwrap();
     assert_eq!(
         execution.output.nodes(),
         [SemanticNode::Image {
-            resource: String::from("images/forest.png"),
+            resource: String::from("img/forest.png"),
             alt: TextValue::from(""),
         }]
+    );
+    assert_eq!(
+        execution,
+        crate::macro_runtime::image(&[Value::string("img/forest.png")]).unwrap()
     );
     for path in [
         "",

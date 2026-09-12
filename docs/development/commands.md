@@ -58,3 +58,5 @@ bun run vsix
 第一条构建桌面 Host，第二条生成可移动桌面游戏目录，第三条输出 VSIX。构建器不会覆盖已经
 存在的 `dist/NarravaGame`。当前仓库没有 Android/iOS 工程或移动打包脚本；移动构建要先用
 Tauri 2 工具初始化目标平台，再补齐签名、权限、资源和真机验证，不能用上述桌面命令代替。
+
+Linux 编译两个 Host 的音频后端需要 ALSA 开发文件（Debian/Ubuntu：`libasound2-dev`）。CI 已包含该依赖。

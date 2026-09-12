@@ -110,7 +110,7 @@ fn host_navigation_input_is_validated_and_executed_by_engine() {
                     role: crate::semantic::NavigationRole::Link,
                     id: interaction.clone(),
                     label: TextValue::from("进入森林"),
-                    target: String::from("Forest"),
+                    target: Some(String::from("Forest")),
                 }]),
             })
         },

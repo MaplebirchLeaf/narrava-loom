@@ -19,7 +19,7 @@ fn runtime_dto_renders_without_borrowing_core_host_update() {
                 key: String::from("next"),
                 id: String::from("nav:next"),
                 label: String::from("继续"),
-                target: String::from("Next"),
+                target: Some(String::from("Next")),
             }],
         }],
     };
@@ -266,7 +266,7 @@ fn region_and_key_replacements_update_terminal_surfaces() {
             SemanticNode::Navigation {
                 id: narrava_loom_core::semantic::InteractionId::parse("status:continue").unwrap(),
                 label: TextValue::from("继续"),
-                target: String::from("Next"),
+                target: Some(String::from("Next")),
                 role: narrava_loom_core::semantic::NavigationRole::Link,
             },
         ]),
@@ -426,7 +426,7 @@ fn dialog_pages_have_independent_borders_and_interaction_groups() {
                 key: format!("{key}-button"),
                 id: format!("{key}-action"),
                 label: action.to_owned(),
-                target: String::new(),
+                target: None,
             },
         ]
     };
@@ -434,13 +434,19 @@ fn dialog_pages_have_independent_borders_and_interaction_groups() {
         current: String::from("Dialog"),
         can_back: false,
         can_forward: false,
-        nodes: vec![narrava_loom_protocol::HostNodeDto::Region {
+        nodes: vec![narrava_loom_protocol::HostNodeDto::Dialog {
             key: String::from("dialog"),
-            region: String::from("dialog"),
-            nodes: page("one", "第一页", "默认按钮")
-                .into_iter()
-                .chain(page("two", "第二页", "危险按钮"))
-                .collect(),
+            initial: String::from("第二页"),
+            pages: vec![
+                narrava_loom_protocol::HostDialogPageDto {
+                    title: String::from("第一页"),
+                    nodes: page("one", "普通标题", "默认按钮"),
+                },
+                narrava_loom_protocol::HostDialogPageDto {
+                    title: String::from("第二页"),
+                    nodes: page("two", "普通标题", "危险按钮"),
+                },
+            ],
         }],
     };
 
@@ -458,7 +464,12 @@ fn dialog_pages_have_independent_borders_and_interaction_groups() {
     assert_eq!(frame.interactions[1].group, "弹窗 · 第二页");
     assert_eq!(frame.dialog_pages.len(), 2);
     assert_eq!(frame.dialog_pages[0].title, "第一页");
-    assert!(frame.dialog_pages[0].lines.is_empty());
+    assert!(
+        frame.dialog_pages[0]
+            .lines
+            .iter()
+            .any(|line| line.contains("普通标题"))
+    );
 
     let mut output: Vec<u8> = Vec::new();
     write_frame(&mut output, &frame).unwrap();
@@ -845,4 +856,49 @@ fn meter_component_renders_the_same_numeric_bar_from_core_and_protocol() {
             [expected]
         );
     }
+}
+
+#[test]
+fn text_only_dialog_pages_use_initial_title_and_survive_refresh() {
+    let mut frame = TuiFrame {
+        dialog_key: Some(String::from("opening:1")),
+        dialog_initial: String::from("装备"),
+        dialog_pages: ["属性", "装备", "经历", "说明"]
+            .iter()
+            .map(|title| crate::TuiDialogPage {
+                title: (*title).to_owned(),
+                group: format!("弹窗 · {title}"),
+                lines: vec![format!("{title}正文")],
+            })
+            .collect(),
+        ..TuiFrame::default()
+    };
+    let mut state = crate::screen::ScreenState::default();
+    let visible = |state: &crate::screen::ScreenState, frame: &TuiFrame| {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|surface| crate::screen::draw(surface, frame, state))
+            .unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>()
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect::<String>()
+    };
+    state.move_vertical(&frame, 0);
+    assert!(visible(&state, &frame).contains("装备正文"));
+    assert_eq!(state.focus(), None);
+    state.move_horizontal(&frame, 1);
+    assert!(visible(&state, &frame).contains("经历正文"));
+    state.move_vertical(&frame, 0);
+    assert!(visible(&state, &frame).contains("经历正文"));
+    frame.dialog_key = Some(String::from("opening:2"));
+    state.move_vertical(&frame, 0);
+    assert!(visible(&state, &frame).contains("装备正文"));
 }

@@ -372,7 +372,7 @@ fn engine_appends_safe_return_to_latest_navigation_target() {
                         role: crate::semantic::NavigationRole::Link,
                         id: InteractionId::from_key("start:choice:0"),
                         label: TextValue::from("去往"),
-                        target: String::from("End"),
+                        target: Some(String::from("End")),
                     }]),
                 })
             } else {
@@ -431,7 +431,7 @@ fn engine_skips_safe_return_when_output_has_navigation() {
                     role: crate::semantic::NavigationRole::Link,
                     id: InteractionId::from_key("start:choice:0"),
                     label: TextValue::from("去往"),
-                    target: String::from("Forest"),
+                    target: Some(String::from("Forest")),
                 }]),
             })
         },

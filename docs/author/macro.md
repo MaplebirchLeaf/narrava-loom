@@ -8,7 +8,7 @@ Macro 写在 Twee 正文中，用于显示内容、改变状态或建立交互�
 
 ```twee
 <<print $hero.name>>
-<<image "img/tree.png" "树">>
+<<image "tree.png" "树">>
 ```
 
 图片文件放在 `resources/img/tree.png`；参数使用 Resource 逻辑路径。
@@ -60,5 +60,8 @@ Widget、脚本 Macro 与原生 Macro 共用现有输出语义，不需要生成
 ## 内容区域与弹窗
 
 `slot` 建立可替换的内容槽，`replace` 更新槽或标准区域。显示样式由 Host 决定。
-当前弹窗仍由 Dialog Region 与标题划分页签；独立 `dialog/page` 宏尚未实现，
-不要把[弹窗设计提案](../development/dialog-design.md)当作当前可用 API。
+`dialog/page` 显式定义单页或多页弹窗，`dialog` 的参数选择默认页标题。
+无导航 `<<link "查看角色">>` 点击后执行正文；完整语法见[弹窗与页面](dialog.md)。
+
+背景音使用 `<<audio "forest.ogg" "ambience" "forest">>`，参见 [Audio 生命周期与标签](audio.md)。
+图片路径相对于 `resources/img/`，音频路径相对于 `resources/audio/`。

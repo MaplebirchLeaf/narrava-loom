@@ -117,6 +117,10 @@ fn runtime_protocol_discriminators_match_the_canonical_contract() {
         nodes: Vec::new(),
     };
     let updates = [
+        RuntimeUpdate::Audio {
+            effects: Vec::new(),
+            update: None,
+        },
         RuntimeUpdate::Ready {
             update: empty_update,
         },
@@ -176,6 +180,14 @@ fn surface_node_discriminators_match_the_canonical_contract() {
             resource: text.clone(),
             alt: text.clone(),
         },
+        HostNodeDto::Dialog {
+            key: key(),
+            initial: text.clone(),
+            pages: vec![crate::HostDialogPageDto {
+                title: text.clone(),
+                nodes: vec![],
+            }],
+        },
         HostNodeDto::Region {
             key: key(),
             region: text.clone(),
@@ -228,13 +240,13 @@ fn surface_node_discriminators_match_the_canonical_contract() {
             key: key(),
             id: text.clone(),
             label: text.clone(),
-            target: text.clone(),
+            target: Some(text.clone()),
         },
         HostNodeDto::Button {
             key: key(),
             id: text.clone(),
             label: text.clone(),
-            target: text.clone(),
+            target: Some(text.clone()),
         },
         HostNodeDto::SafeReturn {
             key: key(),
@@ -294,4 +306,30 @@ fn container_without_flow_is_rejected() {
     .expect_err("当前 Protocol Container 必须显式携带 flow");
 
     assert!(error.to_string().contains("flow"));
+}
+
+#[test]
+fn audio_effects_round_trip_separately_from_surface() {
+    let update = RuntimeUpdate::Audio {
+        effects: vec![
+            AudioEffect::Play {
+                resource: "audio/forest.ogg".into(),
+                channel: "bgm".into(),
+                looping: true,
+                volume: 0.4,
+            },
+            AudioEffect::Stop {
+                channel: "bgm".into(),
+            },
+        ],
+        update: None,
+    };
+    let json = serde_json::to_value(&update).unwrap();
+    assert_eq!(json["effects"][0]["loop"], true);
+    assert_eq!(json["effects"][0]["volume"], 0.4);
+    assert!(json.get("nodes").is_none());
+    assert_eq!(
+        serde_json::from_value::<RuntimeUpdate>(json).unwrap(),
+        update
+    );
 }

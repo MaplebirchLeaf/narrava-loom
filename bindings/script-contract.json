@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "globals": [
     "State",
     "V",
@@ -14,6 +14,7 @@
     "Story",
     "Save",
     "Resource",
+    "Audio",
     "I18n",
     "Surface"
   ],

@@ -29,7 +29,7 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 | `run` | `<<run expression>>` | 求值并丢弃结果，保留副作用 |
 | `print` | `<<print expression [color] [style...]>>` 或 `<<print expression {color, styles, delay, heading}>>` | 求值并入 Passage 输出；带选项时产生带语义样式、color、delay 与结构性标题的 StyledText |
 | `meter` | `<<meter "体力" $stamina 0 100>>` | label、value、min、max；有限数值且 min < max；复用 meter@1 component，TUI 字符条、Tauri 图形条 |
-| `image` | `<<image "img/tree.png" "树">>` | 用 Resource 逻辑路径输出图片；alt 为可选字符串，路径支持 Expression；Tauri 显示图片，TUI 将 alt 显示在方框中 |
+| `image` | `<<image "tree.png" "树">>` | 用 Resource 逻辑路径输出图片；alt 为可选字符串，路径支持 Expression；Tauri 显示图片，TUI 将 alt 显示在方框中 |
 | `include` | `<<include "Passage">>` | 在当前位置执行另一 Passage，不发生导航 |
 | `goto` | `<<goto "Passage">>` | 请求导航并停止当前 Passage |
 | `link` | `<<link [[文本\|Passage]]>>...<</link>>` | 建立玩家可点击的导航动作；正文激活后执行 |
@@ -263,10 +263,10 @@ TUI 把延迟文本停放在 `frame.delayed`，由消费方按 `render_at` 到�
 
 ### `print` 的 heading：结构性标题
 
-heading 是 `1` 或 `2` 的**结构性标题级别**，不属于字形样式：它表达文档层级（例如
-弹窗 Dialog 的页面标题），Host 据此划分页面并生成页签或标题元素。Tauri WebView 把
-heading 1/2 渲染为 `h1`/`h2`，弹窗按顶层标题把后续内容归入对应页面并生成页签；
-TUI 加粗下划线提示。不带 heading 的文本不受影响。
+heading 是 `1` 或 `2` 的结构性标题级别。Tauri 映射为 `h1`/`h2`，TUI 用加粗下划线提示；
+普通标题不划分弹窗页面。显式分页使用 `<<dialog "默认页标题">>` 与 `<<page "页标题">>`，
+单页和多页共用同一语法；无导航 `<<link "文本">>` 点击执行正文而不进入新 Passage。
+详见[弹窗与页面](../author/dialog.md)。
 
 需要 Region、Component 或 fallback 等结构化表现时，再在 `.ts/.js` 中定义语义 Macro：
 
@@ -294,7 +294,7 @@ Container：Inline 出现闭合标签、Container 缺少或错配闭合标签都
 ### 原生图片 Macro
 
 ```twee
-<<image "img/tree.png" "树">>
+<<image "tree.png" "树">>
 <<image $portrait $name>>
 ```
 
@@ -313,3 +313,14 @@ Tauri 通过现有 Resource 协议显示图片；TUI 将 alt 放进方框，不�
 值可以超出量程：保留原值，Host 将填充限制在空条与满条之间。
 宏复用 `Surface.component("meter", 1, {label, value, min, max}, fallback)` 的现有语义链，
 不另设 Meter 类型。TUI 使用十格字符条；Tauri 使用图形条，外观由 Host/CSS 决定。
+
+## Audio effect
+
+`<<audio resource channel? tag?>>` 声明循环背景音，默认 channel 为 `bgm`。
+Script 使用 `Audio.play(resource, { channel?, tags?, loop?, volume? })` 和 `Audio.stop(channel)`。
+按当前主 Passage 的 tag 计算所需音频；Header/Footer 可提供公共规则；同音频续播，离开自动停止。
+Audio 通过 RuntimeUpdate effect 交付，不属于 SemanticNode、Surface 或 Save。
+完整规则见 [Audio](../author/audio.md)。
+
+图片作者路径相对于 `resources/img/`：`<<image "tree.png" "树">>`；
+音频相对于 `resources/audio/`。保留对应根前缀也会归一到同一 Resource。

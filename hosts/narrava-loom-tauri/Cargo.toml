@@ -1,12 +1,13 @@
 [package]
 name = "narrava-loom-tauri"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 
 [build-dependencies]
 tauri-build = "2.6.3"
 
 [dependencies]
+rodio = "0.22.2" # Host 本地音频播放与解码
 narrava-loom-core = { path = "../.." }
 narrava-loom-protocol = { path = "../../crates/narrava-loom-protocol" }
 narrava-loom-script = { path = "../../crates/narrava-loom-script" }

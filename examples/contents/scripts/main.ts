@@ -229,7 +229,7 @@ Macro.add("surfaceDemo", {
       Surface.text("需要留意。 ", { styles: ["marked"] }),
       Surface.text("危险状态。", { styles: ["strong"], color: 8 }),
       Surface.hardBreak(),
-      Surface.image("images/loom.svg", {
+      Surface.image("loom.svg", {
         key: "loom-image",
         alt: "由经纬线组成的 Narrava Loom 示意图",
       }),
@@ -244,39 +244,6 @@ Macro.add("surfaceDemo", {
         "footer",
         [Surface.text("当前示例：语义渲染与 Resource", { key: "demo-footer", color: 3 })],
         { key: "demo-footer-region" },
-      ),
-    ),
-})
-
-// Dialog 演示：页签、动作按钮及其角色（default/primary/secondary/danger）。
-Macro.add("dialogDemo", {
-  body: "inline",
-  arguments: "raw",
-  execution: "sync",
-  handler: () =>
-    Surface.fragment(
-      Surface.region(
-        "header",
-        [Surface.text("Dialog 与按钮", { key: "dialog-page-title", styles: ["strong"] })],
-        { key: "dialog-page-header" },
-      ),
-      Surface.text("进入本页时会打开语义 Dialog。关闭后仍可阅读正文并返回大厅。"),
-      Surface.region(
-        "dialog",
-        [
-          Surface.text("第一页", { key: "dialog-page-one", heading: 2 }),
-          Surface.text("WebView 用页签切换；TUI 在同一弹窗内用左右键切换页面。"),
-          Surface.action("默认按钮", "dismiss", { key: "default-action", role: "default" }),
-          Surface.action("主要按钮", "dismiss", { key: "primary-action", role: "primary" }),
-          Surface.text("第二页", { key: "dialog-page-two", heading: 2 }),
-          Surface.text("第二页独立展示次要与危险动作；上下键只在当前页的操作间循环。"),
-          Surface.action("次要按钮", "dismiss", {
-            key: "secondary-action",
-            role: "secondary",
-          }),
-          Surface.action("危险按钮", "dismiss", { key: "danger-action", role: "danger" }),
-        ],
-        { key: "demo-dialog" },
       ),
     ),
 })

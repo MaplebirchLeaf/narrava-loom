@@ -1,3 +1,4 @@
+import { takeAudio, beginAudio, rollbackAudio, audioPassage, audioScope, audioMacro } from "./audio"
 import { drainAuthorEvents, publishBuiltin, publishReaction } from "./event"
 import { claimHostOperation, completeHostOperation } from "./host"
 import {
@@ -41,6 +42,12 @@ export default function runtime(contract: BootstrapContract): void {
     emitReaction: publishReaction,
     takeAuthorEvents: drainAuthorEvents,
     completeSave: finishSave,
+    takeAudio,
+    beginAudio,
+    rollbackAudio,
+    audioPassage,
+    audioScope,
+    audioMacro,
     takeSave() {
       const request = this.save
       this.save = null

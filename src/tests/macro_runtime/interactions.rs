@@ -23,7 +23,7 @@ fn macro_interactions_add_get_update_and_take_without_implicit_overwrite() {
         .expect("首次 Interaction 应能新增");
     assert!(interactions.has(&id));
     assert_eq!(
-        interactions.get(&id).map(MacroInteraction::target),
+        interactions.get(&id).and_then(MacroInteraction::target),
         Some("Forest")
     );
     assert_eq!(
@@ -31,21 +31,21 @@ fn macro_interactions_add_get_update_and_take_without_implicit_overwrite() {
         Err(MacroInteractionError::Duplicate)
     );
     assert_eq!(
-        interactions.get(&id).map(MacroInteraction::target),
+        interactions.get(&id).and_then(MacroInteraction::target),
         Some("Forest")
     );
 
     let previous: MacroInteraction<'_, '_> = interactions
         .update(&id, delayed("Town", &second_body))
         .expect("显式 update 应替换已有 Interaction");
-    assert_eq!(previous.target(), "Forest");
+    assert_eq!(previous.target(), Some("Forest"));
     assert_eq!(
-        interactions.get(&id).map(MacroInteraction::target),
+        interactions.get(&id).and_then(MacroInteraction::target),
         Some("Town")
     );
 
     let taken: MacroInteraction<'_, '_> = interactions.take(&id).expect("激活应取走所有权");
-    assert_eq!(taken.target(), "Town");
+    assert_eq!(taken.target(), Some("Town"));
     assert!(!interactions.has(&id));
     assert_eq!(interactions.take(&id), None);
 }
@@ -67,7 +67,7 @@ fn macro_interactions_del_and_missing_update_are_explicit() {
     assert_eq!(
         interactions
             .del(&id)
-            .map(|action: MacroInteraction<'_, '_>| action.target().to_owned()),
+            .and_then(|action: MacroInteraction<'_, '_>| action.target().map(str::to_owned)),
         Some(String::from("Map"))
     );
     assert!(interactions.is_empty());
@@ -101,7 +101,7 @@ fn link_with_body_registers_body_target_and_selected_captures() {
     let (target, registered_body, captures): (_, _, CapturedMacroLocals<Value>) =
         action.into_parts();
     let scopes: MacroLocalScopes<Value> = captures.into_scopes();
-    assert_eq!(target, "Forest");
+    assert_eq!(target.as_deref(), Some("Forest"));
     assert_eq!(registered_body, body.as_slice());
     assert_eq!(scopes.get("selected"), Some(&Value::Number(3.0)));
 }

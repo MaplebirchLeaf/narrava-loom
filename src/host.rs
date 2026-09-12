@@ -363,6 +363,18 @@ impl HostUpdate {
         self.surface.append(content);
     }
 
+    /// 无导航正文保留当前 Passage，新的弹窗取代上一次弹窗。
+    pub fn apply_action_output(&mut self, content: SemanticOutput) {
+        if content
+            .nodes()
+            .iter()
+            .any(|node| matches!(node, crate::semantic::SemanticNode::Dialog { .. }))
+        {
+            self.surface.remove_dialogs();
+        }
+        self.surface.append(content);
+    }
+
     /// 在现有更新前插入同一事务较早产生的语义输出。
     pub fn prepend_surface(&mut self, mut content: SemanticOutput) {
         content.append(std::mem::take(&mut self.surface));

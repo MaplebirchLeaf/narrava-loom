@@ -37,11 +37,7 @@ pub fn image(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
     };
     let resource: String = resource.to_unicode_string().ok_or_else(invalid)?;
     let path: crate::resource::ResourcePath =
-        crate::resource::ResourcePath::parse(&resource).map_err(|_| invalid())?;
-    // Resource 逻辑路径不携带盘符或 URI scheme。
-    if resource.contains(':') {
-        return Err(invalid());
-    }
+        crate::resource::ResourcePath::in_directory("img", &resource).map_err(|_| invalid())?;
     let alt: TextValue = match arguments.get(1) {
         None => TextValue::from(""),
         Some(Value::String(alt)) => alt.clone(),
@@ -109,7 +105,7 @@ pub fn meter(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
 ///   `{ color, styles, delay, heading }`；
 /// - `color`：0..=63 的标准调色板索引；`styles`：8 个语义字形之一；
 /// - `delay`：毫秒，渲染器在此之前不呈现文本，不约定到期后的动画；
-/// - `heading`：1 或 2 的结构性标题级别，用于页面划分（如弹窗页签标题），不是字形样式。
+/// - `heading`：1 或 2 的结构性标题级别，用于正文标题，不是字形样式。
 pub fn print(arguments: &[Value]) -> Result<BodyExecution, Diagnostic> {
     let Some(value) = arguments.first() else {
         return Err(print_error("`print` 至少需要一个文字参数"));
@@ -264,7 +260,7 @@ fn print_error(message: &str) -> Diagnostic {
 struct PreparedLink {
     id: InteractionId,
     label: TextValue,
-    target: String,
+    target: Option<String>,
 }
 
 /// 把准备完成的单个 `[[label|target]]` 参数转换为导航 Interaction。
@@ -289,8 +285,10 @@ pub fn link_with_body<'hir, 'source>(
     interactions: &mut MacroInteractions<'hir, 'source>,
 ) -> Result<BodyExecution, Diagnostic> {
     let prepared: PreparedLink = prepare_link(arguments, identity)?;
-    let action: MacroInteraction<'hir, 'source> =
-        MacroInteraction::new(&prepared.target, body, captures);
+    let action: MacroInteraction<'hir, 'source> = match &prepared.target {
+        Some(target) => MacroInteraction::new(target, body, captures),
+        None => MacroInteraction::action(body, captures),
+    };
     interactions
         .add(prepared.id.clone(), action)
         .map_err(|error: MacroInteractionError| link_interaction_error(error))?;
@@ -306,8 +304,10 @@ pub fn button_with_body<'hir, 'source>(
     interactions: &mut MacroInteractions<'hir, 'source>,
 ) -> Result<BodyExecution, Diagnostic> {
     let prepared: PreparedLink = prepare_link(arguments, identity)?;
-    let action: MacroInteraction<'hir, 'source> =
-        MacroInteraction::new(&prepared.target, body, captures);
+    let action: MacroInteraction<'hir, 'source> = match &prepared.target {
+        Some(target) => MacroInteraction::new(target, body, captures),
+        None => MacroInteraction::action(body, captures),
+    };
     interactions
         .add(prepared.id.clone(), action)
         .map_err(link_interaction_error)?;
@@ -319,6 +319,16 @@ fn prepare_link(
     arguments: &[Value],
     identity: RuntimeExecutionIdentity,
 ) -> Result<PreparedLink, Diagnostic> {
+    if let [Value::String(label)] = arguments {
+        if label.is_empty() {
+            return Err(link_error("link label cannot be empty"));
+        }
+        return Ok(PreparedLink {
+            id: link_identity(identity, label, ""),
+            label: label.clone(),
+            target: None,
+        });
+    }
     let [Value::Object(interaction)] = arguments else {
         return Err(link_error("`link` 必须只接收一个 Interaction Target 参数"));
     };
@@ -330,7 +340,11 @@ fn prepare_link(
         .ok_or_else(|| link_error("`link` 的 Passage 目标必须是有效 Unicode 文本"))?;
     let id: InteractionId = link_identity(identity, &label, &target);
 
-    Ok(PreparedLink { id, label, target })
+    Ok(PreparedLink {
+        id,
+        label,
+        target: Some(target),
+    })
 }
 
 /// 把准备好的链接组装为导航语义输出。

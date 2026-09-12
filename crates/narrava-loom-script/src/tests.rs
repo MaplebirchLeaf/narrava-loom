@@ -150,7 +150,7 @@ fn bootstrap_exposes_frozen_host_neutral_surface_builders() {
                 hardBreakHasKey: "key" in Surface.hardBreak({ key: "ignored" }),
                 value: Surface.region("bar", [
                   Surface.text("体力不足", { key: "stamina", styles: ["strong"], color: "warning" }),
-                  Surface.image("images/hero.png", { alt: "主角" }),
+                  Surface.image("hero.png", { alt: "主角" }),
                 ], { key: "status" }),
               })
             "#,
@@ -955,8 +955,467 @@ mod runtime_session_state_machine {
         twee,
     };
     use narrava_loom_protocol::{
-        HostNodeDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeUpdate, SaveOperation,
+        HostNodeDto, HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeUpdate,
+        SaveOperation,
     };
+
+    fn audio_update(
+        update: RuntimeUpdate,
+    ) -> (Vec<narrava_loom_protocol::AudioEffect>, HostUpdateDto) {
+        match update {
+            RuntimeUpdate::Audio {
+                effects,
+                update: Some(update),
+            } => (effects, update),
+            RuntimeUpdate::Ready { update } => (Vec::new(), update),
+            _ => panic!("expected completed frame"),
+        }
+    }
+
+    fn audio_navigate(
+        runtime: &mut RuntimeSession<'_, '_>,
+        update: &HostUpdateDto,
+        target: &str,
+    ) -> (Vec<narrava_loom_protocol::AudioEffect>, HostUpdateDto) {
+        let interaction = update
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation {
+                    id, target: name, ..
+                } if name.as_deref() == Some(target) => Some(id.clone()),
+                _ => None,
+            })
+            .expect("test navigation must exist");
+        audio_update(
+            runtime
+                .execute(RuntimeCommand::Activate { interaction })
+                .unwrap(),
+        )
+    }
+
+    fn action_id(update: &HostUpdateDto, label: &str) -> String {
+        update
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                HostNodeDto::Navigation {
+                    id,
+                    label: text,
+                    target: None,
+                    ..
+                } if text == label => Some(id.clone()),
+                _ => None,
+            })
+            .expect("action link")
+    }
+
+    #[test]
+    fn dialog_action_opens_four_pages_without_navigation_and_can_reopen() {
+        with_runtime(
+            r#":: Start
+<<set $opened to 0>>
+<<link "查看角色">>
+<<set $opened to $opened + 1>>
+<<dialog "装备">>
+<<page "属性">>
+<<print $opened>>
+<<meter "体力" 72 0 100>>
+<<page "装备">>
+<<image "tree.png" "树">>
+<<page "经历">>
+<<scriptText>>
+<<page "其他">>
+只有文字。
+<</dialog>>
+<</link>>
+"#,
+            "Macro.add('scriptText', {handler: () => '脚本正文'});",
+            |runtime| {
+                let (_, start) = audio_update(runtime.execute(RuntimeCommand::Start).unwrap());
+                assert!(
+                    !start
+                        .nodes
+                        .iter()
+                        .any(|node| matches!(node, HostNodeDto::Dialog { .. }))
+                );
+                let id: String = action_id(&start, "查看角色");
+                let mut previous_key: Option<String> = None;
+                for count in 1..=2 {
+                    let (_, update) = audio_update(
+                        runtime
+                            .execute(RuntimeCommand::Activate {
+                                interaction: id.clone(),
+                            })
+                            .unwrap(),
+                    );
+                    assert_eq!(update.current, "Start");
+                    assert!(!update.can_back);
+                    let dialogs: Vec<&HostNodeDto> = update
+                        .nodes
+                        .iter()
+                        .filter(|node| matches!(node, HostNodeDto::Dialog { .. }))
+                        .collect();
+                    assert_eq!(dialogs.len(), 1);
+                    let HostNodeDto::Dialog {
+                        key,
+                        initial,
+                        pages,
+                    } = dialogs[0]
+                    else {
+                        unreachable!()
+                    };
+                    assert_eq!(initial, "装备");
+                    assert_eq!(
+                        pages
+                            .iter()
+                            .map(|page| page.title.as_str())
+                            .collect::<Vec<_>>(),
+                        ["属性", "装备", "经历", "其他"]
+                    );
+                    assert!(pages[0].nodes.iter().any(|node| matches!(node, HostNodeDto::Text { text, .. } if text == &count.to_string())));
+                    assert!(pages[0].nodes.iter().any(|node| matches!(node, HostNodeDto::Component { capability, .. } if capability == "meter")));
+                    assert!(
+                        matches!(&pages[1].nodes.iter().find(|node| matches!(node, HostNodeDto::Image { .. })).unwrap(), HostNodeDto::Image { resource, alt, .. } if resource == "img/tree.png" && alt == "树")
+                    );
+                    assert!(pages[2].nodes.iter().any(
+                        |node| matches!(node, HostNodeDto::Text { text, .. } if text == "脚本正文")
+                    ));
+                    assert_ne!(previous_key.as_ref(), Some(key));
+                    previous_key = Some(key.clone());
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn dialog_action_pending_cancel_and_invalid_default_roll_back() {
+        for initial in ["页", "不存在"] {
+            with_runtime(
+                &format!(
+                    r#":: Start
+<<set $opened to 0>>
+<<link "打开">>
+<<set $opened to $opened + 1>>
+<<dialog "{initial}">>
+<<page "页">>
+<<wait>>
+<<print $opened>>
+<</dialog>>
+<</link>>
+"#
+                ),
+                "Macro.add('wait', {handler: async () => { await Host.delay(1); return '完成'; }});",
+                |runtime| {
+                    let (_, start) = audio_update(runtime.execute(RuntimeCommand::Start).unwrap());
+                    let id = action_id(&start, "打开");
+                    let operation = pending(
+                        runtime
+                            .execute(RuntimeCommand::Activate {
+                                interaction: id.clone(),
+                            })
+                            .unwrap(),
+                    )
+                    .id();
+                    assert!(
+                        runtime
+                            .execute(RuntimeCommand::Cancel {
+                                operation: operation + 1
+                            })
+                            .is_err()
+                    );
+                    runtime
+                        .execute(RuntimeCommand::Cancel { operation })
+                        .unwrap();
+                    let operation = pending(
+                        runtime
+                            .execute(RuntimeCommand::Activate {
+                                interaction: id.clone(),
+                            })
+                            .unwrap(),
+                    )
+                    .id();
+                    let result = runtime.execute(RuntimeCommand::Resume {
+                        operation,
+                        result: None,
+                    });
+                    if initial == "页" {
+                        let (_, update) = audio_update(result.unwrap());
+                        let HostNodeDto::Dialog { pages, .. } = update
+                            .nodes
+                            .iter()
+                            .find(|node| matches!(node, HostNodeDto::Dialog { .. }))
+                            .unwrap()
+                        else {
+                            unreachable!()
+                        };
+                        assert!(pages[0].nodes.iter().any(
+                            |node| matches!(node, HostNodeDto::Text { text, .. } if text == "1")
+                        ));
+                        assert!(!update.can_back);
+                    } else {
+                        assert!(result.is_err());
+                        assert!(matches!(
+                            runtime
+                                .execute(RuntimeCommand::Activate { interaction: id })
+                                .unwrap(),
+                            RuntimeUpdate::Pending { .. }
+                        ));
+                    }
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn audio_macros_and_script_share_declarations_without_surface_nodes() {
+        with_runtime(
+            r#":: Start
+<<audio "forest.ogg" "bgm">>
+<<scriptAudio>>
+正文
+"#,
+            r#"Macro.add('scriptAudio', { handler: () => Audio.play('bell.wav', {channel:'voice', loop:false, volume:0.4}) });"#,
+            |runtime| {
+                let (effects, update) =
+                    audio_update(runtime.execute(RuntimeCommand::Start).unwrap());
+                assert_eq!(
+                    serde_json::to_value(effects).unwrap(),
+                    serde_json::json!([
+                        {"type":"play","resource":"audio/forest.ogg","channel":"bgm","loop":true,"volume":1.0},
+                        {"type":"play","resource":"audio/bell.wav","channel":"voice","loop":false,"volume":0.4}
+                    ])
+                );
+                assert!(
+                    !serde_json::to_string(&update.nodes)
+                        .unwrap()
+                        .contains("audio/")
+                );
+                assert!(!update.can_back);
+            },
+        );
+    }
+
+    #[test]
+    fn audio_tags_headers_continuity_override_and_history_use_current_passage() {
+        with_runtime(
+            r#":: Start
+<<link [[进入森林|Forest]]>><</link>>
+:: Header
+页眉
+<<audio "forest.ogg" "ambience" "forest">>
+:: Footer
+页脚
+:: Forest [forest rain]
+<<audio "birds.ogg" "voice">>
+<<link [[继续|ForestNext]]>><</link>>
+:: ForestNext [forest]
+<<audio "audio/forest.ogg" "ambience">>
+<<link [[洞穴|Cave]]>><</link>>
+:: Cave [forest]
+<<audio "cave.ogg" "ambience">>
+<<link [[城镇|Town]]>><</link>>
+:: Town
+结束
+"#,
+            r#"Audio.play('rain.ogg', { channel:'rain', tags:['rain'], volume:0.2 });"#,
+            |runtime| {
+                let (effects, start) =
+                    audio_update(runtime.execute(RuntimeCommand::Start).unwrap());
+                assert!(effects.is_empty());
+                assert!(serde_json::to_string(&start).unwrap().contains("页眉"));
+                assert!(serde_json::to_string(&start).unwrap().contains("页脚"));
+                let (effects, forest) = audio_navigate(runtime, &start, "Forest");
+                assert_eq!(effects.len(), 3);
+                let (effects, _next) = audio_navigate(runtime, &forest, "ForestNext");
+                assert!(effects.iter().all(|effect| matches!(
+                    effect,
+                    narrava_loom_protocol::AudioEffect::Stop { .. }
+                )));
+                assert_eq!(
+                    effects.len(),
+                    2,
+                    "forest ambience must continue without another play"
+                );
+                let operation = pending(
+                    runtime
+                        .execute(RuntimeCommand::SelectLanguage {
+                            locale: "en".into(),
+                        })
+                        .unwrap(),
+                )
+                .id();
+                let (effects, next) = audio_update(
+                    runtime
+                        .execute(RuntimeCommand::Resume {
+                            operation,
+                            result: Some(PendingResult::SelectLanguage),
+                        })
+                        .unwrap(),
+                );
+                assert!(
+                    effects.is_empty(),
+                    "language refresh must not restart matching audio"
+                );
+                let save = pending(
+                    runtime
+                        .execute(RuntimeCommand::Save {
+                            operation: SaveOperation::Export,
+                            target: "audio-test".into(),
+                        })
+                        .unwrap(),
+                );
+                let PendingOperation::Save {
+                    operation,
+                    document: Some(document),
+                    ..
+                } = save
+                else {
+                    panic!("export document expected");
+                };
+                assert!(matches!(
+                    runtime
+                        .execute(RuntimeCommand::Resume {
+                            operation,
+                            result: Some(PendingResult::Save { document: None })
+                        })
+                        .unwrap(),
+                    RuntimeUpdate::Applied
+                ));
+                let operation = pending(
+                    runtime
+                        .execute(RuntimeCommand::Save {
+                            operation: SaveOperation::Import,
+                            target: "audio-test".into(),
+                        })
+                        .unwrap(),
+                )
+                .id();
+                let (effects, restored) = audio_update(
+                    runtime
+                        .execute(RuntimeCommand::Resume {
+                            operation,
+                            result: Some(PendingResult::Save {
+                                document: Some(document),
+                            }),
+                        })
+                        .unwrap(),
+                );
+                assert!(
+                    effects.is_empty(),
+                    "restoring the same scene must not restart matching audio"
+                );
+                assert_eq!(restored.current, next.current);
+                let (effects, cave) = audio_navigate(runtime, &restored, "Cave");
+                assert!(
+                    matches!(&effects[..], [narrava_loom_protocol::AudioEffect::Play {resource, ..}] if resource == "audio/cave.ogg")
+                );
+                let (effects, _) = audio_navigate(runtime, &cave, "Town");
+                assert!(
+                    matches!(&effects[..], [narrava_loom_protocol::AudioEffect::Stop {channel}] if channel == "ambience")
+                );
+                let (effects, _) = audio_update(runtime.execute(RuntimeCommand::Back).unwrap());
+                assert!(
+                    matches!(&effects[..], [narrava_loom_protocol::AudioEffect::Play {resource, ..}] if resource == "audio/cave.ogg")
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn audio_waits_for_commit_and_cancel_or_failure_discards_it() {
+        for cancel in [false, true] {
+            with_runtime(
+                ":: Start\n<<audio \"audio/a.wav\">><<wait>>",
+                "Macro.add('wait', { handler: async () => { await Host.delay(1); Audio.stop('sfx'); } });",
+                |runtime| {
+                    let operation = pending(runtime.execute(RuntimeCommand::Start).unwrap()).id();
+                    assert!(
+                        runtime
+                            .execute(RuntimeCommand::Cancel {
+                                operation: operation + 1
+                            })
+                            .is_err()
+                    );
+                    let result = runtime
+                        .execute(if cancel {
+                            RuntimeCommand::Cancel { operation }
+                        } else {
+                            RuntimeCommand::Resume {
+                                operation,
+                                result: None,
+                            }
+                        })
+                        .unwrap();
+                    if cancel {
+                        assert!(matches!(result, RuntimeUpdate::Applied));
+                        let operation =
+                            pending(runtime.execute(RuntimeCommand::Start).unwrap()).id();
+                        let RuntimeUpdate::Audio { effects, .. } = runtime
+                            .execute(RuntimeCommand::Resume {
+                                operation,
+                                result: None,
+                            })
+                            .unwrap()
+                        else {
+                            panic!("new execution must complete");
+                        };
+                        assert_eq!(
+                            effects.len(),
+                            1,
+                            "cancelled audio must not leak into next execution"
+                        );
+                    } else {
+                        let RuntimeUpdate::Audio { effects, .. } = result else {
+                            panic!("effects must follow successful resume");
+                        };
+                        assert_eq!(effects.len(), 1);
+                    }
+                    assert!(runtime.execute(RuntimeCommand::Back).is_err());
+                },
+            );
+        }
+        with_runtime(
+            r#":: Start
+<<audio "audio/a.wav">><<failOnce>>"#,
+            "let attempts = 0; Macro.add('failOnce', { handler: () => { if (attempts++ === 0) Audio.play('../bad.wav'); } });",
+            |runtime| {
+                assert!(runtime.execute(RuntimeCommand::Start).is_err());
+                let RuntimeUpdate::Audio { effects, .. } =
+                    runtime.execute(RuntimeCommand::Start).unwrap()
+                else {
+                    panic!("retry must succeed");
+                };
+                assert_eq!(
+                    effects.len(),
+                    1,
+                    "failed execution must discard queued effects"
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn direct_dialog_uses_vm_and_rejects_duplicate_titles() {
+        with_runtime(
+            ":: Start\n<<dialog \"页\">>\n<<page \"页\">>\n正文\n<</dialog>>",
+            "",
+            |runtime| {
+                let (_, update) = audio_update(runtime.execute(RuntimeCommand::Start).unwrap());
+                assert!(update.nodes.iter().any(
+                    |node| matches!(node, HostNodeDto::Dialog { pages, .. } if pages.len() == 1)
+                ));
+            },
+        );
+        for source in [
+            ":: Start\n<<dialog \"页\">>\n<<page \"页\">>\nA\n<<page \"页\">>\nB\n<</dialog>>",
+            ":: Start\n<<dialog 1>>\n<<page 1>>\n正文\n<</dialog>>",
+        ] {
+            with_runtime(source, "", |runtime| {
+                assert!(runtime.execute(RuntimeCommand::Start).is_err());
+            });
+        }
+    }
 
     fn with_runtime(story: &str, script: &str, test: impl FnOnce(&mut RuntimeSession<'_, '_>)) {
         use std::sync::atomic::{AtomicU64, Ordering};

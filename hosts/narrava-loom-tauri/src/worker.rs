@@ -156,6 +156,7 @@ pub(crate) fn run_worker(
     let session =
         narrava_loom_script::RuntimeSession::with_data(&hir, &bytecode, script, state, services);
     let mut runtime = session;
+    let mut audio = crate::audio::AudioOutput::new(resources.as_ref().clone());
     let mut logs: Vec<HostLogDto> = vec![HostLogDto {
         level: String::from("info"),
         message: String::from("Runtime Worker 已就绪"),
@@ -168,7 +169,14 @@ pub(crate) fn run_worker(
         };
         match request {
             WorkerRequest::Execute { command, reply } => {
-                let result: WorkerResult = runtime.execute(command);
+                let result: WorkerResult = runtime.execute(command).map(|update| {
+                    let (update, errors) = audio.consume(update);
+                    logs.extend(errors.into_iter().map(|error| HostLogDto {
+                        level: String::from("warn"),
+                        message: error.message,
+                    }));
+                    update
+                });
                 append_runtime_notices(&mut runtime, &mut logs);
                 let _sent = reply.send(result);
             }

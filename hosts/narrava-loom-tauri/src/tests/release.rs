@@ -159,7 +159,7 @@ fn history_back_restores_persistent_state_before_replaying_the_target() {
             .find_map(|node| match node {
                 HostNodeDto::Navigation {
                     id, target: actual, ..
-                } if actual == target => Some(id),
+                } if actual.as_deref() == Some(target) => Some(id),
                 _ => None,
             })
             .expect("当前页面应提供下一步导航");
@@ -234,7 +234,9 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+            HostNodeDto::Navigation { id, target, .. } if target.as_deref() == Some("Hall") => {
+                Some(id)
+            }
             _ => None,
         })
         .unwrap();
@@ -245,7 +247,11 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "SurfaceGallery" => Some(id),
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("SurfaceGallery") =>
+            {
+                Some(id)
+            }
             _ => None,
         })
         .unwrap();
@@ -260,7 +266,7 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
     );
     assert!(gallery.nodes.iter().any(|node| matches!(
         node,
-        HostNodeDto::Image { resource, .. } if resource == "images/loom.svg"
+        HostNodeDto::Image { resource, .. } if resource == "img/loom.svg"
     )));
     assert!(gallery.nodes.iter().any(|node| matches!(
         node,
@@ -273,7 +279,11 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
                 .nodes
                 .iter()
                 .find_map(|node| match node {
-                    HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+                    HostNodeDto::Navigation { id, target, .. }
+                        if target.as_deref() == Some("Hall") =>
+                    {
+                        Some(id)
+                    }
                     _ => None,
                 })
                 .expect("Gallery 应能返回大厅"),
@@ -285,7 +295,9 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
             hall.nodes
                 .iter()
                 .find_map(|node| match node {
-                    HostNodeDto::Navigation { id, target, .. } if target == "FormGallery" => {
+                    HostNodeDto::Navigation { id, target, .. }
+                        if target.as_deref() == Some("FormGallery") =>
+                    {
                         Some(id)
                     }
                     _ => None,
@@ -332,7 +344,9 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Button { id, target, .. } if target == "Hall" => Some(id.clone()),
+            HostNodeDto::Button { id, target, .. } if target.as_deref() == Some("Hall") => {
+                Some(id.clone())
+            }
             _ => None,
         })
         .expect("表单页应产生语义 button");
@@ -343,7 +357,9 @@ fn example_surface_builder_reaches_tauri_semantic_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "ReplaceGallery" => {
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("ReplaceGallery") =>
+            {
                 Some(id.clone())
             }
             _ => None,
@@ -425,7 +441,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+            HostNodeDto::Navigation { id, target, .. } if target.as_deref() == Some("Hall") => {
+                Some(id)
+            }
             _ => None,
         })
         .unwrap();
@@ -436,7 +454,11 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "StateGallery" => Some(id),
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("StateGallery") =>
+            {
+                Some(id)
+            }
             _ => None,
         })
         .expect("大厅应提供脚本状态代理入口");
@@ -454,7 +476,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+            HostNodeDto::Navigation { id, target, .. } if target.as_deref() == Some("Hall") => {
+                Some(id)
+            }
             _ => None,
         })
         .expect("状态代理页应可返回大厅");
@@ -465,7 +489,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "AuthorToolsGallery" => {
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("AuthorToolsGallery") =>
+            {
                 Some(id)
             }
             _ => None,
@@ -519,7 +545,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .filter_map(|node| match node {
-            HostNodeDto::Button { id, target, .. } if target == "AuthorToolsGallery" => {
+            HostNodeDto::Button { id, target, .. }
+                if target.as_deref() == Some("AuthorToolsGallery") =>
+            {
                 Some(id.clone())
             }
             _ => None,
@@ -553,7 +581,11 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Button { id, target, .. } if target == "AuthorToolsGallery" => Some(id),
+            HostNodeDto::Button { id, target, .. }
+                if target.as_deref() == Some("AuthorToolsGallery") =>
+            {
+                Some(id)
+            }
             _ => None,
         })
         .expect("重绘后应继续提供 English 切换动作");
@@ -581,7 +613,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .filter_map(|node| match node {
-            HostNodeDto::Button { id, target, .. } if target == "Hall" => Some(id.clone()),
+            HostNodeDto::Button { id, target, .. } if target.as_deref() == Some("Hall") => {
+                Some(id.clone())
+            }
             _ => None,
         })
         .collect();
@@ -593,7 +627,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "AuthorToolsGallery" => {
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("AuthorToolsGallery") =>
+            {
                 Some(id)
             }
             _ => None,
@@ -606,7 +642,9 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
                 .nodes
                 .iter()
                 .filter_map(|node| match node {
-                    HostNodeDto::Button { id, target, .. } if target == "Hall" => Some(id),
+                    HostNodeDto::Button { id, target, .. } if target.as_deref() == Some("Hall") => {
+                        Some(id)
+                    }
                     _ => None,
                 })
                 .nth(1)
@@ -621,7 +659,11 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "TextGallery" => Some(id),
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("TextGallery") =>
+            {
+                Some(id)
+            }
             _ => None,
         })
         .expect("大厅应提供 print 演示入口");
@@ -649,12 +691,14 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         HostNodeDto::StyledText { text, color, .. } if text.contains("63") && *color == 63
     )));
 
-    // 弹窗页签：dialog 区域按结构性标题（heading: 2）划分页面
+    // 原生弹窗经过真实 Tauri Worker；默认页与任意页数保留。
     let back_to_hall: String = text_gallery
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id.clone()),
+            HostNodeDto::Navigation { id, target, .. } if target.as_deref() == Some("Hall") => {
+                Some(id.clone())
+            }
             _ => None,
         })
         .expect("TextGallery 应能返回大厅");
@@ -663,62 +707,59 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "DialogGallery" => Some(id),
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("DialogGallery") =>
+            {
+                Some(id)
+            }
             _ => None,
         })
         .expect("大厅应提供弹窗演示入口");
     let dialog_gallery = block_on(host.activate(dialog_gallery_id)).unwrap();
-    fn collect_styled<'a>(nodes: &'a [HostNodeDto], out: &mut Vec<&'a HostNodeDto>) {
-        for node in nodes {
-            if matches!(node, HostNodeDto::StyledText { .. }) {
-                out.push(node);
-            }
-            match node {
-                HostNodeDto::Region {
-                    nodes: children, ..
-                }
-                | HostNodeDto::Container {
-                    nodes: children, ..
-                }
-                | HostNodeDto::Replace {
-                    nodes: children, ..
-                } => collect_styled(children, out),
-                HostNodeDto::Component { fallback, .. } => collect_styled(fallback, out),
-                _ => {}
-            }
-        }
-    }
-    let mut styled: Vec<&HostNodeDto> = Vec::new();
-    collect_styled(&dialog_gallery.nodes, &mut styled);
-    let headings: Vec<&HostNodeDto> = styled
+    let open = dialog_gallery
+        .nodes
         .iter()
-        .copied()
-        .filter(|node| {
-            matches!(
-                node,
-                HostNodeDto::StyledText {
-                    heading: Some(2),
-                    ..
-                }
-            )
+        .find_map(|node| match node {
+            HostNodeDto::Navigation {
+                id,
+                target: None,
+                label,
+                ..
+            } if label == "查看角色" => Some(id),
+            _ => None,
         })
-        .collect();
-    assert_eq!(headings.len(), 2, "Dialog 应由两个结构性标题划分两页");
-    assert!(headings.iter().any(|node| matches!(
-        node,
-        HostNodeDto::StyledText { text, .. } if text.contains("第一页")
-    )));
-    assert!(headings.iter().any(|node| matches!(
-        node,
-        HostNodeDto::StyledText { text, .. } if text.contains("第二页")
-    )));
+        .expect("无导航弹窗入口");
+    let opened = block_on(host.activate(open)).unwrap();
+    assert_eq!(opened.current, dialog_gallery.current);
+    assert_eq!(opened.can_back, dialog_gallery.can_back);
+    let HostNodeDto::Dialog { initial, pages, .. } = opened
+        .nodes
+        .iter()
+        .find(|node| matches!(node, HostNodeDto::Dialog { .. }))
+        .expect("显式 Dialog DTO")
+    else {
+        unreachable!()
+    };
+    assert_eq!(initial, "装备");
+    assert_eq!(pages.len(), 4);
+    assert_eq!(pages[1].title, "装备");
+    assert!(
+        pages[1]
+            .nodes
+            .iter()
+            .any(|node| matches!(node, HostNodeDto::Image { .. }))
+    );
     let hall = block_on(
         host.activate(
             dialog_gallery
                 .nodes
                 .iter()
                 .find_map(|node| match node {
-                    HostNodeDto::Navigation { id, target, .. } if target == "Hall" => Some(id),
+                    HostNodeDto::Navigation { id, target, .. }
+                        if target.as_deref() == Some("Hall") =>
+                    {
+                        Some(id)
+                    }
                     _ => None,
                 })
                 .expect("DialogGallery 应能返回大厅"),
@@ -731,7 +772,11 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
         .nodes
         .iter()
         .find_map(|node| match node {
-            HostNodeDto::Navigation { id, target, .. } if target == "MacroGallery" => Some(id),
+            HostNodeDto::Navigation { id, target, .. }
+                if target.as_deref() == Some("MacroGallery") =>
+            {
+                Some(id)
+            }
             _ => None,
         })
         .expect("大厅应提供控制流范本入口");
@@ -1005,16 +1050,16 @@ fn twee_image_reaches_protocol_with_resource_and_options() {
     fs::write(
         root_path.join("contents/story/main.twee"),
         r#":: Start
-<<image "images/loom.svg">>
-<<set $portrait = "images/loom.svg">>
+<<image "loom.svg">>
+<<set $portrait = "loom.svg">>
 <<image $portrait "森林">>
 "#,
     )
     .unwrap();
-    fs::create_dir_all(root_path.join("resources/images")).unwrap();
+    fs::create_dir_all(root_path.join("resources/img")).unwrap();
     let image_bytes: Vec<u8> =
-        fs::read(repository.join("examples/resources/images/loom.svg")).unwrap();
-    fs::write(root_path.join("resources/images/loom.svg"), &image_bytes).unwrap();
+        fs::read(repository.join("examples/resources/img/loom.svg")).unwrap();
+    fs::write(root_path.join("resources/img/loom.svg"), &image_bytes).unwrap();
     let host: TauriHost = TauriHost::spawn(&root).unwrap();
     let update: HostUpdateDto = block_on(host.start()).unwrap();
     let images: Vec<(&str, &str)> = update
@@ -1025,12 +1070,9 @@ fn twee_image_reaches_protocol_with_resource_and_options() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        images,
-        vec![("images/loom.svg", ""), ("images/loom.svg", "森林")]
-    );
+    assert_eq!(images, vec![("img/loom.svg", ""), ("img/loom.svg", "森林")]);
     let response: tauri::http::Response<Vec<u8>> =
-        crate::resource_protocol::respond(&host.resources, "images/loom.svg");
+        crate::resource_protocol::respond(&host.resources, "img/loom.svg");
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), &image_bytes);
     drop(host);

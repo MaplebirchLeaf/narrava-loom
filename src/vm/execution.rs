@@ -316,13 +316,82 @@ impl MirExecutionFrame {
                     .checked_add(1)
                     .expect("单条执行链的 include 数量不可能超过地址空间");
             }
+            BytecodeOperation::BeginDialog { output } => {
+                if self.dialog.is_some() {
+                    return Err(MirExecutionError::InvalidDialog("nested dialog"));
+                }
+                let initial: String = evaluate_dialog_title(&expressions[0], context)?;
+                self.dialog = Some(DialogOutput {
+                    initial,
+                    pages: Vec::new(),
+                    visible: self.should_emit(*output),
+                    outer: std::mem::take(&mut self.output),
+                    depth: self.stack.len(),
+                });
+                self.advance(instruction_count)?;
+            }
+            BytecodeOperation::BeginDialogPage => {
+                let title: String = evaluate_dialog_title(&expressions[0], context)?;
+                let dialog: &mut DialogOutput = self
+                    .dialog
+                    .as_mut()
+                    .ok_or(MirExecutionError::InvalidDialog("page outside dialog"))?;
+                if title.trim().is_empty() || dialog.pages.iter().any(|page| page.title == title) {
+                    return Err(MirExecutionError::InvalidDialog(
+                        "empty or duplicate page title",
+                    ));
+                }
+                if let Some(page) = dialog.pages.last_mut() {
+                    page.content = std::mem::take(&mut self.output);
+                }
+                dialog.pages.push(crate::semantic::SemanticDialogPage {
+                    title,
+                    content: SemanticOutput::default(),
+                });
+                self.advance(instruction_count)?;
+            }
+            BytecodeOperation::EndDialog => {
+                let mut dialog: DialogOutput = self
+                    .dialog
+                    .take()
+                    .ok_or(MirExecutionError::InvalidDialog("end outside dialog"))?;
+                if !dialog.pages.iter().any(|page| page.title == dialog.initial) {
+                    return Err(MirExecutionError::InvalidDialog(
+                        "initial page does not exist",
+                    ));
+                }
+                if let Some(page) = dialog.pages.last_mut() {
+                    page.content = std::mem::take(&mut self.output);
+                }
+                self.output = dialog.outer;
+                if dialog.visible {
+                    self.output.remove_dialogs();
+                    self.output.push(SemanticNode::Dialog {
+                        initial: dialog.initial,
+                        pages: dialog.pages,
+                    });
+                }
+                self.advance(instruction_count)?;
+            }
             BytecodeOperation::RequestGoto => {
+                if self.dialog.is_some() {
+                    return Err(MirExecutionError::InvalidDialog("goto inside dialog"));
+                }
                 let target = &expressions[0];
                 self.navigation = Some(evaluate_passage_name(target, context)?);
                 return Ok(MirStep::NavigationPending);
             }
             BytecodeOperation::InvokeMacro { .. } => return Ok(MirStep::MacroPending),
             BytecodeOperation::ExitPassage | BytecodeOperation::Halt => {
+                if self
+                    .dialog
+                    .as_ref()
+                    .is_some_and(|dialog| dialog.depth == self.stack.len())
+                {
+                    return Err(MirExecutionError::InvalidDialog(
+                        "dialog exited before closing",
+                    ));
+                }
                 return Ok(self.finish_current());
             }
         }
@@ -351,4 +420,28 @@ fn fold_source_line_whitespace(text: &str) -> TextValue {
         }
     }
     TextValue::from(output)
+}
+
+fn evaluate_dialog_title(
+    expression: &crate::expression::Expression<'_>,
+    context: &mut dyn WritableEvaluationContext,
+) -> Result<String, MirExecutionError> {
+    let Value::String(title) =
+        evaluate_with_mut(expression, context).map_err(MirExecutionError::Evaluation)?
+    else {
+        return Err(MirExecutionError::InvalidDialog(
+            "page title must be a string",
+        ));
+    };
+    let title: String = title
+        .to_unicode_string()
+        .ok_or(MirExecutionError::InvalidDialog(
+            "page title must be Unicode",
+        ))?;
+    if title.trim().is_empty() {
+        return Err(MirExecutionError::InvalidDialog(
+            "page title cannot be empty",
+        ));
+    }
+    Ok(title)
 }

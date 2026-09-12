@@ -84,6 +84,11 @@ pub enum BytecodeOperation {
         output: MirOutputMode,
     },
     RequestGoto,
+    BeginDialog {
+        output: MirOutputMode,
+    },
+    BeginDialogPage,
+    EndDialog,
     InvokeMacro {
         name: String,
         arguments: BytecodeMacroArguments,
@@ -160,6 +165,9 @@ impl BytecodeOperation {
                 Self::RequestInclude { output: *output }
             }
             MirInstruction::RequestGoto(_) => Self::RequestGoto,
+            MirInstruction::BeginDialog { output, .. } => Self::BeginDialog { output: *output },
+            MirInstruction::BeginDialogPage(_) => Self::BeginDialogPage,
+            MirInstruction::EndDialog => Self::EndDialog,
             MirInstruction::InvokeMacro {
                 call,
                 captures,
@@ -238,6 +246,9 @@ impl BytecodeOperation {
             Self::JumpIfNotStrictEqual { .. } => Opcode::JumpIfNotStrictEqual,
             Self::Jump { .. } => Opcode::Jump,
             Self::Halt => Opcode::Halt,
+            Self::BeginDialog { .. } => Opcode::BeginDialog,
+            Self::BeginDialogPage => Opcode::BeginDialogPage,
+            Self::EndDialog => Opcode::EndDialog,
         }
     }
 
@@ -249,6 +260,8 @@ impl BytecodeOperation {
             | Self::Unset
             | Self::RequestInclude { .. }
             | Self::RequestGoto
+            | Self::BeginDialog { .. }
+            | Self::BeginDialogPage
             | Self::Evaluate { .. }
             | Self::PrepareCollectionIteration { .. }
             | Self::NextIteration { .. }
@@ -263,7 +276,8 @@ impl BytecodeOperation {
             | Self::PrintLiteral { .. }
             | Self::ExitPassage
             | Self::Jump { .. }
-            | Self::Halt => 0,
+            | Self::Halt
+            | Self::EndDialog => 0,
         }
     }
 
@@ -338,7 +352,12 @@ pub(super) fn own_expressions(instruction: &MirInstruction<'_, '_>) -> Vec<Owned
         MirInstruction::PrintExpression { expression, .. }
         | MirInstruction::EvaluateDiscard(expression)
         | MirInstruction::Unset(expression)
-        | MirInstruction::RequestGoto(expression) => vec![expression],
+        | MirInstruction::RequestGoto(expression)
+        | MirInstruction::BeginDialog {
+            initial: expression,
+            ..
+        }
+        | MirInstruction::BeginDialogPage(expression) => vec![expression],
         MirInstruction::RequestInclude { target, .. }
         | MirInstruction::Evaluate {
             expression: target, ..
@@ -367,7 +386,8 @@ pub(super) fn own_expressions(instruction: &MirInstruction<'_, '_>) -> Vec<Owned
         | MirInstruction::PrintLiteral { .. }
         | MirInstruction::ExitPassage
         | MirInstruction::Jump { .. }
-        | MirInstruction::Halt => Vec::new(),
+        | MirInstruction::Halt
+        | MirInstruction::EndDialog => Vec::new(),
     };
     expressions.into_iter().map(OwnedExpression::from).collect()
 }

@@ -19,7 +19,7 @@ fn output_preserves_semantic_node_order() {
             role: crate::semantic::NavigationRole::Link,
             id: InteractionId::from_key("start:choice:0"),
             label: TextValue::from("继续"),
-            target: String::from("Forest"),
+            target: Some(String::from("Forest")),
         },
     ]);
 
@@ -65,7 +65,7 @@ fn interaction_identity_resolves_only_core_presented_actions() {
         role: crate::semantic::NavigationRole::Link,
         id: id.clone(),
         label: TextValue::from("进入森林"),
-        target: String::from("Forest"),
+        target: Some(String::from("Forest")),
     }]);
 
     assert_eq!(output.interaction_target(&id), Some("Forest"));

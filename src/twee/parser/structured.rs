@@ -29,6 +29,7 @@ pub(super) fn parse_multiline_macro<'source>(
             | "include"
             | "goto"
             | "print"
+            | "page"
     ) {
         return Ok(Some((
             BodyNode {
@@ -145,6 +146,7 @@ fn requires_container_syntax(name: &str) -> bool {
             | "button"
             | "replace"
             | "slot"
+            | "dialog"
     )
 }
 

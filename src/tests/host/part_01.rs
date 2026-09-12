@@ -151,7 +151,7 @@ fn host_takes_only_a_presented_macro_interaction_with_the_same_target() {
         HostApi::take_macro_interaction(&presented, &id, &mut interactions)
             .expect("相同 ID 和目标应通过验证");
 
-    assert_eq!(action.target(), "Forest");
+    assert_eq!(action.target(), Some("Forest"));
     assert!(!interactions.has(&id));
 }
 
@@ -480,7 +480,7 @@ fn host_mir_chain_presents_and_activates_an_author_link() {
         panic!("Start 应只显示一个作者导航动作");
     };
     assert_eq!(label.as_units(), TextValue::from("进入森林").as_units());
-    assert_eq!(target, "Forest");
+    assert_eq!(target.as_deref(), Some("Forest"));
 
     let advanced: HostDriveResult = HostApi::advance_mir(
         &mut pending,

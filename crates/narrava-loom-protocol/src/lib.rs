@@ -101,6 +101,11 @@ pub enum HostNodeDto {
         resource: String,
         alt: String,
     },
+    Dialog {
+        key: String,
+        initial: String,
+        pages: Vec<HostDialogPageDto>,
+    },
     /// 将子节点路由到具名 Host 区域。
     Region {
         key: String,
@@ -163,14 +168,14 @@ pub enum HostNodeDto {
         key: String,
         id: String,
         label: String,
-        target: String,
+        target: Option<String>,
     },
     /// 按钮角色的 Story 导航。
     Button {
         key: String,
         id: String,
         label: String,
-        target: String,
+        target: Option<String>,
     },
     /// 返回 Runtime 已验证的上一语境。
     SafeReturn {
@@ -178,6 +183,13 @@ pub enum HostNodeDto {
         id: String,
         target: String,
     },
+}
+
+/// 显式弹窗页；标题同时是页内稳定身份。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostDialogPageDto {
+    pub title: String,
+    pub nodes: Vec<HostNodeDto>,
 }
 
 /// 内容容器的跨 Host 标准表现语义。
@@ -323,10 +335,31 @@ pub enum PendingResult {
     Failed { error: HostErrorDto },
 }
 
+/// 成功执行后由 Host 消费一次的音频 effect；不属于 Surface 或存档。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum AudioEffect {
+    Play {
+        resource: String,
+        channel: String,
+        #[serde(rename = "loop")]
+        looping: bool,
+        volume: f64,
+    },
+    Stop {
+        channel: String,
+    },
+}
+
 /// RuntimeSession 对一条命令的拥有型结果。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RuntimeUpdate {
+    /// 一次性音频命令，可与成功的展示更新一并交付。
+    Audio {
+        effects: Vec<AudioEffect>,
+        update: Option<HostUpdateDto>,
+    },
     /// 产生了一份可展示更新。
     Ready { update: HostUpdateDto },
     /// 命令已应用，但没有新的展示更新。

@@ -431,7 +431,7 @@ impl HostApi {
                     "交互没有对应的延迟 Macro 动作",
                 )
             })?;
-        if action.target() != presented_target {
+        if action.target() != Some(presented_target) {
             return Err(host_error(
                 "host.macro_interaction_target_mismatch",
                 "SemanticOutput 目标与延迟 Macro 动作不一致",
@@ -782,6 +782,7 @@ impl HostApi {
                 },
             )?;
         let (target, body, captures) = action.into_parts();
+        let target: String = target.expect("navigation entry validates target");
         let restore_captures = captures.clone();
         let state_checkpoint: StateCheckpoint = state.checkpoint();
         let story_snapshot: StorySnapshot<'hir, 'source> = story.snapshot();

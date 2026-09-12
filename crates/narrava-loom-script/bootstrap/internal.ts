@@ -33,6 +33,7 @@ export interface ScriptGlobalRegistry {
   Engine?: unknown
   Story?: unknown
   Save?: unknown
+  Audio?: unknown
   Resource?: unknown
   I18n?: unknown
   Surface?: Record<string, unknown>

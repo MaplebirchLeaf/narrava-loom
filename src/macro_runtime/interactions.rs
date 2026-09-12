@@ -9,7 +9,7 @@ use super::CapturedMacroLocals;
 /// 玩家激活后由 Macro Runtime 执行的一次性动作。
 #[derive(Clone, Debug, PartialEq)]
 pub struct MacroInteraction<'hir, 'source> {
-    target: String,
+    target: Option<String>,
     body: &'hir [HirBodyNode<'source>],
     captures: CapturedMacroLocals<Value>,
 }
@@ -22,15 +22,27 @@ impl<'hir, 'source> MacroInteraction<'hir, 'source> {
         captures: CapturedMacroLocals<Value>,
     ) -> Self {
         Self {
-            target: target.to_owned(),
+            target: Some(target.to_owned()),
+            body,
+            captures,
+        }
+    }
+
+    /// 不导航的延迟正文沿用同一动作表与捕获规则。
+    pub fn action(
+        body: &'hir [HirBodyNode<'source>],
+        captures: CapturedMacroLocals<Value>,
+    ) -> Self {
+        Self {
+            target: None,
             body,
             captures,
         }
     }
 
     /// 激活后要导航的 Passage 目标。
-    pub fn target(&self) -> &str {
-        &self.target
+    pub fn target(&self) -> Option<&str> {
+        self.target.as_deref()
     }
 
     /// 玩家激活后执行的延迟正文。
@@ -42,7 +54,7 @@ impl<'hir, 'source> MacroInteraction<'hir, 'source> {
     pub fn into_parts(
         self,
     ) -> (
-        String,
+        Option<String>,
         &'hir [HirBodyNode<'source>],
         CapturedMacroLocals<Value>,
     ) {
@@ -124,6 +136,11 @@ impl<'hir, 'source> MacroInteractions<'hir, 'source> {
     /// 判断动作表是否为空。
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// 释放已不在当前输出中的弹窗动作，避免重复打开后累积失效 ID。
+    pub fn retain_visible(&mut self, output: &crate::semantic::SemanticOutput) {
+        self.entries.retain(|id, _| output.contains_interaction(id));
     }
 
     /// 清空全部登记动作。

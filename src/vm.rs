@@ -45,7 +45,9 @@ pub enum MirStep {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MirExecutionError {
     /// 单条执行链消耗的 Bytecode 指令超过显式预算。
-    InstructionLimitExceeded { limit: usize },
+    InstructionLimitExceeded {
+        limit: usize,
+    },
     /// 引用的 Passage 不在当前 Bytecode 程序内。
     MissingPassage,
     /// 给定的运行语言不属于当前程序的 I18n 目录。
@@ -64,6 +66,7 @@ pub enum MirExecutionError {
     ExpectedMacroPending,
     /// 容器 Macro 正文内不允许 `include` 请求。
     MacroBodyIncludeUnsupported,
+    InvalidDialog(&'static str),
 }
 
 /// 一条执行链的 Passage 调用栈、运行状态与累计语义输出。
@@ -75,9 +78,19 @@ pub struct MirExecutionFrame {
     stack: Vec<MirPassageFrame>,
     output: SemanticOutput,
     navigation: Option<String>,
+    dialog: Option<DialogOutput>,
     includes_entered: usize,
     instruction_limit: usize,
     instructions_executed: usize,
+}
+
+#[derive(Debug, PartialEq)]
+struct DialogOutput {
+    initial: String,
+    pages: Vec<crate::semantic::SemanticDialogPage>,
+    outer: SemanticOutput,
+    visible: bool,
+    depth: usize,
 }
 
 /// 官方 Runtime 单条连续执行链的默认 Bytecode 指令预算。
@@ -184,6 +197,7 @@ impl MirExecutionFrame {
         Self {
             stack: vec![MirPassageFrame::new(passage, false)],
             output: SemanticOutput::default(),
+            dialog: None,
             navigation: None,
             includes_entered: 0,
             instruction_limit: DEFAULT_INSTRUCTION_LIMIT,
@@ -196,6 +210,7 @@ impl MirExecutionFrame {
         Self {
             stack: vec![MirPassageFrame::new_macro(body)],
             output: SemanticOutput::default(),
+            dialog: None,
             navigation: None,
             includes_entered: 0,
             instruction_limit: DEFAULT_INSTRUCTION_LIMIT,

@@ -37,6 +37,7 @@ const typeName = (name) =>
   name === "SaveOperation" ? "NarravaRuntimeSaveOperation" : `Narrava${name}`
 const tsType = (rustType) => {
   if (rustType === "String" || rustType === "RuntimeSessionId") return "string"
+  if (rustType === "f64") return "number"
   if (rustType === "bool") return "boolean"
   if (/^u(8|16|32|64)$/.test(rustType)) return "number"
   if (rustType === "serde_json::Value") return "unknown"
@@ -126,7 +127,7 @@ declare global {
   type NarravaBuiltinEventName =${union(contract.builtinEvents)}
   type NarravaSurfaceBuilderName =${union(contract.surfaceBuilders)}
   type NarravaRuntimeCommandType =${union(runtimeProtocol.commands)}
-  type NarravaRuntimeUpdateType = ${union(runtimeProtocol.updates)}
+  type NarravaRuntimeUpdateType =${union(runtimeProtocol.updates)}
   type NarravaPendingOperationType = ${union(runtimeProtocol.pendingOperations)}
   type NarravaSurfaceNodeType =${union(surfaceNodes)}
 ${runtimeTypes}

@@ -31,12 +31,37 @@
 <<link [[查看 Twee 内 Surface|TextGallery]]>><</link>><br>
 <<link [[查看控制流范本|MacroGallery]]>><</link>>
 
+<<link [[本地音频示例|AudioGallery]]>><</link>>
+
 :: SurfaceGallery [reference]
 <<surfaceDemo>>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: DialogGallery [reference]
-<<dialogDemo>>
+点击查看角色，默认打开“装备”。关闭后可以重复打开。<br>
+<<link "查看角色">>
+<<dialog "装备">>
+<<page "属性">>
+<<meter "体力" 72 0 100>>
+<<page "装备">>
+<<image "loom.svg" "织机">>
+装备正文。<br>
+<<page "经历">>
+经历正文。普通标题不会拆出新页。<br>
+<<print "回忆" {heading: 2}>>
+<<page "说明">>
+Tauri 点击页签或用左右键；TUI 用左右键切页、Esc 关闭。<br>
+纯文字页也能独立选择。
+<</dialog>>
+<</link>>
+<br>
+<<link "单页提示">>
+<<dialog "提示">>
+<<page "提示">>
+这是一个单页弹窗。使用 Host 自带关闭按钮或 Esc 返回。
+<</dialog>>
+<</link>>
+<br>
 <<link [[返回大厅|Hall]]>><</link>>
 
 :: FormGallery [reference]
@@ -74,7 +99,7 @@
 
 :: TextGallery [reference]
 这是由 print Macro 提供的 Twee 内 Surface：内容 + 可选 color + 零到多个 style，<br>
-不需要写脚本。图片和状态条可用原生 image、meter 宏；Region 与当前 Dialog 示例使用 scripts 构建。<br>
+不需要写脚本。图片和状态条可用原生 image、meter 宏；弹窗使用原生 dialog/page；Region 示例使用 scripts 构建。<br>
 
 <br>标准调色板是 0..=63：0-7 是默认色与灰阶，8-63 是红到深紫的色谱。<br>
 8-63 是光谱（红8→橙16→黄24→绿32→蓝40→紫48→深紫56→63，每色相 8 级）；0 为正文默认。<br>
@@ -204,3 +229,18 @@ switch：按值严格匹配，命中输出该分支：<br>
 <<link [[进入大厅|Hall]]>><</link>>
 <<link [[查看藏书室|Library]]>><</link>>
 <span class="highlight-demo" data-passage="HighlightGallery">HTML 标签、属性和文本</span>
+
+
+:: AudioGallery [forest]
+<<audio "chime.wav" "ambience" "forest">>
+当前页面带有 forest 标签，循环播放背景音。<br>
+<<link [[走向林间深处（连续播放）|AudioForest]]>><</link>><br>
+<<link [[离开森林（自动停止）|Hall]]>><</link>>
+
+:: AudioForest [forest]
+上一页与这里需要相同的音频，所以不中断、不从头播放。<br>
+<<link [[返回林间入口|AudioGallery]]>><</link>><br>
+<<link [[离开森林（自动停止）|Hall]]>><</link>>
+
+:: Header
+<<audio "chime.wav" "ambience" "forest">>

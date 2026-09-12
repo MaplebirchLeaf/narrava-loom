@@ -1,3 +1,4 @@
+import audio from "./audio"
 import contract from "../../../bindings/script-contract.json"
 import events from "./event"
 import host from "./host"
@@ -17,6 +18,7 @@ macro()
 logger()
 events(contract.builtinEvents)
 host()
+audio()
 save()
 resources()
 surface()

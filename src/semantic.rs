@@ -87,8 +87,8 @@ pub enum TextStyle {
     Deleted,
 }
 
-/// 结构性标题级别：表达文档层级（如弹窗页签的页面标题），不属于字形样式。
-/// Host 用它划分页面或渲染标题元素；无标题时是普通文本。
+/// 结构性标题级别：表达正文层级，不属于字形样式。
+/// Host 用它渲染标题元素；无标题时是普通文本。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HeadingLevel {
     /// 一级标题。
@@ -420,13 +420,17 @@ pub enum SemanticNode {
         color: TextColor,
         /// 到达指定毫秒数前内容不可见；动画方式完全属于 Host。
         delay: Option<u64>,
-        /// 结构性标题级别（可选）：用于页面划分（如弹窗页签的页面标题），
+        /// 结构性标题级别（可选）：用于正文标题，
         /// 不属于字形样式；Host 决定如何呈现标题层级。
         heading: Option<HeadingLevel>,
     },
     Image {
         resource: String,
         alt: TextValue,
+    },
+    Dialog {
+        initial: String,
+        pages: Vec<SemanticDialogPage>,
     },
     Region {
         region: RegionId,
@@ -460,7 +464,7 @@ pub enum SemanticNode {
     Navigation {
         id: InteractionId,
         label: TextValue,
-        target: String,
+        target: Option<String>,
         role: NavigationRole,
     },
     /// 没有作者导航动作时，由 Engine 追加的安全返回语义。
@@ -468,6 +472,13 @@ pub enum SemanticNode {
         id: InteractionId,
         target: String,
     },
+}
+
+/// 弹窗页的标题与正文；正文中的普通标题不创建页面。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticDialogPage {
+    pub title: String,
+    pub content: SemanticOutput,
 }
 
 /// 一次 Core 执行产生的有序语义输出，不规定宿主如何呈现。
@@ -532,6 +543,19 @@ impl SemanticOutput {
         self.keys.extend(other.keys);
     }
 
+    pub(crate) fn remove_dialogs(&mut self) {
+        let mut index: usize = 0;
+        self.nodes.retain(|node| {
+            let keep: bool = !matches!(node, SemanticNode::Dialog { .. });
+            if !keep {
+                self.keys.remove(index);
+            } else {
+                index += 1;
+            }
+            keep
+        });
+    }
+
     /// 当前执行是否没有产生语义节点。
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty()
@@ -545,7 +569,10 @@ impl SemanticOutput {
     /// 是否包含作者产生的导航动作；SafeReturn 不计入作者动作。
     pub fn has_navigation(&self) -> bool {
         self.nodes.iter().any(|node: &SemanticNode| match node {
-            SemanticNode::Navigation { .. } => true,
+            SemanticNode::Navigation { target, .. } => target.is_some(),
+            SemanticNode::Dialog { pages, .. } => {
+                pages.iter().any(|page| page.content.has_navigation())
+            }
             SemanticNode::Region { content, .. }
             | SemanticNode::Container { content, .. }
             | SemanticNode::Replace { content, .. } => content.has_navigation(),
@@ -563,8 +590,8 @@ impl SemanticOutput {
                     id: candidate,
                     target,
                     ..
-                }
-                | SemanticNode::SafeReturn {
+                } if candidate == id => target.as_deref(),
+                SemanticNode::SafeReturn {
                     id: candidate,
                     target,
                 } if candidate == id => Some(target.as_str()),
@@ -572,8 +599,26 @@ impl SemanticOutput {
                 | SemanticNode::Container { content, .. }
                 | SemanticNode::Replace { content, .. } => content.interaction_target(id),
                 SemanticNode::Component { fallback, .. } => fallback.interaction_target(id),
+                SemanticNode::Dialog { pages, .. } => pages
+                    .iter()
+                    .find_map(|page| page.content.interaction_target(id)),
                 _ => None,
             })
+    }
+
+    pub fn contains_interaction(&self, id: &InteractionId) -> bool {
+        self.nodes.iter().any(|node| match node {
+            SemanticNode::Navigation { id: candidate, .. }
+            | SemanticNode::SafeReturn { id: candidate, .. } => candidate == id,
+            SemanticNode::Region { content, .. }
+            | SemanticNode::Container { content, .. }
+            | SemanticNode::Replace { content, .. } => content.contains_interaction(id),
+            SemanticNode::Component { fallback, .. } => fallback.contains_interaction(id),
+            SemanticNode::Dialog { pages, .. } => pages
+                .iter()
+                .any(|page| page.content.contains_interaction(id)),
+            _ => false,
+        })
     }
 
     /// 从当前可见输出查找输入契约；Region、Component fallback 与替换内容均递归验证。
@@ -589,6 +634,9 @@ impl SemanticOutput {
                 SemanticNode::Container { content, .. } => content.input_binding(id),
                 SemanticNode::Replace { content, .. } => content.input_binding(id),
                 SemanticNode::Component { fallback, .. } => fallback.input_binding(id),
+                SemanticNode::Dialog { pages, .. } => {
+                    pages.iter().find_map(|page| page.content.input_binding(id))
+                }
                 _ => None,
             })
     }

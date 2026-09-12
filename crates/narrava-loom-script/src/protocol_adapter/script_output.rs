@@ -62,7 +62,10 @@ fn push_node(
         "hard-break" => SemanticNode::HardBreak,
         "image" => {
             let resource = string_property(object, "resource")?;
-            ResourcePath::parse(&resource).map_err(|error| invalid(error.to_string()))?;
+            let resource: String = ResourcePath::in_directory("img", &resource)
+                .map_err(|_| invalid("Image 资源路径无效"))?
+                .as_str()
+                .to_owned();
             SemanticNode::Image {
                 resource,
                 alt: visible_text(optional_string(object, "alt")?.unwrap_or_default())?,

@@ -2,6 +2,23 @@
 
 // 原生宏的形态、语法与说明共用一份目录；依据 docs/reference/api-and-syntax.md。
 const MACRO_APIS = Object.freeze({
+  dialog: {
+    kind: "container",
+    signature: '<<dialog "默认页标题">><<page "页标题">>正文<</dialog>>',
+    description:
+      "打开含一个或多个 page 的弹窗；参数选择默认页标题，标题必须存在且唯一；Host 自带关闭按钮",
+  },
+  page: {
+    kind: "clause",
+    signature: '<<page "页标题">>',
+    description: "dialog 的直接子句，正文延续到下一个 page 或 /dialog；不需要 /page",
+  },
+  audio: {
+    kind: "inline",
+    signature: '<<audio "forest.ogg" "ambience" "forest">>',
+    description:
+      "声明当前 Passage 所需的循环背景音；位置参数为资源、可选 channel（默认 bgm）、可选 tag；相邻页面同音频连续播放",
+  },
   if: {
     kind: "container",
     signature: "<<if condition>>...<</if>>",
@@ -99,7 +116,7 @@ const MACRO_APIS = Object.freeze({
   },
   link: {
     kind: "container",
-    signature: "<<link [[文本|Passage]]>>...<</link>>",
+    signature: '<<link "文本">>...<</link>> 或 <<link [[文本|Passage]]>>...<</link>>',
     description: "建立玩家可点击的导航动作；正文激活后执行",
   },
   button: {

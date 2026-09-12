@@ -85,6 +85,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     let session: RuntimeSession<'_, '_> =
         RuntimeSession::with_data(&hir, &bytecode, script, state, services);
     let mut runtime = session;
+    let mut audio = crate::audio::AudioOutput::new(resources.clone());
     let mut renderer: TuiRenderer = TuiRenderer::default();
     let mut language_index: usize = languages
         .iter()
@@ -94,6 +95,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     // 启动起始 Passage 并渲染第一帧。
     let mut update = ready_update(execute_blocking(
         &mut runtime,
+        &mut audio,
         Path::new(game_path),
         RuntimeCommand::Start,
     )?)?;
@@ -103,11 +105,11 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         return crate::screen::run_screen(frame, |operation| {
             apply_operation(
                 &mut runtime,
+                &mut audio,
                 &mut renderer,
                 &mut update,
                 Path::new(game_path),
-                &languages,
-                &mut language_index,
+                (&languages, &mut language_index),
                 operation,
             )
         })
@@ -139,11 +141,11 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             operation => {
                 let _frame = apply_operation(
                     &mut runtime,
+                    &mut audio,
                     &mut renderer,
                     &mut update,
                     Path::new(game_path),
-                    &languages,
-                    &mut language_index,
+                    (&languages, &mut language_index),
                     operation,
                 )?;
             }
@@ -154,13 +156,14 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
 
 fn apply_operation(
     runtime: &mut RuntimeSession<'_, '_>,
+    audio: &mut crate::audio::AudioOutput,
     renderer: &mut TuiRenderer,
     update: &mut HostUpdateDto,
     game_path: &Path,
-    languages: &[String],
-    language_index: &mut usize,
+    language: (&[String], &mut usize),
     operation: crate::TuiOperation,
 ) -> Result<Option<TuiFrame>, HostErrorDto> {
+    let (languages, language_index) = language;
     let previous_language_index: usize = *language_index;
     let command: Option<RuntimeCommand> = match operation {
         crate::TuiOperation::Back => Some(RuntimeCommand::Back),
@@ -200,6 +203,7 @@ fn apply_operation(
     let previous_passage: String = update.current.clone();
     let result: RuntimeUpdate = match execute_blocking(
         runtime,
+        audio,
         game_path,
         command.expect("已处理所有无 Runtime 命令"),
     ) {
@@ -217,14 +221,16 @@ fn apply_operation(
                     operation: narrava_loom_protocol::SaveOperation::Export,
                     target: String::from("autosave"),
                 };
-                if let Err(error) = execute_blocking(runtime, game_path, autosave) {
+                if let Err(error) = execute_blocking(runtime, audio, game_path, autosave) {
                     eprintln!("! {}：{}", error.code, error.message);
                 }
             }
             Ok(Some(renderer.render_update(update)))
         }
         RuntimeUpdate::Applied => Ok(None),
-        RuntimeUpdate::Pending { .. } => unreachable!("execute_blocking consumes pending updates"),
+        RuntimeUpdate::Pending { .. } | RuntimeUpdate::Audio { .. } => {
+            unreachable!("execute_blocking consumes pending and audio updates")
+        }
     }
 }
 
@@ -235,18 +241,25 @@ fn ready_update(update: RuntimeUpdate) -> Result<HostUpdateDto, HostErrorDto> {
             "tui_host.update_expected",
             "Runtime 命令没有产生可展示更新",
         )),
-        RuntimeUpdate::Pending { .. } => unreachable!("execute_blocking consumes pending updates"),
+        RuntimeUpdate::Pending { .. } | RuntimeUpdate::Audio { .. } => {
+            unreachable!("execute_blocking consumes pending and audio updates")
+        }
     }
 }
 
 /// TUI 的唯一平台异步职责：等待 Runtime 公开的 delay，再用同一 ID 恢复。
 fn execute_blocking(
     runtime: &mut RuntimeSession<'_, '_>,
+    audio: &mut crate::audio::AudioOutput,
     game_path: &Path,
     mut command: RuntimeCommand,
 ) -> Result<RuntimeUpdate, HostErrorDto> {
     loop {
-        match runtime.execute(command)? {
+        let (update, errors) = audio.consume(runtime.execute(command)?);
+        for error in errors {
+            eprintln!("! {}：{}", error.code, error.message);
+        }
+        match update {
             RuntimeUpdate::Pending {
                 operation:
                     PendingOperation::Delay {

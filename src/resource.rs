@@ -32,6 +32,19 @@ impl ResourcePath {
         Ok(Self(path.to_owned()))
     }
 
+    /// 作者媒体路径相对于分类目录；已有同名根前缀不会重复添加。
+    pub fn in_directory(directory: &str, path: &str) -> Result<Self, ResourceError> {
+        Self::parse(path)?;
+        if path.contains(':') || path.contains('\0') {
+            return Err(ResourceError::InvalidPath(path.to_owned()));
+        }
+        let prefix: String = format!("{directory}/");
+        Self::parse(&format!(
+            "{prefix}{}",
+            path.strip_prefix(&prefix).unwrap_or(path)
+        ))
+    }
+
     /// 原始字符串形式的逻辑路径。
     pub fn as_str(&self) -> &str {
         &self.0

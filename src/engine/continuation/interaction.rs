@@ -672,7 +672,10 @@ impl Engine {
             ..
         } = halted;
         let identity: RuntimeExecutionIdentity = runtime.identity;
-        let target: String = interaction.target().to_owned();
+        let target: String = interaction
+            .target()
+            .expect("navigation interaction requires target")
+            .to_owned();
         Engine::begin_mir_chain_from_checkpoint(
             state,
             story,

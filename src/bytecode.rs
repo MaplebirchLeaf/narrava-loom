@@ -27,7 +27,7 @@ use crate::{
 /// Bytecode JSON 文件头的固定魔数。
 pub const BYTECODE_MAGIC: [u8; 4] = *b"NRVA";
 /// 当前 Bytecode 编码版本；解码时与文件头比对，不匹配即拒绝。
-pub const BYTECODE_VERSION: u16 = 1;
+pub const BYTECODE_VERSION: u16 = 2;
 
 /// Bytecode 解码或布局校验失败的原因。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,6 +72,9 @@ pub enum Opcode {
     JumpIfNotStrictEqual,
     Jump,
     Halt,
+    BeginDialog,
+    BeginDialogPage,
+    EndDialog,
 }
 
 /// Bytecode 文件头：固定魔数与编码版本，解码时据此拒绝无效输入。
@@ -117,7 +120,12 @@ impl BytecodeConstants {
             MirInstruction::PrintExpression { expression, .. }
             | MirInstruction::EvaluateDiscard(expression)
             | MirInstruction::Unset(expression)
-            | MirInstruction::RequestGoto(expression) => {
+            | MirInstruction::RequestGoto(expression)
+            | MirInstruction::BeginDialog {
+                initial: expression,
+                ..
+            }
+            | MirInstruction::BeginDialogPage(expression) => {
                 push_value(&mut self.expressions, OwnedExpression::from(*expression))
             }
             MirInstruction::RequestInclude { target, .. }
@@ -481,6 +489,9 @@ fn encode(source: &MirInstruction<'_, '_>) -> BytecodeInstruction {
         MirInstruction::JumpIfNotStrictEqual { .. } => Opcode::JumpIfNotStrictEqual,
         MirInstruction::Jump { .. } => Opcode::Jump,
         MirInstruction::Halt => Opcode::Halt,
+        MirInstruction::BeginDialog { .. } => Opcode::BeginDialog,
+        MirInstruction::BeginDialogPage(_) => Opcode::BeginDialogPage,
+        MirInstruction::EndDialog => Opcode::EndDialog,
     };
     BytecodeInstruction {
         opcode,

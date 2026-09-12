@@ -142,8 +142,8 @@ Macro.add("statusCard", {
       styles: ["strong"],
       color: 40,
     }),
-    Surface.text("第一页", { key: "page-one", heading: 2 }),
-    Surface.image("images/hero.png", {
+    Surface.text("角色状态", { key: "status-title", heading: 2 }),
+    Surface.image("hero.png", {
       key: "hero",
       alt: "站在森林入口的主角",
     }),
@@ -154,7 +154,7 @@ Macro.add("statusCard", {
 可组合的文本结构为 `emphasis`、`strong`、`code`、`quote`、`marked`、`small`、
 `inserted`、`deleted` 共 8 个。`color` 是 0..=63 的 Narrava 标准调色板索引，Host 负责映射。
 `Surface.text()` 与 Twee 的 `<<print>>` 还可携带 `delay`（毫秒，0..=86400000）与
-结构性 `heading`（1 或 2，用于弹窗页签等页面划分，不属于字形样式）。delay 让渲染器在此之前
+结构性 `heading`（1 或 2，用于正文标题，不划分弹窗页面）。delay 让渲染器在此之前
 保持文字不可见；具体动画由 Host 决定。
 
 `Surface.region()` 可写入 `header`、`main`、`footer`、`bar`、`dialog`。Region 的 children

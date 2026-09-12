@@ -147,7 +147,7 @@ fn engine_macro_interaction_cancel_restores_domains_and_returns_owners() {
     assert_eq!(
         interactions
             .get(&interaction_id)
-            .map(MacroInteraction::target),
+            .and_then(MacroInteraction::target),
         Some("Other")
     );
     assert_eq!(state.variables_get("leaked"), None);

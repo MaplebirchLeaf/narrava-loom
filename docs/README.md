@@ -27,7 +27,7 @@
 ## 规划与文档规则
 
 [项目状态](development/status.md)是当前完成度与优先级的唯一入口；
-[弹窗提案](development/dialog-design.md)记录待确认方案，不混入可用 API。
+[弹窗与页面](author/dialog.md)说明已实现语法，[弹窗执行边界](development/dialog-design.md)记录内部设计。
 
 | 目录 | 读者与内容 | 不应放入 |
 | --- | --- | --- |
@@ -38,3 +38,5 @@
 
 同一主题可有作者手册与内部设计两篇，但各自只维护对应职责，并互相链接。
 变更历史集中在根目录 CHANGELOG；页面不再追加逐次实施日志。
+
+音频作者入口：[Audio 播放与停止](author/audio.md)；实现边界：[Audio effect](development/audio-design.md)。

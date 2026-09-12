@@ -51,6 +51,12 @@ pub enum MirInstruction<'hir, 'source> {
     },
     /// 请求结束当前 Passage 并由 Engine 确认导航。
     RequestGoto(&'hir Expression<'source>),
+    BeginDialog {
+        initial: &'hir Expression<'source>,
+        output: MirOutputMode,
+    },
+    BeginDialogPage(&'hir Expression<'source>),
+    EndDialog,
     /// 运行时再通过 Macro Definitions 解析的动态调用。
     InvokeMacro {
         call: &'hir HirMacro<'source>,

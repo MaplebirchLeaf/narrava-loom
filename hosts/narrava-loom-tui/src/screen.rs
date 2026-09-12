@@ -27,10 +27,26 @@ pub(crate) struct ScreenState {
     editor: Option<String>,
     status: String,
     dialog_dismissed: bool,
+    dialog_key: Option<String>,
+    dialog_page: usize,
+    dialog_scroll: u16,
 }
 
 impl ScreenState {
     fn normalize(&mut self, frame: &TuiFrame) {
+        if self.dialog_key != frame.dialog_key {
+            self.dialog_key.clone_from(&frame.dialog_key);
+            self.dialog_dismissed = false;
+            self.dialog_scroll = 0;
+            self.dialog_page = frame
+                .dialog_pages
+                .iter()
+                .position(|page| page.title == frame.dialog_initial)
+                .unwrap_or(0);
+        }
+        self.dialog_page = self
+            .dialog_page
+            .min(frame.dialog_pages.len().saturating_sub(1));
         let indices: Vec<usize> = self.navigation_indices(frame);
         self.focus = match (self.focus, indices.is_empty()) {
             (_, true) => None,
@@ -45,7 +61,15 @@ impl ScreenState {
             .iter()
             .enumerate()
             .filter_map(|(index, interaction)| {
-                (!self.dialog_open(frame) || interaction.group.starts_with("弹窗")).then_some(index)
+                (if self.dialog_open(frame) {
+                    frame
+                        .dialog_pages
+                        .get(self.dialog_page)
+                        .is_some_and(|page| interaction.group == page.group)
+                } else {
+                    !interaction.group.starts_with("弹窗")
+                })
+                .then_some(index)
             })
             .collect()
     }
@@ -93,6 +117,21 @@ impl ScreenState {
 
     pub(crate) fn move_horizontal(&mut self, frame: &TuiFrame, delta: isize) {
         self.normalize(frame);
+        if self.dialog_open(frame) {
+            let indices: Vec<usize> = self.navigation_indices(frame);
+            let row: usize = self
+                .focus
+                .and_then(|focus| indices.iter().position(|index| *index == focus))
+                .unwrap_or(0);
+            self.dialog_scroll = 0;
+            self.dialog_page = (self.dialog_page as isize + delta)
+                .rem_euclid(frame.dialog_pages.len() as isize)
+                as usize;
+            let indices: Vec<usize> = self.navigation_indices(frame);
+            self.focus = indices.get(row).or_else(|| indices.last()).copied();
+            self.normalize(frame);
+            return;
+        }
         let Some(current) = self.focus else {
             return;
         };
@@ -197,11 +236,19 @@ where
                     None
                 }
                 KeyCode::PageUp => {
-                    state.main_scroll = state.main_scroll.saturating_sub(5);
+                    if state.dialog_open(&frame) {
+                        state.dialog_scroll = state.dialog_scroll.saturating_sub(5);
+                    } else {
+                        state.main_scroll = state.main_scroll.saturating_sub(5);
+                    }
                     None
                 }
                 KeyCode::PageDown => {
-                    state.main_scroll = state.main_scroll.saturating_add(5);
+                    if state.dialog_open(&frame) {
+                        state.dialog_scroll = state.dialog_scroll.saturating_add(5);
+                    } else {
+                        state.main_scroll = state.main_scroll.saturating_add(5);
+                    }
                     None
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => focused_operation(&frame, &mut state),
@@ -240,7 +287,6 @@ where
                 frame = next;
                 state.main_scroll = 0;
                 state.status.clear();
-                state.dialog_dismissed = false;
                 state.focus = None;
                 state.normalize(&frame);
             }
@@ -363,7 +409,12 @@ pub(crate) fn draw(surface: &mut Frame<'_>, frame: &TuiFrame, state: &ScreenStat
         let popup: Rect = centered_rect(76, 60, area);
         surface.render_widget(Clear, popup);
         let block: Block<'_> = Block::default()
-            .title(format!(" {} ", page.title))
+            .title(format!(
+                " {} ({}/{}) ←→切页 Esc关闭 ",
+                page.title,
+                state.dialog_page + 1,
+                frame.dialog_pages.len()
+            ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(ACCENT));
         let inner: Rect = block.inner(popup);
@@ -377,7 +428,9 @@ pub(crate) fn draw(surface: &mut Frame<'_>, frame: &TuiFrame, state: &ScreenStat
             .split(inner)
             .to_vec();
         surface.render_widget(
-            Paragraph::new(styled_text(&page.lines)).wrap(Wrap { trim: false }),
+            Paragraph::new(styled_text(&page.lines))
+                .wrap(Wrap { trim: false })
+                .scroll((state.dialog_scroll, 0)),
             page_layout[0],
         );
         draw_actions(surface, page_layout[1], frame, state);
@@ -442,14 +495,9 @@ fn active_dialog_page<'frame>(
     frame: &'frame TuiFrame,
     state: &ScreenState,
 ) -> Option<&'frame TuiDialogPage> {
-    let group: Option<&str> = state
-        .focus
-        .and_then(|index: usize| frame.interactions.get(index))
-        .map(|interaction: &TuiInteraction| interaction.group.as_str());
     frame
         .dialog_pages
-        .iter()
-        .find(|page: &&TuiDialogPage| Some(page.group.as_str()) == group)
+        .get(state.dialog_page)
         .or_else(|| frame.dialog_pages.first())
 }
 

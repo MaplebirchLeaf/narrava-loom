@@ -1,5 +1,6 @@
 //! Host-neutral Narrava 生命周期编排。
 
+mod actions;
 mod state_io;
 
 pub use state_io::RuntimeData;
@@ -23,7 +24,7 @@ use narrava_loom_core::{
     state::{State, StateCheckpoint, StateSnapshot},
     story::{
         Story,
-        special::{BAR_PASSAGE, BAR_STOWED_PASSAGE},
+        special::{BAR_PASSAGE, BAR_STOWED_PASSAGE, FOOTER_PASSAGE, HEADER_PASSAGE},
     },
 };
 use narrava_loom_protocol::{
@@ -48,6 +49,7 @@ fn limits() -> EngineExecutionLimits {
 }
 
 enum Pending<'hir, 'source> {
+    Action(Box<actions::PendingAction>),
     Main {
         operation: u64,
         execution: narrava_loom_core::host::HostExecutionToken,
@@ -168,12 +170,49 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
 
     /// 执行一条平台无关命令；Pending 必须以返回的 operation ID 恢复或取消。
     pub fn execute(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        // 错误 operation ID 不能清除仍在等待恢复的事务音频。
         match &command {
             RuntimeCommand::Resume { operation, .. } | RuntimeCommand::Cancel { operation } => {
-                self.check_operation(*operation)?;
+                self.check_operation(*operation)?
             }
             _ => self.ensure_idle()?,
         }
+        self.script
+            .audio_control("beginAudio", serde_json::json!([]))
+            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+        let cancel: bool = matches!(command, RuntimeCommand::Cancel { .. });
+        let result = self.execute_inner(command);
+        if result.is_err() || cancel {
+            let _discarded = self
+                .script
+                .audio_control("rollbackAudio", serde_json::json!([]));
+            return result;
+        }
+        let update = result?;
+        if matches!(update, RuntimeUpdate::Pending { .. }) {
+            return Ok(update);
+        }
+        let effects = self
+            .script
+            .take_audio()
+            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+        if effects.is_empty() {
+            return Ok(update);
+        }
+        match update {
+            RuntimeUpdate::Ready { update } => Ok(RuntimeUpdate::Audio {
+                effects,
+                update: Some(update),
+            }),
+            RuntimeUpdate::Applied => Ok(RuntimeUpdate::Audio {
+                effects,
+                update: None,
+            }),
+            _ => unreachable!("音频只附着最终完成结果"),
+        }
+    }
+
+    fn execute_inner(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
         let cancels_execution = matches!(&command, RuntimeCommand::Cancel { .. });
         let executes_story: bool = matches!(
             &command,
@@ -358,6 +397,13 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         })?;
         let id: InteractionId = InteractionId::parse(interaction)
             .map_err(|error| HostErrorDto::new("runtime_session.interaction", error.to_string()))?;
+        if self
+            .interactions
+            .get(&id)
+            .is_some_and(|action| action.target().is_none())
+        {
+            return self.activate_action(&id);
+        }
         let params: Value = Value::Null;
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
         let language: Option<Rc<I18nRuntimeLanguage>> = self.language.clone();
@@ -736,6 +782,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 let result = self.continue_resumed(resumed);
                 self.drive_main(result)
             }
+            Pending::Action(waiting) => self.resume_action(*waiting),
             Pending::Special(waiting) => self.resume_special(*waiting),
             Pending::Host(waiting) => self.resume_host(*waiting, _result),
         }
@@ -753,6 +800,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 )
                 .map_err(|error| diagnostic(error.diagnostic.clone()))?;
             }
+            Pending::Action(_) => {}
             Pending::Special(mut waiting) => {
                 HostApi::cancel_pending(
                     &mut waiting.continuations,
@@ -829,7 +877,9 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         mut update: HostUpdate,
         mut next_special: usize,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
-        let specials: [(&str, RegionId); 2] = [
+        let specials: [(&str, RegionId); 4] = [
+            (HEADER_PASSAGE, RegionId::header()),
+            (FOOTER_PASSAGE, RegionId::footer()),
             (BAR_PASSAGE, RegionId::bar()),
             (BAR_STOWED_PASSAGE, RegionId::bar_stowed()),
         ];
@@ -838,6 +888,9 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             if !self.story.has(name) {
                 continue;
             }
+            self.script
+                .audio_control("audioScope", serde_json::json!([name]))
+                .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
             let mut view_state: State = self.state.fork_view();
             let mut view_story: Story<'hir, 'source> = self.story.fork_view();
             let mut continuations = HostPendingExecutions::new();
@@ -896,6 +949,9 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 }
             }
         }
+        self.script
+            .audio_control("audioScope", serde_json::json!(["passage", false]))
+            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
         let dto = encode_host_update(&update, self.story.can_back(), self.story.can_forward());
         self.presented = Some(Rc::new(update));
         Ok(RuntimeUpdate::Ready { update: dto })
@@ -979,6 +1035,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         })?;
         let expected: u64 = match &waiting {
             Pending::Main { operation, .. } => *operation,
+            Pending::Action(waiting) => waiting.operation(),
             Pending::Special(waiting) => waiting.operation,
             Pending::Host(waiting) => waiting.operation,
         };
