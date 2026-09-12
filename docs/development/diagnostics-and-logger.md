@@ -30,3 +30,10 @@ Twee、Expression、Macro 和 Story 的解析或运行错误转换为稳定 Diag
 - `clear` 清空历史和待处理记录，保留订阅且不重置序号。
 
 Core Logger 不保存 Rust 或 JavaScript 回调。Host 通过拥有型查询或订阅结果展示记录。
+
+## Script 与宿主通路
+
+`EcmaBinding` 持有一个 Core Logger，脚本 Logger、Runtime 失败和平台提示写入同一实例。
+历史和订阅各自有界（默认 1024 条），宿主快照不消费作者订阅。
+`HostErrorDto` 携带可选 severity/location；原始字节范围与生成脚本位置明确区分。
+脚本控制台与只读检查入口与作者用法见[随机数与调试](../author/random-and-debugging.md)。

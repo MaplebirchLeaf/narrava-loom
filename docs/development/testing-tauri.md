@@ -58,18 +58,22 @@ cargo run --locked -p narrava-loom-tauri -- examples
 第一次编译可能需要较长时间。Linux 若缺少 WebKit/GTK，请先安装 Tauri 2 的系统依赖。窗口启动
 后按以下顺序验收：
 
-1. Start 能进入大厅，前进、后退和侧栏收起不会报错；
-2. “语义渲染”显示 Header、Bar、Footer、图片、Meter 和 Component fallback；
-3. Dialog 默认定位第一页，切换页签后活动页签底部没有多余分隔线；
-4. Checkbox 可切换，同组 Radio 互斥，Textbox 修改后能写回 State；
-5. `replace` 能更新固定区域，页面中不出现原始控制节点；“查看内容替换”还应只显示
-   `status-panel` 的替换后内容；
-6. `:: Bar` 与 `:: BarStowed` 分别提供展开和收起内容，Host 不注入管理面板；
-7. 作者能力页能导出／导入 Save，导出 I18n 模板，并加载 `languages/en/`；
-8. Resource 图片、默认主题和窄屏布局正常。
+1. Start 保持开始菜单；“新的一天”进入开局表单，开始后进入卧室；
+2. 表单的 Textbox、Checkbox 和 Radio 能写回 State，行动、返回和前进正常；
+3. 地图显示统一坐标，进入医院等室内地点后，人物页展示正确的地点信息；
+4. 作者手册展示 Header、Bar、Footer、图片、Meter 和 Component fallback；
+5. Dialog 页签、窄屏布局和侧栏收起正常；模态框打开时 F10 控制台仍能输入；
+6. `replace` 更新稳定区域，正文不出现原始控制节点；
+7. 存档与设置可导出／导入 Save、切换局部英文包；森林音频连续播放并在离开时停止；
+8. Reaction 的行动事件、体力阈值和夜间导航按示例说明触发。
 
 示例启用了开发者模式。按 F12 可开关 WebView DevTools，检查 Renderer 的 DOM、控制台与网络面板；
-它只是 Renderer 调试入口，不属于游戏脚本 API。
+它只是 Renderer 调试入口，不属于游戏脚本 API。F10 打开单行脚本控制台，验证 `V`、
+`Location.current()`、`Random.current()`、赋值后的 Reaction 与输入同步、错误回滚、命令历史
+和清屏。还应验证 `State`、`Save`、`Engine` 的属性树，`Save.ex` 的 Tab 补全与参数帮助，
+`Save.export/import`、`Engine.goto/back` 和 `await Host.delay(10000)` 的停止回滚。
+关闭 developer 后前端入口隐藏，Rust 查询和执行同样拒绝。
+输入触发 Reaction 替换或导航后，控件值与显示内容应同步；读档和语言切换也必须返回新画面。
 
 ## 4. 发行目录回归
 

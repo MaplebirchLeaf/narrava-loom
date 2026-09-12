@@ -9,7 +9,8 @@
 - [Macro](author/macro.md)：原生宏、参数、点击正文与内容复用。
 - [弹窗与页面](author/dialog.md)：打开、切页与关闭弹窗。
 - [Audio](author/audio.md)：背景音声明、tag 匹配与连续播放。
-- [World](author/world.md)：地点注册、二维范围、Passage Tag 与位置移动。
+- [Location](author/location.md)：地点注册、二维范围、Passage Tag 与位置移动。
+- [随机数与只读调试](author/random-and-debugging.md)：可回放随机序列与 State / Location / 日志检查。
 - [Save](author/save.md)：保存范围、存读档和完成结果。
 - [Event](author/event.md)：作者事件、拉取订阅、Engine Passage 事件与 Reaction 事件链。
 - [Reaction](author/reaction.md)：三种触发源、结构化效果、事务与 Save 行为。

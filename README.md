@@ -30,7 +30,7 @@ cargo run --locked -p narrava-loom-tui -- examples
 
 - [游戏作者手册](docs/author/guide.md)：从写故事到打包。
 - [API 与语法速查](docs/reference/api-and-syntax.md)：当前作者契约。
-- [综合示例](examples/README.md)：可运行场景与预期行为。
+- [小镇示例](examples/README.md)：可游玩的日常循环与完整能力手册。
 - [Twee 编辑器扩展](editors/vscode-narrava-loom/README.md)：高亮、导航与诊断。
 - [总体架构](docs/architecture/overview.md)：Core、Protocol、Script 与 Host 的边界。
 - [仓库布局](docs/development/repository-layout.md)与[源码规范](docs/development/code-style.md)：源码、测试和文档归属。

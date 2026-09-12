@@ -14,7 +14,7 @@ Narrava Loom/
 │   ├── narrava-loom-tauri/         官方 Tauri Host；桌面可运行，移动共享层待平台工程
 │   └── narrava-loom-tui/           Host-neutral 终端 Renderer 与输入前端
 ├── crates/
-│   ├── narrava-loom-world/         纯领域地点、多边形与位置规则
+│   ├── narrava-loom-location/         纯领域地点、多边形与位置规则
 │   ├── narrava-loom-protocol/      零 Core 依赖的拥有型 Runtime/Host DTO
 │   └── narrava-loom-script/        ECMAScript 执行、RuntimeSession 与 Core/Protocol 适配
 ├── bindings/typescript/            游戏脚本 TypeScript 契约
@@ -30,7 +30,7 @@ Narrava Loom/
 ## 存放规则
 
 - Core 公共语义、编译器和运行时放在 `src/`；不得导入 Tauri、DOM、CSS 或具体 Renderer 类型。
-- World 算法放在独立 crate；Core 保留 State 所有权、Passage 绑定、历史与 Save 对接。
+- Location 算法放在独立 crate；Core 保留 State 所有权、Passage 绑定、历史与 Save 对接。
 - 平台实现放在 `hosts/<host>/`，Host 以 `narrava-loom-protocol` 的拥有型命令与更新驱动 Runtime；
   Core 与 Protocol 之间的转换位于 `narrava-loom-script/src/protocol_adapter/`。
 - 游戏作者可直接复制或修改的内容放在 `examples/`；示例不得要求作者编写 Rust。
@@ -46,7 +46,7 @@ Narrava Loom/
 
 ```mermaid
 flowchart LR
-  World[narrava-loom-world] --> Core[narrava-loom-core]
+  Location[narrava-loom-location] --> Core[narrava-loom-core]
   Core --> Script[narrava-loom-script]
   Protocol[narrava-loom-protocol] --> Script
   Script --> Host
@@ -54,7 +54,7 @@ flowchart LR
 ```
 
 Core 不得依赖 Host 或具体 Renderer。Host 通过 Script Runtime 和 Protocol 驱动 Core。
-World 只依赖序列化库，不依赖 Core、脚本或平台；三个宿主目标见[总体架构](../architecture/overview.md#宿主目标)。
+Location 只依赖序列化库，不依赖 Core、脚本或平台；三个宿主目标见[总体架构](../architecture/overview.md#宿主目标)。
 
 ## 构建输出
 

@@ -62,11 +62,11 @@ cargo run --locked -p narrava-loom-tui -- examples
 ```
 
 TUI Host 会加载 `examples/`、执行脚本并渲染完整屏幕。方向键移动焦点，Enter 激活，`s` 切换侧栏，
-`b`／`f` 回溯与前进，F2／F3 快速存读档，F4 切换语言，`q` 退出。带 `delay` 的文本保留在
+`b`／`f` 回溯与前进，F2／F3 快速存读档，F4 切换语言，F10 只读检查，`q` 退出。带 `delay` 的文本保留在
 `frame.delayed`。可用非 TTY 文本回退做一次输入回归：
 
 ```bash
-printf 'help\nquit\n' | cargo run --locked -p narrava-loom-tui -- examples
+printf 'help\n:inspect\nquit\n' | cargo run --locked -p narrava-loom-tui -- examples
 ```
 
 ## 修改 Renderer 时必须覆盖什么
@@ -82,6 +82,8 @@ printf 'help\nquit\n' | cargo run --locked -p narrava-loom-tui -- examples
 7. 可交互节点保留 Core 提供的不透明 Interaction ID，并在操作列表中归入实际可见区域或 Dialog 页；
 8. 输入提交必须使用 Core 提供的 Interaction ID 和允许值，不能依赖显示标签或 HTML 属性；
 9. TUI crate 没有反向引入平台类型到 Core。
+
+F10 检查覆盖层支持滚动，Esc/F10 关闭后保留原帧、弹窗和焦点；检查期间输入不能穿透到故事。
 
 新增行为应写成 `TuiFrame`、`TuiCommand`、`TuiOperation` 或焦点状态的精确断言。不要用 ANSI
 颜色快照代替语义断言；终端尺寸和全屏布局仍是 Host 表现，不进入 Protocol。

@@ -37,7 +37,7 @@ resources → Resource API → Host
 
 Bytecode 是 VM 的唯一叙事指令输入。Script Bundle 由 `narrava-loom-script` 通过 Boa 执行，
 Oxc 只用于移除 TypeScript 类型语法。脚本通过受控 Adapter 访问 State、Story、Event、
-Reaction、World、Macro、Resource、I18n 和 Save。
+Reaction、Location、Macro、Resource、I18n 和 Save。
 
 Twee 的 Parser、IR 与 VM 边界见 [Twee 编译器](twee.md)；Expression 与 Macro 分别见
 [Expression](expression.md) 和 [Macro](macro-runtime.md)。
@@ -71,7 +71,7 @@ Twee 的 Parser、IR 与 VM 边界见 [Twee 编译器](twee.md)；Expression 与
 | Crate                   | 职责                                                            |
 | ----------------------- | --------------------------------------------------------------- |
 | `narrava-loom-core`     | Source、编译、Bytecode、VM、Engine 与领域状态                   |
-| `narrava-loom-world`    | 纯领域地点、二维多边形、包含查询与位置校验；不依赖 Core 或 Host |
+| `narrava-loom-location`    | 纯领域地点、二维多边形、包含查询与位置校验；不依赖 Core 或 Host |
 | `narrava-loom-protocol` | 零 Core 依赖的 Runtime/Host 命令、更新与 Surface DTO            |
 | `narrava-loom-script`   | ECMAScript、RuntimeSession 与 Core/Protocol 适配                |
 | `narrava-loom-tauri`    | 桌面 Host、Worker、资源 IO 与 WebView Renderer                  |
@@ -100,12 +100,12 @@ Surface 只表达文本、语义样式、区域、交互、稳定 Key 和替换�
 
 ## 领域所有权
 
-- State 持有变量、`Rc<World>` 地点定义与 `WorldState` 位置；Macro 局部值由调用帧管理。
+- State 持有变量、`Rc<Location>` 地点定义与 `LocationState` 位置；Macro 局部值由调用帧管理。
 - Story 持有 Passage 索引、历史和当前光标。
 - Save 只序列化稳定领域状态，不序列化 Host handle、continuation 或脚本函数。
 - Logger 保存结构化运行记录；Diagnostic 表达可定位的失败，两者不代替彼此。
 - I18n 选择属于 Runtime 执行上下文，不写入 State。
 
-World 的几何与位置规则由独立 crate 提供，Core 将 Passage Tag 绑定到 State，Script 提供
-受控适配。作者行为见 [World](../author/world.md)，快照与恢复边界见
+Location 的几何与位置规则由独立 crate 提供，Core 将 Passage Tag 绑定到 State，Script 提供
+受控适配。作者行为见 [Location](../author/location.md)，快照与恢复边界见
 [Runtime Session](runtime-session.md) 和 [Save](save-format.md)。

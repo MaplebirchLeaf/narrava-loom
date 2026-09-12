@@ -9,7 +9,8 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 | 保存                                     | 不保存                                   |
 | ---------------------------------------- | ---------------------------------------- |
 | `State.variables`（`$name`）             | `State.global`                           |
-| 当前地点 ID、坐标与环境                  | World 地点定义、多边形、父子索引         |
+| 当前地点 ID、坐标与环境                  | Location 地点定义、多边形、父子索引      |
+| 随机种子、当前位置及逐历史项的序列       | 地图生成算法、系统时钟                   |
 | Story 完整导航时间线                     | `State.setup`                            |
 | Story 当前游标                           | `State.temporary`（`_name`）             |
 | 各历史项进入前的 `$variables` 与世界位置 | `State.global`／`State.setup` 的历史版本 |
@@ -23,13 +24,13 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 ## 二进制文档结构
 
 `.nsave` 是正式二进制协议，不是 Rust 内存布局、JSON 或 ZIP。文件以 `NRSAVE\0` magic 和单字节
-schema version 开始，当前写入版本为 `3`；payload 使用 postcard 编码稳定字段、Value 图节点 ID
-和长度前缀数据。v3 为当前状态与每个历史项增加世界位置；读取 v2 时将两处位置补为未定位，
+schema version 开始，当前写入版本为 `4`；payload 使用 postcard 编码稳定字段、Value 图节点 ID
+和长度前缀数据。v4 为当前状态与每个历史项增加完整随机种子和序列位置；读取 v2/v3 时补为种子 0 的初始序列。v3 已增加地点位置；读取 v2 时将两处位置补为未定位，
 不根据当前 Passage 猜测旧位置。未知 magic/version 在解析 payload 前拒绝。
 
 Core 通过 `SaveDocument::to_bytes()`／`from_bytes()` 编解码，Host 只读写 `Vec<u8>`。
 
-游戏身份仍要求精确 `id + version`；v2 格式兼容不放宽游戏版本匹配。通用游戏存档迁移尚未实现。
+游戏身份仍要求精确 `id + version`；v2/v3 格式兼容不放宽游戏版本匹配。通用游戏存档迁移尚未实现。
 
 ## Value 图
 
@@ -63,11 +64,11 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 捕获直接借用活动 `$variables` 和已经隔离的历史快照进行 ValueGraph 编码。Story history 在运行期
 保存 Passage 引用及进入前的持久状态，只有可移植存档边界写入 PassageName；因此 Save 大小取决于
 实际 history 与其持久状态，而不是 Story 总 Passage 数。当前或任一历史项的未知地点、越界坐标
-等错误都以 `save.invalid_world` 原子拒绝，不留下部分恢复的状态。
+等错误都以 `save.invalid_location` 原子拒绝，不留下部分恢复的状态。
 
 Core `restore()` 只恢复稳定领域状态；官方 RuntimeSession 随后通过 `RefreshCurrent` 重绘当前
 Passage。刷新所有权见 [Runtime Session](runtime-session.md#pending-与-host)，
-作者可见的位置行为见 [World](../author/world.md#刷新历史与存档)。
+作者可见的位置行为见 [Location](../author/location.md#刷新历史与存档)。
 
 ## 请求与平台 IO
 

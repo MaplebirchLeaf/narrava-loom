@@ -53,6 +53,9 @@ Macro 名区分大小写。结构 Macro 的子句不能脱离所属容器单独�
 > 状态绑定输入当前支持 `$` 与 `_` receiver。`@` 属于已经结束的 Macro 调用帧；在持久 Widget
 > 实例状态完成前，点击后的 Host 输入不会伪造对 `@` 的写回。
 
+输入 receiver 必须是无副作用的变量、成员或索引路径，例如 `$name`、`$hero.name`、
+`$items[$index + 1]`；索引中的函数调用、赋值和自增会在控件创建时拒绝。
+
 `replace` 不接受 CSS selector、HTML 字符串、DOM 节点或终端坐标。固定区域名由每个 Host 映射；
 普通 key 必须先由 `slot` 或 Script Surface 建立。`slot` 放进 `silently` 后输出会被丢弃，
 因此不会留下可替换目标。
@@ -185,12 +188,12 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 - `State.global/variables/temporary.extend(values)`
 - `State.setup.get()`、`State.setup.set(value)`
 
-### `World`
+### `Location`
 
 - 注册与查询：`add`、`get`、`places`、`locate`。
 - 玩家位置：`current`、`move`。
 
-参数、返回值以及坐标、导航和恢复规则统一见 [World](../author/world.md)。
+参数、返回值以及坐标、导航和恢复规则统一见 [Location](../author/location.md)。
 
 ### `Macro`
 
@@ -209,8 +212,8 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 - 写日志：`trace`、`debug`、`info`、`warn`、`error`
 - 读取订阅：`subscribe(filter?)`、`take(subscription)`、`unsubscribe(subscription)`
 
-订阅签名已声明，但当前脚本实现尚未接通；Core Logger 与游戏内控制台的差距见
-[项目状态](../development/status.md)。
+脚本与宿主共用有界 Core Logger，订阅按过滤条件接收后续记录。控制台与用法见
+[随机数与只读调试](../author/random-and-debugging.md)。
 
 ### `Event`
 
@@ -341,3 +344,9 @@ Tag、Macro、Expression 函数、变量、注释、链接和插值，并提供�
 
 语言服务会从内置表、跨文件 Widget 和脚本 `Macro.add/update()` 的 `body` 字段区分 Inline 与
 Container：Inline 出现闭合标签、Container 缺少或错配闭合标签都会产生诊断。
+
+## 可回放随机与调试
+
+`Random.seed(seed)` 使用非负安全整数重置序列；`Random.next()` 和 `Math.random()` 与
+Twee `random/either` 共用 State 的随机源。`Random.current()` 返回只读 `{seed, state}`
+字符串快照。正式存档保存完整序列；参见[随机数与只读调试](../author/random-and-debugging.md)。

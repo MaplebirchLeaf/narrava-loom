@@ -138,7 +138,10 @@ maximized = false
 
 开发时可在 `[host.tauri]` 设置 `developer = true`。此时按 F12 切换 WebView DevTools；
 默认和发布配置应保持 `false`。关闭时 Rust command 同样拒绝访问，而非仅隐藏前端入口。
-DevTools 只属于开发 WebView，不进入游戏 Worker API；调试 Worker State 不通过浏览器控制台暴露。
+F12 DevTools 调试 WebView。F10 是底部单行脚本控制台，`debug_execute` 经共享命令队列执行
+Runtime 的 JavaScript；`debug_complete` 查询成员，`debug_cancel` 取消受管等待，
+`debug_snapshot` 读取已提交状态、对象结果和统一日志。所有入口都由
+同一个 developer 开关控制。操作与边界见[随机数与调试](../author/random-and-debugging.md)。
 
 `title` 未填写时继承 `game.name`。`icon` 是游戏级可选项，仓库 Host 不要求自带 `icon.png`；
 填写时只接受游戏目录内的普通相对 PNG／ICO 路径；
