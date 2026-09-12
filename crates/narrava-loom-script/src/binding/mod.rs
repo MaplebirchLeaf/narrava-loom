@@ -1,5 +1,6 @@
 //! 脚本 Macro 调用、挂起恢复与内建事件投递。
 
+pub(crate) mod diagnostics;
 mod reactions;
 mod requests;
 
@@ -7,7 +8,7 @@ use crate::{
     EcmaBinding, EcmaRuntime, ScriptError, ScriptMacroOutcome, ScriptPending, js_string,
     json_to_value, script_error, state_adapter,
 };
-use boa_engine::{Context, Source};
+use boa_engine::{Context, JsError, Source};
 use narrava_loom_core::{
     SourceList,
     expression::{
@@ -64,7 +65,7 @@ impl EcmaBinding {
     ) -> Result<ScriptMacroOutcome, ScriptError> {
         let call = serde_json::json!({ "name": name, "arguments": arguments });
         let expression = format!(
-            "globalThis.__narravaMacroResult = undefined; Promise.resolve(__narrava.invokeMacro({}, {})).then(value => {{ globalThis.__narravaMacroResult = {{ ok: true, value: JSON.stringify(value) }} }}, error => {{ globalThis.__narravaMacroResult = {{ ok: false, value: String(error) }} }});",
+            "globalThis.__narravaMacroResult = undefined; Promise.resolve(__narrava.invokeMacro({}, {})).then(value => {{ globalThis.__narravaMacroResult = {{ ok: true, value: JSON.stringify(value) }} }}, error => {{ globalThis.__narravaMacroResult = {{ ok: false, error }} }});",
             serde_json::to_string(name).expect("字符串必须可序列化"),
             call,
         );
@@ -72,10 +73,10 @@ impl EcmaBinding {
         state_adapter::with_state(&mut runtime.context, state, |context| {
             context
                 .eval(Source::from_bytes(expression.as_bytes()))
-                .map_err(|error| script_error("script.macro", error))?;
-            context
-                .run_jobs()
-                .map_err(|error| script_error("script.macro_jobs", error))?;
+                .map_err(|error| diagnostics::js_error(context, "script.macro", error, None))?;
+            context.run_jobs().map_err(|error| {
+                diagnostics::js_error(context, "script.macro_jobs", error, None)
+            })?;
             macro_outcome(context)
         })
     }
@@ -91,10 +92,12 @@ impl EcmaBinding {
         state_adapter::with_state(&mut runtime.context, state, |context| {
             context
                 .eval(Source::from_bytes(expression.as_bytes()))
-                .map_err(|error| script_error("script.host_operation", error))?;
-            context
-                .run_jobs()
-                .map_err(|error| script_error("script.macro_jobs", error))?;
+                .map_err(|error| {
+                    diagnostics::js_error(context, "script.host_operation", error, None)
+                })?;
+            context.run_jobs().map_err(|error| {
+                diagnostics::js_error(context, "script.macro_jobs", error, None)
+            })?;
             macro_outcome(context)
         })
     }
@@ -187,17 +190,25 @@ fn macro_outcome(context: &mut Context) -> Result<ScriptMacroOutcome, ScriptErro
         }));
     }
 
+    let failed = context
+        .eval(Source::from_bytes("__narravaMacroResult.ok === false"))
+        .map_err(|error| diagnostics::js_error(context, "script.macro", error, None))?;
+    if failed.as_boolean() == Some(true) {
+        let error = context
+            .eval(Source::from_bytes("__narravaMacroResult.error"))
+            .map_err(|error| diagnostics::js_error(context, "script.macro", error, None))?;
+        return Err(diagnostics::js_error(
+            context,
+            "script.macro_rejected",
+            JsError::from_opaque(error),
+            None,
+        ));
+    }
     let result = context
         .eval(Source::from_bytes("JSON.stringify(__narravaMacroResult)"))
         .map_err(|error| script_error("script.macro", error))?;
     let result: serde_json::Value = serde_json::from_str(&js_string(&result, context)?)
         .map_err(|error| ScriptError::new("script.macro", error.to_string()))?;
-    if result["ok"] != true {
-        return Err(ScriptError::new(
-            "script.macro_rejected",
-            result["value"].as_str().unwrap_or("Promise 被拒绝"),
-        ));
-    }
     let value: Value = match result["value"].as_str() {
         None => Value::Undefined,
         Some(json) => json_to_value(

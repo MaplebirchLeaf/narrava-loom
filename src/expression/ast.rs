@@ -201,6 +201,52 @@ pub enum ExpressionKind<'source> {
 }
 
 impl Expression<'_> {
+    /// 输入绑定必须能反复只读查询：仅允许持久/临时变量路径与无副作用索引。
+    pub fn is_input_receiver(&self) -> bool {
+        match &self.kind {
+            ExpressionKind::Variable { scope, .. } => *scope != VariableScope::Local,
+            ExpressionKind::Group(inner) => inner.is_input_receiver(),
+            ExpressionKind::Member { target, .. } => target.is_input_receiver(),
+            ExpressionKind::Index { target, index } => {
+                target.is_input_receiver() && index.is_read_only_index()
+            }
+            _ => false,
+        }
+    }
+
+    /// 索引可以计算，但不能执行调用、赋值或自增；读取不会推进 RNG 或触发脚本。
+    fn is_read_only_index(&self) -> bool {
+        match &self.kind {
+            ExpressionKind::Boolean(_)
+            | ExpressionKind::Null
+            | ExpressionKind::Number(_)
+            | ExpressionKind::String(_)
+            | ExpressionKind::Undefined
+            | ExpressionKind::Global(_)
+            | ExpressionKind::Setup => true,
+            ExpressionKind::Variable { scope, .. } => *scope != VariableScope::Local,
+            ExpressionKind::Group(inner) => inner.is_read_only_index(),
+            ExpressionKind::Unary { operand, .. } => operand.is_read_only_index(),
+            ExpressionKind::Binary { left, right, .. } => {
+                left.is_read_only_index() && right.is_read_only_index()
+            }
+            ExpressionKind::Member { target, .. } => target.is_read_only_index(),
+            ExpressionKind::Index { target, index } => {
+                target.is_read_only_index() && index.is_read_only_index()
+            }
+            ExpressionKind::Conditional {
+                condition,
+                consequent,
+                alternate,
+            } => {
+                condition.is_read_only_index()
+                    && consequent.is_read_only_index()
+                    && alternate.is_read_only_index()
+            }
+            _ => false,
+        }
+    }
+
     /// 赋值只能写入名称、变量或没有可选链的属性位置。
     pub fn is_assignable_target(&self) -> bool {
         match &self.kind {

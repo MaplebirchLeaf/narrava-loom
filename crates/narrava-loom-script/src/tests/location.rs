@@ -4,11 +4,11 @@ use narrava_loom_protocol::{
 };
 
 const PLACES: &str = r#"
-World.add({id:'town',name:'新手镇',bounds:[[0,0],[100,0],[100,100],[0,100]],entry:[5,5]});
-World.add({id:'hospital',name:'医院',parent:'town',bounds:[[20,20],[40,20],[40,40],[20,40]],entry:[25,25]});
-Macro.add('where', {handler: () => JSON.stringify(World.current())});
-Macro.add('step', {handler: () => { World.move([26,27]); return ''; }});
-Macro.add('failMove', {handler: () => { World.move([28,29]); throw new Error('failed world action'); }});
+Location.add({id:'town',name:'新手镇',bounds:[[0,0],[100,0],[100,100],[0,100]],entry:[5,5]});
+Location.add({id:'hospital',name:'医院',parent:'town',bounds:[[20,20],[40,20],[40,40],[20,40]],entry:[25,25]});
+Macro.add('where', {handler: () => JSON.stringify(Location.current())});
+Macro.add('step', {handler: () => { Location.move([26,27]); return ''; }});
+Macro.add('failMove', {handler: () => { Location.move([28,29]); throw new Error('failed location action'); }});
 "#;
 
 const STORY: &str = r#":: Start
@@ -36,7 +36,7 @@ const STORY: &str = r#":: Start
 "#;
 
 #[test]
-fn world_menu_has_no_location_and_tags_bind_registered_ids() {
+fn location_menu_has_no_location_and_tags_bind_registered_ids() {
     with_runtime(STORY, PLACES, |runtime| {
         let (_, start) = ready(runtime.execute(RuntimeCommand::Start).unwrap());
         assert!(text(&start).contains("null"));
@@ -54,7 +54,7 @@ fn world_menu_has_no_location_and_tags_bind_registered_ids() {
 }
 
 #[test]
-fn world_history_restores_position_and_returns_to_unlocated_menu() {
+fn location_history_restores_position_and_returns_to_unlocated_menu() {
     with_runtime(STORY, PLACES, |runtime| {
         let (_, start) = ready(runtime.execute(RuntimeCommand::Start).unwrap());
         let (_, town) = navigate(runtime, &start, "Town");
@@ -77,7 +77,7 @@ fn world_history_restores_position_and_returns_to_unlocated_menu() {
 }
 
 #[test]
-fn world_failed_navigation_rolls_back_location_and_coordinates() {
+fn location_failed_navigation_rolls_back_location_and_coordinates() {
     with_runtime(STORY, PLACES, |runtime| {
         let (_, start) = ready(runtime.execute(RuntimeCommand::Start).unwrap());
         let (_, town) = navigate(runtime, &start, "Town");
@@ -108,20 +108,20 @@ fn world_failed_navigation_rolls_back_location_and_coordinates() {
 }
 
 #[test]
-fn world_rejects_ambiguous_place_and_environment_tags_before_start() {
+fn location_rejects_ambiguous_place_and_environment_tags_before_start() {
     for tags in ["town hospital", "town inside outside"] {
         let story: String = format!(":: Start\nmenu\n:: Invalid [{tags}]\ninvalid\n");
         with_runtime(&story, PLACES, |runtime| {
             assert_eq!(
                 runtime.execute(RuntimeCommand::Start).unwrap_err().code,
-                "world.passage_tags"
+                "location.passage_tags"
             );
         });
     }
 }
 
 #[test]
-fn world_save_restores_location_after_another_place_was_visited() {
+fn location_save_restores_location_after_another_place_was_visited() {
     with_runtime(STORY, PLACES, |runtime| {
         let (_, start) = ready(runtime.execute(RuntimeCommand::Start).unwrap());
         let (_, town) = navigate(runtime, &start, "Town");
@@ -138,7 +138,7 @@ fn world_save_restores_location_after_another_place_was_visited() {
 }
 
 #[test]
-fn world_negative_position_survives_untagged_navigation_save_and_history() {
+fn location_negative_position_survives_untagged_navigation_save_and_history() {
     let story: &str = r#":: Start
 <<link [[开始|Hospital]]>><</link>>
 :: Hospital [hospital inside]
@@ -152,10 +152,10 @@ fn world_negative_position_survives_untagged_navigation_save_and_history() {
 <<where>>
 "#;
     let script: &str = r#"
-World.add({id:'town',bounds:[[-100,-100],[100,-100],[100,100],[-100,100]],entry:[5,5]});
-World.add({id:'hospital',parent:'town',bounds:[[-40,-40],[-20,-40],[-20,-20],[-40,-20]],entry:[-30,-30]});
-Macro.add('where', {handler: () => JSON.stringify(World.current())});
-Macro.add('step', {handler: () => { World.move([-26,-27]); return ''; }});
+Location.add({id:'town',bounds:[[-100,-100],[100,-100],[100,100],[-100,100]],entry:[5,5]});
+Location.add({id:'hospital',parent:'town',bounds:[[-40,-40],[-20,-40],[-20,-20],[-40,-20]],entry:[-30,-30]});
+Macro.add('where', {handler: () => JSON.stringify(Location.current())});
+Macro.add('step', {handler: () => { Location.move([-26,-27]); return ''; }});
 "#;
     with_runtime(story, script, |runtime| {
         let (_, start) = ready(runtime.execute(RuntimeCommand::Start).unwrap());
@@ -191,7 +191,7 @@ Macro.add('step', {handler: () => { World.move([-26,-27]); return ''; }});
 }
 
 #[test]
-fn world_refresh_preserves_action_position_and_does_not_repeat_body_movement() {
+fn location_refresh_preserves_action_position_and_does_not_repeat_body_movement() {
     let story: &str = r#":: Start
 <<link [[进入|Hospital]]>><</link>>
 :: Hospital [hospital inside]
@@ -202,7 +202,7 @@ fn world_refresh_preserves_action_position_and_does_not_repeat_body_movement() {
 <<where>>
 "#;
     let script: String = format!(
-        "{PLACES}\nMacro.add('initialStep', {{handler: () => {{ World.move([25,26]); return ''; }} }});"
+        "{PLACES}\nMacro.add('initialStep', {{handler: () => {{ Location.move([25,26]); return ''; }} }});"
     );
     with_runtime(story, &script, |runtime| {
         let (_, start) = ready(runtime.execute(RuntimeCommand::Start).unwrap());
@@ -249,10 +249,10 @@ fn world_refresh_preserves_action_position_and_does_not_repeat_body_movement() {
 }
 
 #[test]
-fn world_location_is_available_to_lifecycle_reaction_conditions() {
+fn location_location_is_available_to_lifecycle_reaction_conditions() {
     let script: String = format!(
         r#"{PLACES}
-Reaction.add({{id:'hospital.welcome', lifecycle:true, cond:() => World.current()?.place === 'hospital', widget:'医院事件已触发'}});
+Reaction.add({{id:'hospital.welcome', lifecycle:true, cond:() => Location.current()?.place === 'hospital', widget:'医院事件已触发'}});
 "#
     );
     with_runtime(STORY, &script, |runtime| {
@@ -266,7 +266,7 @@ Reaction.add({{id:'hospital.welcome', lifecycle:true, cond:() => World.current()
 }
 
 #[test]
-fn world_refresh_releases_position_when_the_replayed_passage_navigates() {
+fn location_refresh_releases_position_when_the_replayed_passage_navigates() {
     for target in ["Town", "Hospital"] {
         let story: &str = r#":: Start
 <<link [[进入|Hospital]]>><</link>>
@@ -283,11 +283,11 @@ Macro.add('arm', {{handler: () => {{ redirect = true; return ''; }} }});
 Macro.add('redirect', {{handler: () => {{
   if (!redirect) return '';
   redirect = false;
-  World.move([26,27]);
+  Location.move([26,27]);
   return '';
 }} }});
 Reaction.add({{id:'redirect', lifecycle:true, cond:() => redirect, goto:'{target}', limit:1}});
-Macro.add('stepInTown', {{handler:() => {{ World.move([50,50]); return ''; }} }});
+Macro.add('stepInTown', {{handler:() => {{ Location.move([50,50]); return ''; }} }});
 "#
         );
         with_runtime(story, &script, |runtime| {

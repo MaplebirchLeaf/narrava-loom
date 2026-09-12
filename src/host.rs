@@ -50,6 +50,41 @@ use crate::{
     vm::MirExecutionError,
 };
 
+/// Binding 回调携带的结构化失败；旧文本回调仍使用调用边界的稳定错误码。
+pub trait HostDispatchError {
+    fn into_diagnostic(self, fallback_code: &str, fallback_message: &str) -> Diagnostic;
+}
+
+impl HostDispatchError for Diagnostic {
+    fn into_diagnostic(self, _fallback_code: &str, _fallback_message: &str) -> Diagnostic {
+        self
+    }
+}
+
+impl HostDispatchError for Box<Diagnostic> {
+    fn into_diagnostic(self, _fallback_code: &str, _fallback_message: &str) -> Diagnostic {
+        *self
+    }
+}
+
+impl HostDispatchError for String {
+    fn into_diagnostic(self, fallback_code: &str, _fallback_message: &str) -> Diagnostic {
+        host_error(fallback_code, &self)
+    }
+}
+
+impl HostDispatchError for &str {
+    fn into_diagnostic(self, fallback_code: &str, _fallback_message: &str) -> Diagnostic {
+        host_error(fallback_code, self)
+    }
+}
+
+impl HostDispatchError for () {
+    fn into_diagnostic(self, fallback_code: &str, fallback_message: &str) -> Diagnostic {
+        host_error(fallback_code, fallback_message)
+    }
+}
+
 /// Host 交回 Core 的平台无关玩家动作。
 ///
 /// 当前只开放 Passage 导航；新增输入语义时扩展此枚举，不接收平台回调对象。
@@ -356,6 +391,14 @@ impl HostUpdate {
     /// 本次调用按执行顺序产生的宿主无关语义输出。
     pub fn surface(&self) -> &SemanticOutput {
         &self.surface
+    }
+
+    /// 在事务安全点同步输入呈现；不开放交互身份或整体节点结构的修改。
+    pub fn update_inputs<E>(
+        &mut self,
+        mut update: impl FnMut(&mut crate::semantic::SemanticInputBinding) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.surface.update_inputs(&mut update)
     }
 
     /// 在现有更新末尾合并同一事务产生的语义输出。

@@ -87,7 +87,12 @@ impl HostApi {
     }
 
     /// 恢复异步 Interaction Handler；再次 Pending 会原子归还 Host 容器。
-    pub fn resume_macro_interaction_pending<'hir, 'source, Pending, ResumeError>(
+    pub fn resume_macro_interaction_pending<
+        'hir,
+        'source,
+        Pending,
+        ResumeError: HostDispatchError,
+    >(
         pending: &mut HostPendingExecutions<HostMacroInteractionPending<'hir, 'source, Pending>>,
         interactions: &mut MacroInteractions<'hir, 'source>,
         state: &mut State,
@@ -140,17 +145,17 @@ impl HostApi {
                 EngineMacroInteractionResumeError::Runtime {
                     interaction: action,
                     story_error,
-                    ..
+                    error,
                 } => {
                     let restore_failed: bool = interactions.add(interaction, action).is_err();
-                    Err(host_error(
-                        if story_error.is_some() || restore_failed {
-                            "engine.rollback.failed"
-                        } else {
-                            "host.pending.interaction_resume_failed"
-                        },
-                        "异步 Interaction 恢复失败，事务已回滚",
-                    ))
+                    Err(if story_error.is_some() || restore_failed {
+                        host_error(
+                            "engine.rollback.failed",
+                            "异步 Interaction 恢复失败后无法回滚事务",
+                        )
+                    } else {
+                        resumed_diagnostic(error, "host.pending.interaction_resume_failed")
+                    })
                 }
             },
         }
@@ -159,7 +164,14 @@ impl HostApi {
     /// 驱动已经恢复的 Interaction 正文，并在正文结束后进入其目标 Passage。
     ///
     /// Binding 只处理最终更新或新的异步等待，不需要识别独立 Macro 正文的 VM 边界。
-    pub fn drive_macro_interaction<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn drive_macro_interaction<
+        'hir,
+        'source,
+        Pending,
+        DispatchError: HostDispatchError,
+        Lifecycle,
+        Dispatch,
+    >(
         resumed: HostMacroInteractionResumed<'hir, 'source>,
         context: HostMacroInteractionDriveContext<'_, 'hir, 'source, Pending>,
         state: &mut State,
@@ -234,19 +246,18 @@ impl HostApi {
                             let EngineMacroInteractionDispatchError {
                                 interaction: action,
                                 story_error,
-                                ..
+                                kind,
                             } = *error;
                             let restore_failed: bool =
                                 interactions.add(interaction, action).is_err();
                             return Err(Box::new(HostDriveError {
-                                diagnostic: host_error(
-                                    if story_error.is_some() || restore_failed {
-                                        "engine.rollback.failed"
-                                    } else {
-                                        "host.interaction.dispatch_failed"
-                                    },
-                                    "Interaction 正文中的 Macro 分派失败，事务已回滚",
-                                ),
+                                diagnostic: if story_error.is_some() || restore_failed {
+                                    host_error("engine.rollback.failed", "Interaction Macro 分派失败后无法回滚事务")
+                                } else if let crate::engine::EngineMacroInteractionDispatchFailureKind::Callback(error) = kind {
+                                    error.into_diagnostic("host.interaction.dispatch_failed", "Interaction 正文中的 Macro 分派失败，事务已回滚")
+                                } else {
+                                    host_error("host.interaction.dispatch_failed", "Interaction 正文中的 Macro 分派失败，事务已回滚")
+                                },
                                 pending: None,
                             }));
                         }
@@ -300,7 +311,7 @@ impl HostApi {
     }
 
     /// 取出并恢复当前异步 Handler；再次 Pending 会自动归还容器。
-    pub fn resume_pending<'hir, 'source, Pending, ResumeError>(
+    pub fn resume_pending<'hir, 'source, Pending, ResumeError: HostDispatchError>(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -343,19 +354,13 @@ impl HostApi {
                 ))
             }
             Err(EngineMirContinuationResumeError::Runtime(failure)) => {
-                let rollback_failed: bool = failure.rollback(state, story).is_err();
-                Err(host_error(
-                    if rollback_failed {
-                        "engine.rollback.failed"
-                    } else {
-                        "host.pending.resume_failed"
-                    },
-                    if rollback_failed {
-                        "异步恢复失败，且 Story 检查点无法恢复"
-                    } else {
-                        "异步 Handler 或 VM 恢复失败，事务已回滚"
-                    },
-                ))
+                Err(match failure.rollback(state, story) {
+                    Ok(error) => resumed_diagnostic(error, "host.pending.resume_failed"),
+                    Err(_) => host_error(
+                        "engine.rollback.failed",
+                        "异步恢复失败，且 Story 检查点无法恢复",
+                    ),
+                })
             }
         }
     }
@@ -388,6 +393,32 @@ impl HostApi {
                     Err(diagnostic)
                 }
             }
+        }
+    }
+}
+
+fn resumed_diagnostic<Error: HostDispatchError, Pending>(
+    error: crate::runtime::RuntimeMacroContinuationResumeError<Error, Pending>,
+    fallback_code: &str,
+) -> Diagnostic {
+    use crate::{macro_runtime::MacroResumeError, runtime::RuntimeMacroContinuationResumeError};
+    match error {
+        RuntimeMacroContinuationResumeError::Macro {
+            error: MacroResumeError::Resume(failure),
+            ..
+        } => failure
+            .error
+            .into_diagnostic(fallback_code, "异步 Handler 恢复失败，事务已回滚"),
+        RuntimeMacroContinuationResumeError::Macro {
+            error: MacroResumeError::Identity(error),
+            ..
+        } => error.diagnostic(),
+        RuntimeMacroContinuationResumeError::Vm {
+            error: MirExecutionError::Evaluation(error),
+            ..
+        } => error.diagnostic(),
+        RuntimeMacroContinuationResumeError::Vm { .. } => {
+            host_error(fallback_code, "异步 VM 恢复失败，事务已回滚")
         }
     }
 }

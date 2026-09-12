@@ -167,6 +167,10 @@ fn write_help(writer: &mut impl Write) -> io::Result<()> {
     writeln!(writer, "  sidebar             切换侧栏展开／收起")?;
     writeln!(writer, "  save / load         使用 quick 槽位存档／读档")?;
     writeln!(writer, "  language            切换到下一种已安装语言")?;
+    writeln!(
+        writer,
+        "  :inspect            查看状态、地点、随机源与日志（只读）"
+    )?;
     writeln!(writer, "  help                显示本帮助")?;
     writeln!(writer, "  quit                退出")
 }

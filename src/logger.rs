@@ -4,6 +4,9 @@ use std::collections::HashMap;
 
 use crate::diagnostic::Diagnostic;
 
+/// 每局游戏默认保留的日志条数，订阅的未读队列使用同一上限。
+pub const DEFAULT_LOG_CAPACITY: usize = 1024;
+
 /// Logger 事件的详细程度与严重程度。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
@@ -38,6 +41,17 @@ impl LogFilter {
 /// Logger 为一次订阅分配的稳定身份。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LogSubscriptionId(u64);
+
+impl LogSubscriptionId {
+    /// 将 Host/Script 的不透明值恢复为查询身份；是否存在仍由 Logger 校验。
+    pub fn from_value(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
 
 /// Logger 分配的单调记录序号。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -94,6 +108,7 @@ impl LogEvent {
 /// 按写入顺序保存结构化事件的最小 Logger。
 #[derive(Debug)]
 pub struct Logger {
+    capacity: usize,
     records: Vec<LogRecord>,
     subscriptions: HashMap<LogSubscriptionId, LogSubscription>,
     next_subscription_id: u64,
@@ -103,7 +118,13 @@ pub struct Logger {
 impl Logger {
     /// 建立空 Logger。
     pub fn new() -> Self {
+        Self::with_capacity(DEFAULT_LOG_CAPACITY)
+    }
+
+    /// 指定历史与每个订阅队列的容量；零容量只分配序号，不保留记录。
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
+            capacity,
             records: Vec::new(),
             subscriptions: HashMap::new(),
             next_subscription_id: 0,
@@ -123,10 +144,10 @@ impl Logger {
             .expect("Logger 记录序号已耗尽");
         for subscription in self.subscriptions.values_mut() {
             if subscription.filter.matches(&record.event) {
-                subscription.pending.push(record.clone());
+                push_bounded(&mut subscription.pending, record.clone(), self.capacity);
             }
         }
-        self.records.push(record);
+        push_bounded(&mut self.records, record, self.capacity);
     }
 
     /// 订阅之后产生且符合条件的事件。
@@ -177,6 +198,16 @@ impl Logger {
             subscription.pending.clear();
         }
     }
+}
+
+fn push_bounded(records: &mut Vec<LogRecord>, record: LogRecord, capacity: usize) {
+    if capacity == 0 {
+        return;
+    }
+    if records.len() == capacity {
+        records.remove(0);
+    }
+    records.push(record);
 }
 
 impl Default for Logger {

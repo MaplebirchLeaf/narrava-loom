@@ -5,6 +5,7 @@
 #[path = "../../audio.rs"]
 mod audio;
 mod command;
+mod debug;
 mod platform;
 mod renderer;
 mod screen;

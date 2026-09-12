@@ -6,7 +6,7 @@
 
 use std::{collections::BTreeMap, error::Error, fmt};
 
-use crate::expression::value::TextValue;
+use crate::expression::value::{TextValue, Value};
 
 /// Core 产生、Host 只能原样回送的交互身份。
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -355,6 +355,42 @@ pub enum SemanticValue {
     Map(BTreeMap<String, SemanticValue>),
 }
 
+impl SemanticValue {
+    /// 按有限选项树比较 State 值；不会展开当前值中超出选项形状的循环引用。
+    pub fn matches_value(&self, value: &Value) -> bool {
+        match (self, value) {
+            (Self::Null, Value::Undefined | Value::Null) => true,
+            (Self::Boolean(expected), Value::Boolean(current)) => expected == current,
+            (Self::Number(expected), Value::Number(current)) => {
+                expected.to_bits() == current.to_bits()
+            }
+            (Self::Text(expected), Value::String(current)) => current
+                .as_units()
+                .iter()
+                .copied()
+                .eq(expected.encode_utf16()),
+            (Self::List(expected), Value::Array(current)) => {
+                current.len() == expected.len()
+                    && current.with_ref(|items: &[Value]| {
+                        expected
+                            .iter()
+                            .zip(items)
+                            .all(|(expected, current)| expected.matches_value(current))
+                    })
+            }
+            (Self::Map(expected), Value::Object(current)) => {
+                current.len() == expected.len()
+                    && expected.iter().all(|(name, expected)| {
+                        current
+                            .get(name)
+                            .is_some_and(|current: Value| expected.matches_value(&current))
+                    })
+            }
+            _ => false,
+        }
+    }
+}
+
 impl PartialEq for SemanticValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -639,5 +675,28 @@ impl SemanticOutput {
                 }
                 _ => None,
             })
+    }
+
+    /// 递归更新输入契约，保留节点顺序、稳定 key 与交互身份。
+    pub(crate) fn update_inputs<E>(
+        &mut self,
+        update: &mut impl FnMut(&mut SemanticInputBinding) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for node in &mut self.nodes {
+            match node {
+                SemanticNode::Input { binding, .. } => update(binding)?,
+                SemanticNode::Region { content, .. }
+                | SemanticNode::Container { content, .. }
+                | SemanticNode::Replace { content, .. } => content.update_inputs(update)?,
+                SemanticNode::Component { fallback, .. } => fallback.update_inputs(update)?,
+                SemanticNode::Dialog { pages, .. } => {
+                    for page in pages {
+                        page.content.update_inputs(update)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }

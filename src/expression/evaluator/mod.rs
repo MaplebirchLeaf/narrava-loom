@@ -34,7 +34,7 @@ use session::{ContextAccess, EmptyContext, EvaluationSession};
 use target::AssignmentPath;
 
 /// 求值错误始终携带原 Expression 的源码位置。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvalError {
     ContextWriteRejected(Span),
     InvalidDeleteTarget(Span),
@@ -57,6 +57,7 @@ pub enum EvalError {
     MissingWriteContext(Span),
     NotCallable(Span),
     ScriptCallFailed(Span),
+    ScriptDiagnostic(Span, Box<Diagnostic>),
     ReservedGlobal(Span),
     UnorderedComparison(Span),
     UnknownGlobal(Span),
@@ -66,7 +67,7 @@ pub enum EvalError {
 
 impl EvalError {
     /// 返回错误在 Expression 片段内的 UTF-8 字节范围。
-    pub fn span(self) -> Span {
+    pub fn span(&self) -> Span {
         match self {
             Self::ContextWriteRejected(span)
             | Self::InvalidDeleteTarget(span)
@@ -89,16 +90,17 @@ impl EvalError {
             | Self::MissingWriteContext(span)
             | Self::NotCallable(span)
             | Self::ScriptCallFailed(span)
+            | Self::ScriptDiagnostic(span, _)
             | Self::ReservedGlobal(span)
             | Self::UnorderedComparison(span)
             | Self::UnknownGlobal(span)
             | Self::UnknownMember(span)
-            | Self::UnsupportedExpression(span) => span,
+            | Self::UnsupportedExpression(span) => *span,
         }
     }
 
     /// 转换为稳定 Diagnostic；实际 Source 位置由 Expression 嵌入方附加。
-    pub fn diagnostic(self) -> Diagnostic {
+    pub fn diagnostic(&self) -> Diagnostic {
         let (code, message): (&str, &str) = match self {
             Self::ContextWriteRejected(_) => (
                 "expression.context_write_rejected",
@@ -161,6 +163,7 @@ impl EvalError {
                 "expression.script_call_failed",
                 "Script Binding 调用函数失败",
             ),
+            Self::ScriptDiagnostic(_, diagnostic) => return diagnostic.as_ref().clone(),
             Self::ReservedGlobal(_) => ("expression.reserved_global", "保留的全局名称不可写入"),
             Self::UnorderedComparison(_) => (
                 "expression.unordered_comparison",
@@ -182,6 +185,11 @@ pub trait EvaluationContext {
     /// 读取 State.global 中的全局值；不存在的名称返回 `None`。
     fn global(&self, name: &str) -> Option<&Value>;
 
+    /// 由活动 State 推进可回放随机序列；纯计算上下文可不提供。
+    fn next_random(&self) -> Option<f64> {
+        None
+    }
+
     /// 读取 setup 提供的 State；未提供时返回 `None`。
     fn setup(&self) -> Option<&Value> {
         None
@@ -200,10 +208,11 @@ pub enum ContextWriteError {
 }
 
 /// Script Binding 调用函数句柄时可稳定映射的错误类别。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScriptCallError {
     Unavailable,
     Failed,
+    Diagnostic(Box<Diagnostic>),
 }
 
 /// 写入能力独立扩展只读查询接口，普通求值不需要提供它。

@@ -20,6 +20,15 @@ pub struct DiagnosticLocation {
     pub column: usize,
 }
 
+/// 缺少原始字节范围时仍保留已知文件与真实行列；generated 表示转译后的坐标。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiagnosticSource {
+    pub path: String,
+    pub generated: bool,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+}
+
 /// Expression 等源码片段映射失败的原因。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiagnosticLocationError {
@@ -92,6 +101,7 @@ pub struct Diagnostic {
     pub severity: DiagnosticSeverity,
     pub message: String,
     pub location: Option<DiagnosticLocation>,
+    pub source: Option<Box<DiagnosticSource>>,
 }
 
 impl Diagnostic {
@@ -102,12 +112,24 @@ impl Diagnostic {
             severity,
             message: message.to_owned(),
             location: None,
+            source: None,
         }
     }
 
     /// 附加调用方已经转换好的公共源码位置。
     pub fn with_location(mut self, location: DiagnosticLocation) -> Self {
         self.location = Some(location);
+        self
+    }
+
+    /// 只附加可以确认的文件归属，不推测缺失的行列或字节范围。
+    pub fn with_source(mut self, path: &str, generated: bool) -> Self {
+        self.source = Some(Box::new(DiagnosticSource {
+            path: path.to_owned(),
+            generated,
+            line: None,
+            column: None,
+        }));
         self
     }
 }
@@ -121,6 +143,18 @@ impl fmt::Display for Diagnostic {
                 "{}:{}:{}: [{}] {}",
                 location.source, location.line, location.column, self.code, self.message
             )
+        } else if let Some(source) = &self.source {
+            write!(formatter, "{}", source.path)?;
+            if let Some(line) = source.line {
+                write!(formatter, ":{line}")?;
+                if let Some(column) = source.column {
+                    write!(formatter, ":{column}")?;
+                }
+            }
+            if source.generated {
+                write!(formatter, " (generated)")?;
+            }
+            write!(formatter, ": [{}] {}", self.code, self.message)
         } else {
             write!(formatter, "[{}] {}", self.code, self.message)
         }

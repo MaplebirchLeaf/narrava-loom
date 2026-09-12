@@ -3,6 +3,48 @@
 use super::*;
 
 impl<'hir, 'source> RuntimeSession<'hir, 'source> {
+    pub(super) fn navigate(&mut self, target: &str) -> Result<RuntimeUpdate, HostErrorDto> {
+        let params = Value::Null;
+        let identity = self.identity(STORY_ID);
+        let language = self.language.clone();
+        let result = HostApi::navigate_mir_with_reaction(
+            &mut self.continuations,
+            &mut self.state,
+            &mut self.story,
+            self.bytecode,
+            target,
+            HostMirRequest {
+                params: &params,
+                identity,
+                limits: limits(),
+                language: language.as_deref(),
+            },
+            |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
+            |passage, state, requests| {
+                crate::reaction_runtime::apply_lifecycle_reactions(
+                    self.script.as_ref(),
+                    self.hir,
+                    passage,
+                    state,
+                    requests,
+                )
+            },
+            |invocation, state, requests, scopes| {
+                dispatch_macro(
+                    self.script.as_ref(),
+                    self.hir,
+                    &mut self.interactions,
+                    invocation,
+                    state,
+                    requests,
+                    scopes,
+                )
+            },
+        )
+        .map_err(|error| diagnostic(error.diagnostic.clone()));
+        self.drive_main(result)
+    }
+
     pub(super) fn start(&mut self) -> Result<RuntimeUpdate, HostErrorDto> {
         if self.presented.is_some() {
             return Err(HostErrorDto::new(
@@ -10,7 +52,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 "当前 RuntimeSession 已经启动",
             ));
         }
-        narrava_loom_core::world::validate_passages(self.state.world(), self.hir)
+        narrava_loom_core::location::validate_passages(self.state.location(), self.hir)
             .map_err(diagnostic)?;
         let params: Value = Value::Null;
         let identity: RuntimeExecutionIdentity = self.identity(STORY_ID);
@@ -187,8 +229,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         target: narrava_loom_core::host::HostReplayTarget,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         if target == narrava_loom_core::host::HostReplayTarget::RefreshCurrent {
-            self.script
-                .set_world_refresh(Some(self.state.world_state().clone()));
+            self.script.set_refresh(Some(&self.state));
         }
         let params = Value::Null;
         let identity = self.identity(STORY_ID);
@@ -255,11 +296,10 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 "输入值不属于当前控件允许的值集合",
             ));
         }
-        let expression = parse_expression(binding.receiver.as_str()).map_err(|error| {
-            HostErrorDto::new("runtime_session.input_receiver", format!("{error:?}"))
-        })?;
+        let expression = narrava_loom_core::macro_runtime::parse_input_receiver(&binding.receiver)
+            .map_err(diagnostic)?;
         let core_value: Value =
-            json_to_value(&value).map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            json_to_value(&value).map_err(crate::ScriptError::into_host_error)?;
         if let Err(error) = assign_value_with_mut(&expression, core_value, &mut self.state) {
             return Err(HostErrorDto::new(
                 "runtime_session.input_assignment",

@@ -1,3 +1,4 @@
+import { registerStateProxy } from "./console"
 import { decodeScriptValue, encodeScriptValue, scriptGlobals } from "./internal"
 
 function namespaceAccess(namespace: string) {
@@ -21,7 +22,7 @@ function namespaceAccess(namespace: string) {
 }
 
 function stateProxy(namespace: string): Record<string, unknown> {
-  return new Proxy(Object.create(null) as Record<string, unknown>, {
+  const proxy = new Proxy(Object.create(null) as Record<string, unknown>, {
     get: (_target, key) =>
       typeof key === "string" ? decodeScriptValue(__narravaStateGet(namespace, key)) : undefined,
     set: (_target, key, value) => {
@@ -46,6 +47,8 @@ function stateProxy(namespace: string): Record<string, unknown> {
       }
     },
   })
+  registerStateProxy(proxy)
+  return proxy
 }
 
 export default function state(): void {

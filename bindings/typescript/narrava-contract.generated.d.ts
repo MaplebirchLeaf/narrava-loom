@@ -5,7 +5,8 @@ declare global {
     | "V"
     | "T"
     | "setup"
-    | "World"
+    | "Random"
+    | "Location"
     | "Reaction"
     | "Macro"
     | "Logger"
@@ -33,6 +34,7 @@ declare global {
     | "action"
     | "fragment"
   type NarravaRuntimeCommandType =
+    | "debugScript"
     | "start"
     | "back"
     | "forward"
@@ -65,14 +67,21 @@ declare global {
     | "navigation"
     | "button"
     | "safeReturn"
-  type NarravaHostErrorDto = { readonly code: string; readonly message: string }
+  type NarravaHostErrorDto = { readonly code: string; readonly message: string; readonly severity?: NarravaDiagnosticSeverityDto; readonly location?: NarravaDiagnosticLocationDto }
+  type NarravaDiagnosticSeverityDto = "error" | "warning" | "note"
+  type NarravaDiagnosticLocationDto = { readonly source: string; readonly start: number | null; readonly end: number | null; readonly line: number | null; readonly column: number | null; readonly generated: boolean }
+  type NarravaHostLogLevelDto = "trace" | "debug" | "info" | "warn" | "error"
+  type NarravaHostLogRecordDto = { readonly sequence: number; readonly level: NarravaHostLogLevelDto; readonly target: string; readonly message: string; readonly diagnostic: NarravaHostErrorDto | null }
+  type NarravaHostDebugValueDto = { readonly name: string; readonly kind: string; readonly preview: string; readonly signature: string; readonly help: string; readonly children: readonly NarravaHostDebugValueDto[]; readonly truncated: boolean }
+  type NarravaHostDebugEvaluationDto = { readonly sequence: number; readonly value: NarravaHostDebugValueDto }
+  type NarravaHostDebugSnapshotDto = { readonly evaluation: NarravaHostDebugEvaluationDto | null; readonly current: string | null; readonly state: unknown; readonly location: unknown; readonly random: unknown; readonly truncated: boolean; readonly logs: readonly NarravaHostLogRecordDto[] }
   type NarravaHostNodeDto = { readonly type: "text"; readonly key: string; readonly text: string } | { readonly type: "hardBreak"; readonly key: string } | { readonly type: "styledText"; readonly key: string; readonly text: string; readonly styles: readonly string[]; readonly color: number; readonly delay?: number; readonly heading?: number } | { readonly type: "image"; readonly key: string; readonly resource: string; readonly alt: string } | { readonly type: "dialog"; readonly key: string; readonly initial: string; readonly pages: readonly NarravaHostDialogPageDto[] } | { readonly type: "region"; readonly key: string; readonly region: string; readonly nodes: readonly NarravaHostNodeDto[] } | { readonly type: "container"; readonly key: string; readonly presentation: NarravaContainerPresentationDto; readonly flow: NarravaContainerFlowDto; readonly nodes: readonly NarravaHostNodeDto[] } | { readonly type: "component"; readonly key: string; readonly capability: string; readonly version: number; readonly properties: unknown; readonly fallback: readonly NarravaHostNodeDto[] } | { readonly type: "replace"; readonly key: string; readonly target: NarravaHostReplaceTargetDto; readonly nodes: readonly NarravaHostNodeDto[] } | { readonly type: "action"; readonly key: string; readonly label: string; readonly action: string; readonly role: string } | { readonly type: "checkbox"; readonly key: string; readonly id: string; readonly unchecked: unknown; readonly checked: unknown; readonly selected: boolean } | { readonly type: "radiobutton"; readonly key: string; readonly id: string; readonly group: string; readonly value: unknown; readonly selected: boolean } | { readonly type: "textbox"; readonly key: string; readonly id: string; readonly value: string } | { readonly type: "navigation"; readonly key: string; readonly id: string; readonly label: string; readonly target: string | null } | { readonly type: "button"; readonly key: string; readonly id: string; readonly label: string; readonly target: string | null } | { readonly type: "safeReturn"; readonly key: string; readonly id: string; readonly target: string }
   type NarravaHostDialogPageDto = { readonly title: string; readonly nodes: readonly NarravaHostNodeDto[] }
   type NarravaContainerPresentationDto = "plain" | "panel"
   type NarravaContainerFlowDto = "stack" | "row"
   type NarravaHostReplaceTargetDto = { readonly kind: "region"; readonly value: string } | { readonly kind: "key"; readonly value: string }
   type NarravaHostUpdateDto = { readonly current: string; readonly nodes: readonly NarravaHostNodeDto[]; readonly can_back: boolean; readonly can_forward: boolean }
-  type NarravaRuntimeCommand = { readonly type: "start" } | { readonly type: "back" } | { readonly type: "forward" } | { readonly type: "activate"; readonly interaction: string } | { readonly type: "input"; readonly interaction: string; readonly value: unknown } | { readonly type: "save"; readonly operation: NarravaRuntimeSaveOperation; readonly target: string } | { readonly type: "selectLanguage"; readonly locale: string } | { readonly type: "resume"; readonly operation: number; readonly result?: NarravaPendingResult } | { readonly type: "cancel"; readonly operation: number }
+  type NarravaRuntimeCommand = { readonly type: "debugScript"; readonly source: string } | { readonly type: "start" } | { readonly type: "back" } | { readonly type: "forward" } | { readonly type: "activate"; readonly interaction: string } | { readonly type: "input"; readonly interaction: string; readonly value: unknown } | { readonly type: "save"; readonly operation: NarravaRuntimeSaveOperation; readonly target: string } | { readonly type: "selectLanguage"; readonly locale: string } | { readonly type: "resume"; readonly operation: number; readonly result?: NarravaPendingResult } | { readonly type: "cancel"; readonly operation: number }
   type NarravaRuntimeSaveOperation = "export" | "import"
   type NarravaPendingOperation = { readonly type: "delay"; readonly operation: number; readonly milliseconds: number } | { readonly type: "save"; readonly operation: number; readonly direction: NarravaRuntimeSaveOperation; readonly target: string; readonly document?: readonly number[] } | { readonly type: "selectLanguage"; readonly operation: number; readonly locale: string }
   type NarravaPendingResult = { readonly type: "save"; readonly document?: readonly number[] } | { readonly type: "selectLanguage" } | { readonly type: "failed"; readonly error: NarravaHostErrorDto }

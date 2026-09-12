@@ -3,7 +3,14 @@
 use super::*;
 
 impl HostApi {
-    pub fn drive_stable<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn drive_stable<
+        'hir,
+        'source,
+        Pending,
+        DispatchError: HostDispatchError,
+        Lifecycle,
+        Dispatch,
+    >(
         stable: HostStable<'hir, 'source>,
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
@@ -186,7 +193,7 @@ impl HostApi {
     }
 
     /// 在 MacroPending 边界重新进入统一 Macro 控制器。
-    pub fn dispatch_macro<'hir, 'source, Pending, DispatchError>(
+    pub fn dispatch_macro<'hir, 'source, Pending, DispatchError: HostDispatchError>(
         stable: HostStable<'hir, 'source>,
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
@@ -249,32 +256,37 @@ impl HostApi {
                 }))
             }
             Err(error) => {
+                let mut original: Option<Diagnostic> = None;
                 let transaction: EngineMirResumedTransaction<'hir, 'source> = match error {
+                    EngineMirMacroDispatchError::Callback { error, transaction } => {
+                        original = Some(error.into_diagnostic(
+                            "host.pending.dispatch_failed",
+                            "后续 Macro 分派失败，事务已回滚",
+                        ));
+                        *transaction
+                    }
                     EngineMirMacroDispatchError::Story(transaction)
-                    | EngineMirMacroDispatchError::Callback { transaction, .. }
                     | EngineMirMacroDispatchError::Vm { transaction, .. } => *transaction,
-                    EngineMirMacroDispatchError::Continue(error) => match *error {
-                        EngineMirVmResumeError::Story(transaction)
-                        | EngineMirVmResumeError::StoryRequest { transaction, .. }
-                        | EngineMirVmResumeError::Vm { transaction, .. }
-                        | EngineMirVmResumeError::IncludeLimitExceeded { transaction, .. }
-                        | EngineMirVmResumeError::UnexpectedMacroControl { transaction, .. } => {
-                            *transaction
-                        }
-                    },
+                    EngineMirMacroDispatchError::Continue(error) => {
+                        let (transaction, diagnostic) = mir_resume_failure(*error);
+                        original = Some(diagnostic);
+                        transaction
+                    }
                     EngineMirMacroDispatchError::NotMacro(_)
                     | EngineMirMacroDispatchError::InvalidSuspension(_) => unreachable!(),
                 };
                 let rollback_failed: bool = transaction.rollback(state, story).is_err();
                 Err(Box::new(HostMacroDispatchError::Failed {
-                    diagnostic: host_error(
-                        if rollback_failed {
-                            "engine.rollback.failed"
-                        } else {
-                            "host.pending.dispatch_failed"
-                        },
-                        "后续 Macro 分派失败，事务已回滚",
-                    ),
+                    diagnostic: if rollback_failed {
+                        host_error("engine.rollback.failed", "Macro 分派失败后无法恢复事务")
+                    } else {
+                        original.unwrap_or_else(|| {
+                            host_error(
+                                "host.pending.dispatch_failed",
+                                "后续 Macro 分派失败，事务已回滚",
+                            )
+                        })
+                    },
                     pending: None,
                 }))
             }
@@ -289,7 +301,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,
@@ -387,8 +399,8 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        ResumeError,
-        DispatchError,
+        ResumeError: HostDispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Resume,
         Dispatch,
@@ -443,8 +455,8 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        ResumeError,
-        DispatchError,
+        ResumeError: HostDispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Resume,
         Reaction,

@@ -25,7 +25,8 @@ export interface ScriptGlobalRegistry {
   V?: unknown
   T?: unknown
   setup?: unknown
-  World?: unknown
+  Random?: unknown
+  Location?: unknown
   Reaction?: unknown
   Macro?: unknown
   Logger?: unknown
@@ -45,7 +46,6 @@ export const scriptGlobals = globalThis as unknown as ScriptGlobalRegistry
 export const scriptFunctions = new Map<number, (...arguments_: unknown[]) => unknown>()
 export const eventRecords: EventRecord[] = []
 export const authorEventQueue: EventRecord[] = []
-export const logRecords: unknown[] = []
 export const macroDefinitions = new Map<string, { handler: (call: unknown) => unknown }>()
 export const macroHooks = new Map<number, unknown>()
 export const saveHooks = new Map<number, SaveHook>()

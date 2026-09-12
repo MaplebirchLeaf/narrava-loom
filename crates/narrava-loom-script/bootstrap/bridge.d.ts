@@ -6,12 +6,12 @@ declare function __narravaStateDel(namespace: string, key: string): unknown
 declare function __narravaStateSnapshot(namespace: string): Record<string, unknown>
 declare function __narravaStateReplace(namespace: string, values: Record<string, unknown>): void
 
-declare function __narravaWorldAdd(place: NarravaPlaceDefinition): void
-declare function __narravaWorldGet(id: string): NarravaPlace | undefined
-declare function __narravaWorldPlaces(): readonly NarravaPlace[]
-declare function __narravaWorldLocate(point: NarravaWorldPoint): readonly NarravaPlace[]
-declare function __narravaWorldCurrent(): NarravaWorldPosition | null
-declare function __narravaWorldMove(point: NarravaWorldPoint): NarravaWorldPosition
+declare function __narravaLocationAdd(place: NarravaPlaceDefinition): void
+declare function __narravaLocationGet(id: string): NarravaPlace | undefined
+declare function __narravaLocationPlaces(): readonly NarravaPlace[]
+declare function __narravaLocationLocate(point: NarravaLocationPoint): readonly NarravaPlace[]
+declare function __narravaLocationCurrent(): NarravaLocationPosition | null
+declare function __narravaLocationMove(point: NarravaLocationPoint): NarravaLocationPosition
 
 declare function __narravaReactionAdd(definition: string): string
 declare function __narravaReactionGet(id: string): string | undefined
@@ -24,3 +24,11 @@ declare function __narravaResourceHas(path: string): boolean
 declare function __narravaResourceInfo(path: string): unknown
 declare function __narravaResourceRead(path: string): number[] | undefined
 declare function __narravaResourceText(path: string): string | undefined
+
+/** Core 保存的确定性随机序列。 */
+declare function __narravaRandomNext(): number
+declare function __narravaRandomSeed(seed: number): void
+declare function __narravaRandomCurrent(): { seed: string; state: string }
+
+/** 不调用 Proxy trap 的原生检查。 */
+declare function __narravaConsoleIsProxy(value: unknown): boolean

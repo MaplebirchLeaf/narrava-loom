@@ -1,8 +1,8 @@
 //! Script 发起的 Audio、Save 与语言请求；平台 IO 留给 Session 与 Host。
 
-use crate::{EcmaBinding, ScriptError, js_string, script_error, value_to_json};
+use crate::{EcmaBinding, ScriptError, js_string, script_error, state_adapter, value_to_json};
 use boa_engine::Source;
-use narrava_loom_core::expression::value::Value;
+use narrava_loom_core::{expression::value::Value, state::State};
 
 impl EcmaBinding {
     /// 原生 Twee 与 Script Audio 共用同一参数校验和有序 effect 队列。
@@ -119,6 +119,7 @@ impl EcmaBinding {
         operation: &str,
         target: &str,
         outcome: Result<(), &str>,
+        state: &mut State,
     ) -> Result<(), ScriptError> {
         let completion = match outcome {
             Ok(()) => {
@@ -129,12 +130,15 @@ impl EcmaBinding {
             }
         };
         let expression = format!("__narrava.completeSave({completion})");
-        self.runtime
-            .borrow_mut()
-            .context
-            .eval(Source::from_bytes(expression.as_bytes()))
-            .map(|_| ())
-            .map_err(|error| script_error("script.save_after", error))
+        let mut runtime = self.runtime.borrow_mut();
+        state_adapter::with_state(&mut runtime.context, state, |context| {
+            context
+                .eval(Source::from_bytes(expression.as_bytes()))
+                .map(|_| ())
+                .map_err(|error| {
+                    super::diagnostics::js_error(context, "script.save_after", error, None)
+                })
+        })
     }
 
     /// 同步 Host 已确认的运行语言，使脚本侧 `I18n.locale` 与实际渲染语言一致。

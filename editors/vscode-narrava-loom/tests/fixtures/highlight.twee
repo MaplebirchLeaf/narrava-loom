@@ -1,0 +1,31 @@
+:: HighlightWidgets [widget]
+<<widget "highlightCard">>
+  <<print @args[0]>>
+<</widget>>
+
+/%
+  HighlightGallery 只用于检查 VS Code 高亮，不会从正常故事进入。
+  本注释中的 <<set $ignored to true>> 不应按 Macro 着色。
+%/
+:: HighlightGallery [reference exit]
+<<set $hero.profile.name to "Author">>
+<<set _counter to 42>>
+<<set @choice.label to 'Library'>>
+<<set setup.build.channel to "nightly">>
+
+<<if defined($hero.profile.name) and _counter >= 1>>
+  <<print scriptedGreeting($hero.profile.name)>>
+<<elseif empty(@choice.label)>>
+  <<print string(number(3.14))>>
+<<else>>
+  <<run Object.assign($hero.profile, { ready: true })>>
+<</if>>
+
+<<print `反引号字符串：${$hero.profile.name} / ${string(_counter)}`>>
+
+<<highlightCard "自定义 Widget Macro">>
+<<crossFileCard "跨文件 Widget Macro">>
+
+<<link [[进入大厅|Hall]]>><</link>>
+<<link [[查看藏书室|Library]]>><</link>>
+<span class="highlight-demo" data-passage="HighlightGallery">HTML 标签、属性和文本</span>

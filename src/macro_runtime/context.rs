@@ -209,6 +209,10 @@ impl<'a> MacroEvaluationContext<'a> {
 }
 
 impl EvaluationContext for MacroEvaluationContext<'_> {
+    fn next_random(&self) -> Option<f64> {
+        self.base.next_random()
+    }
+
     fn global(&self, name: &str) -> Option<&Value> {
         self.base.global(name)
     }

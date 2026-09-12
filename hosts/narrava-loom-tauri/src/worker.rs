@@ -14,8 +14,8 @@ use narrava_loom_core::{
     mir::MirStory, nar::ValidatedNarPackage, resource::ResourceCatalog, state::State, twee,
 };
 
-use narrava_loom_protocol::{RuntimeCommand, RuntimeUpdate};
-use narrava_loom_script::{RuntimeData, RuntimeSession};
+use narrava_loom_protocol::{HostDebugSnapshotDto, HostLogLevelDto, RuntimeCommand, RuntimeUpdate};
+use narrava_loom_script::RuntimeData;
 
 use crate::{HostErrorDto, HostLogDto, package::load_language_packages};
 
@@ -29,8 +29,14 @@ pub(crate) enum WorkerRequest {
         command: RuntimeCommand,
         reply: WorkerReply,
     },
+    Complete {
+        path: String,
+        reply: Sender<Result<Vec<narrava_loom_protocol::HostDebugValueDto>, HostErrorDto>>,
+    },
     /// 拉取当前日志快照。
     Logs(Sender<Vec<HostLogDto>>),
+    /// 读取已提交状态；Runtime 拒绝 Pending 中间态。
+    Inspect(Sender<Result<HostDebugSnapshotDto, HostErrorDto>>),
     /// 拉取可用语言列表。
     Languages(Sender<Vec<String>>),
 }
@@ -73,13 +79,19 @@ pub(crate) fn run_worker(
         Ok(ast) => ast,
         Err(error) => {
             let diagnostic = error.diagnostic();
-            return fail_worker(requests, &diagnostic.code, diagnostic.message);
+            return fail_worker_error(
+                requests,
+                narrava_loom_script::protocol_adapter::diagnostic(diagnostic),
+            );
         }
     };
     let hir: HirStory<'_> = match HirStory::lower(&ast) {
         Ok(hir) => hir,
         Err(error) => {
-            return fail_worker(requests, &error.diagnostic.code, error.diagnostic.message);
+            return fail_worker_error(
+                requests,
+                narrava_loom_script::protocol_adapter::diagnostic(error.diagnostic),
+            );
         }
     };
     let mir: MirStory<'_, '_> = match MirStory::lower(&hir) {
@@ -141,7 +153,7 @@ pub(crate) fn run_worker(
         &mut state,
     ) {
         Ok(script) => script,
-        Err(error) => return fail_worker(requests, error.code.as_str(), error.message),
+        Err(error) => return fail_worker_error(requests, error.into_host_error()),
     };
     let identity = match config.identity() {
         Ok(identity) => identity,
@@ -157,10 +169,6 @@ pub(crate) fn run_worker(
         narrava_loom_script::RuntimeSession::with_data(&hir, &bytecode, script, state, services);
     let mut runtime = session;
     let mut audio = crate::audio::AudioOutput::new(resources.as_ref().clone());
-    let mut logs: Vec<HostLogDto> = vec![HostLogDto {
-        level: String::from("info"),
-        message: String::from("Runtime Worker 已就绪"),
-    }];
 
     loop {
         let request = match requests.recv() {
@@ -171,17 +179,22 @@ pub(crate) fn run_worker(
             WorkerRequest::Execute { command, reply } => {
                 let result: WorkerResult = runtime.execute(command).map(|update| {
                     let (update, errors) = audio.consume(update);
-                    logs.extend(errors.into_iter().map(|error| HostLogDto {
-                        level: String::from("warn"),
-                        message: error.message,
-                    }));
+                    for error in errors {
+                        runtime.record_host_error(&error);
+                    }
                     update
                 });
-                append_runtime_notices(&mut runtime, &mut logs);
+                let _notices = runtime.take_notices();
                 let _sent = reply.send(result);
             }
+            WorkerRequest::Complete { path, reply } => {
+                let _sent = reply.send(runtime.console_completions(&path));
+            }
             WorkerRequest::Logs(reply) => {
-                let _sent = reply.send(logs.clone());
+                let _sent = reply.send(runtime.log_records());
+            }
+            WorkerRequest::Inspect(reply) => {
+                let _sent = reply.send(runtime.debug_snapshot());
             }
             WorkerRequest::Languages(reply) => {
                 let _sent = reply.send(available_languages.clone());
@@ -190,25 +203,30 @@ pub(crate) fn run_worker(
     }
 }
 
-fn append_runtime_notices(runtime: &mut RuntimeSession<'_, '_>, logs: &mut Vec<HostLogDto>) {
-    logs.extend(runtime.take_notices().into_iter().map(|notice| HostLogDto {
-        level: String::from("error"),
-        message: format!("{}：{}", notice.code, notice.message),
-    }));
-    if logs.len() > 200 {
-        logs.drain(..logs.len() - 200);
-    }
+pub(crate) fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message: String) {
+    fail_worker_error(requests, HostErrorDto::new(code, message));
 }
 
-pub(crate) fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message: String) {
+fn fail_worker_error(requests: Receiver<WorkerRequest>, error: HostErrorDto) {
     for request in requests {
         let reply: WorkerReply = match request {
             WorkerRequest::Execute { reply, .. } => reply,
+            WorkerRequest::Complete { reply, .. } => {
+                let _sent = reply.send(Err(error.clone()));
+                continue;
+            }
             WorkerRequest::Logs(reply) => {
                 let _sent = reply.send(vec![HostLogDto {
-                    level: String::from("error"),
-                    message: format!("{code}：{message}"),
+                    sequence: 1,
+                    level: HostLogLevelDto::Error,
+                    target: String::from("runtime"),
+                    message: error.message.clone(),
+                    diagnostic: Some(error.clone()),
                 }]);
+                continue;
+            }
+            WorkerRequest::Inspect(reply) => {
+                let _sent = reply.send(Err(error.clone()));
                 continue;
             }
             WorkerRequest::Languages(reply) => {
@@ -216,7 +234,7 @@ pub(crate) fn fail_worker(requests: Receiver<WorkerRequest>, code: &str, message
                 continue;
             }
         };
-        let _sent: Result<(), _> = reply.send(Err(HostErrorDto::new(code, message.clone())));
+        let _sent: Result<(), _> = reply.send(Err(error.clone()));
     }
 }
 

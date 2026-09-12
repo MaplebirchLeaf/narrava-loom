@@ -5,7 +5,9 @@
 
 use tauri::State;
 
-use crate::{HostAssetsDto, HostErrorDto, HostLogDto, HostUpdateDto, TauriHost};
+use crate::{
+    HostAssetsDto, HostDebugSnapshotDto, HostErrorDto, HostLogDto, HostUpdateDto, TauriHost,
+};
 
 /// 启动游戏并返回起始 Passage 更新。
 #[tauri::command]
@@ -31,13 +33,13 @@ pub async fn history(
     host.history(backward).await
 }
 
-/// 写回输入控件值。
+/// 写回输入控件值，并返回可选的 Reaction 更新帧。
 #[tauri::command]
 pub async fn input(
     interaction: String,
     value: serde_json::Value,
     host: State<'_, TauriHost>,
-) -> Result<(), HostErrorDto> {
+) -> Result<Option<HostUpdateDto>, HostErrorDto> {
     host.input(interaction, value).await
 }
 
@@ -53,7 +55,7 @@ pub async fn save_game(
     operation: String,
     target: String,
     host: State<'_, TauriHost>,
-) -> Result<(), HostErrorDto> {
+) -> Result<Option<HostUpdateDto>, HostErrorDto> {
     host.save(operation, target).await
 }
 
@@ -61,6 +63,14 @@ pub async fn save_game(
 #[tauri::command]
 pub async fn host_logs(host: State<'_, TauriHost>) -> Result<Vec<HostLogDto>, HostErrorDto> {
     host.logs().await
+}
+
+/// 只读开发快照；权限与 Runtime 忙碌校验由 Host 和 Worker 执行。
+#[tauri::command]
+pub async fn debug_snapshot(
+    host: State<'_, TauriHost>,
+) -> Result<HostDebugSnapshotDto, HostErrorDto> {
+    host.debug_snapshot().await
 }
 
 /// 拉取可用语言列表。
@@ -74,7 +84,7 @@ pub async fn available_languages(host: State<'_, TauriHost>) -> Result<Vec<Strin
 pub async fn select_language(
     locale: String,
     host: State<'_, TauriHost>,
-) -> Result<(), HostErrorDto> {
+) -> Result<Option<HostUpdateDto>, HostErrorDto> {
     host.select_language(locale).await
 }
 
@@ -102,4 +112,28 @@ pub fn toggle_devtools(
         window.open_devtools();
     }
     Ok(())
+}
+
+/// 在游戏 Runtime 执行开发命令；不访问 WebView realm。
+#[tauri::command]
+pub async fn debug_execute(
+    source: String,
+    host: State<'_, TauriHost>,
+) -> Result<Option<HostUpdateDto>, HostErrorDto> {
+    host.debug_execute(source).await
+}
+
+/// 只读对象成员与 API 说明；不执行命令文本。
+#[tauri::command]
+pub async fn debug_complete(
+    path: String,
+    host: State<'_, TauriHost>,
+) -> Result<Vec<narrava_loom_protocol::HostDebugValueDto>, HostErrorDto> {
+    host.debug_complete(path).await
+}
+
+/// 取消开发命令的受管等待，不打断已经开始的文件 IO。
+#[tauri::command]
+pub fn debug_cancel(host: State<'_, TauriHost>) -> Result<(), HostErrorDto> {
+    host.debug_cancel()
 }

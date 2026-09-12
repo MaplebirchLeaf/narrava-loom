@@ -10,6 +10,13 @@ pub(crate) enum ContextAccess<'a> {
 }
 
 impl ContextAccess<'_> {
+    pub(crate) fn next_random(&self) -> Option<f64> {
+        match self {
+            Self::Read(context) => context.next_random(),
+            Self::Write(context) => context.next_random(),
+        }
+    }
+
     /// 只读查询 State.global；Read 与 Write 模式行为一致。
     pub(crate) fn global(&self, name: &str) -> Option<&Value> {
         match self {
@@ -65,7 +72,14 @@ impl ContextAccess<'_> {
         let writer: &mut dyn WritableEvaluationContext = self.writer(span)?;
         writer
             .call_script(callable, arguments)
-            .map_err(|_error: ScriptCallError| EvalError::ScriptCallFailed(span))
+            .map_err(|error: ScriptCallError| match error {
+                ScriptCallError::Diagnostic(diagnostic) => {
+                    EvalError::ScriptDiagnostic(span, diagnostic)
+                }
+                ScriptCallError::Unavailable | ScriptCallError::Failed => {
+                    EvalError::ScriptCallFailed(span)
+                }
+            })
     }
 }
 

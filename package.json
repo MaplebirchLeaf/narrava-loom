@@ -7,7 +7,9 @@
     "editors/vscode-narrava-loom"
   ],
   "scripts": {
-    "check": "bun run version:check && bun run contract:check && bun run bootstrap:check && bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "check": "bun run version:check && bun run contract:check && bun run bootstrap:check && bun run console:check && bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "console:generate": "node scripts/generate-console-api.mjs",
+    "console:check": "node scripts/generate-console-api.mjs --check",
     "bootstrap:build": "bun scripts/build-bootstrap.mjs",
     "bootstrap:check": "bun scripts/build-bootstrap.mjs --check && tsc -p crates/narrava-loom-script/bootstrap/tsconfig.json",
     "vsix": "bun scripts/build-vscode-extension.mjs",

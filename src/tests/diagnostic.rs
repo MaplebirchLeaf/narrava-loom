@@ -19,6 +19,21 @@ fn creates_diagnostic_without_source_location() {
 }
 
 #[test]
+fn source_only_diagnostic_keeps_unknown_coordinates_absent() {
+    let diagnostic: Diagnostic =
+        Diagnostic::new("script.execute", DiagnosticSeverity::Error, "boom")
+            .with_source("scripts/game.ts", true);
+    let source = diagnostic.source.as_ref().unwrap();
+    assert!(diagnostic.location.is_none());
+    assert!(source.line.is_none());
+    assert!(source.column.is_none());
+    assert_eq!(
+        diagnostic.to_string(),
+        "scripts/game.ts (generated): [script.execute] boom"
+    );
+}
+
+#[test]
 fn attaches_relative_source_location() {
     let location: DiagnosticLocation = DiagnosticLocation {
         source: "story/main.twee".to_owned(),

@@ -113,6 +113,10 @@ impl<Story> EvaluationContext for MacroLogicContext<'_, Story>
 where
     Story: MacroStoryAccess + ?Sized,
 {
+    fn next_random(&self) -> Option<f64> {
+        self.state.next_random()
+    }
+
     fn global(&self, name: &str) -> Option<&Value> {
         self.state.global(name)
     }

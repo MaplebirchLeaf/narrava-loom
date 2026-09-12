@@ -49,6 +49,7 @@ pub enum TuiCommand {
     QuickSave,
     QuickLoad,
     NextLanguage,
+    Inspect,
     Redraw,
     Quit,
 }
@@ -80,6 +81,9 @@ impl TuiCommand {
         }
         if matches!(trimmed, "language" | "lang") {
             return Ok(Self::NextLanguage);
+        }
+        if matches!(trimmed, "inspect" | ":inspect") {
+            return Ok(Self::Inspect);
         }
         if matches!(trimmed, "q" | "quit" | "exit") {
             return Ok(Self::Quit);
@@ -128,6 +132,7 @@ impl TuiCommand {
             Self::QuickSave => Ok(TuiOperation::QuickSave),
             Self::QuickLoad => Ok(TuiOperation::QuickLoad),
             Self::NextLanguage => Ok(TuiOperation::NextLanguage),
+            Self::Inspect => Ok(TuiOperation::Inspect),
             Self::Redraw => Ok(TuiOperation::Redraw),
             Self::Quit => Ok(TuiOperation::Quit),
         }
@@ -147,6 +152,7 @@ pub enum TuiOperation {
     QuickSave,
     QuickLoad,
     NextLanguage,
+    Inspect,
     Redraw,
     Quit,
 }

@@ -6,7 +6,6 @@
   var scriptFunctions = new Map;
   var eventRecords = [];
   var authorEventQueue = [];
-  var logRecords = [];
   var macroDefinitions = new Map;
   var macroHooks = new Map;
   var saveHooks = new Map;
@@ -154,7 +153,8 @@
       "V",
       "T",
       "setup",
-      "World",
+      "Random",
+      "Location",
       "Reaction",
       "Macro",
       "Logger",
@@ -261,7 +261,7 @@
     });
     scriptGlobals.Story = Object.seal({
       has: (name) => runtimeConfiguration.story.passages.some((passage) => passage.name === name),
-      current: () => runtimeConfiguration.story.current ?? undefined,
+      current: () => runtimeConfiguration.story.passages.find((passage) => passage.name === runtimeConfiguration.story.current),
       get: (name) => runtimeConfiguration.story.passages.find((passage) => passage.name === name),
       visits: (name) => runtimeConfiguration.story.visits[name] ?? 0
     });
@@ -289,16 +289,16 @@
 
   // crates/narrava-loom-script/bootstrap/logger.ts
   function logger() {
-    const methods = Object.fromEntries(["trace", "debug", "info", "warn", "error"].map((level) => [
-      level,
-      (target, message) => logRecords.push({ level, target, message })
-    ]));
-    Object.assign(methods, {
-      subscribe: () => subscriptionId(),
-      take: () => [],
-      unsubscribe: () => false
+    scriptGlobals.Logger = Object.freeze({
+      trace: (target, message) => __narravaLoggerLog("trace", target, message),
+      debug: (target, message) => __narravaLoggerLog("debug", target, message),
+      info: (target, message) => __narravaLoggerLog("info", target, message),
+      warn: (target, message) => __narravaLoggerLog("warn", target, message),
+      error: (target, message) => __narravaLoggerLog("error", target, message),
+      subscribe: (filter) => __narravaLoggerSubscribe(filter),
+      take: (subscription) => __narravaLoggerTake(subscription),
+      unsubscribe: (subscription) => __narravaLoggerUnsubscribe(subscription)
     });
-    scriptGlobals.Logger = Object.seal(methods);
   }
 
   // crates/narrava-loom-script/bootstrap/macro.ts
@@ -332,6 +332,17 @@
     const id = subscriptionId();
     macroHooks.set(id, { kind, name, hook });
     return id;
+  }
+
+  // crates/narrava-loom-script/bootstrap/random.ts
+  var next = () => __narravaRandomNext();
+  function random() {
+    scriptGlobals.Random = Object.freeze({
+      next,
+      seed: (seed) => __narravaRandomSeed(seed),
+      current: () => __narravaRandomCurrent()
+    });
+    Object.defineProperty(Math, "random", { value: next, writable: false, configurable: false });
   }
 
   // crates/narrava-loom-script/bootstrap/reaction.ts
@@ -479,6 +490,689 @@
       scriptGlobals.__narrava.save = { operation, target: rewritten };
     }
   }
+  // crates/narrava-loom-script/bootstrap/console-api.generated.json
+  var console_api_generated_default = {
+    State: {
+      signature: "NarravaState",
+      help: `作者侧 State 入口：global 存函数与数据、variables 参与存档（capture/restore 只覆盖它）、 temporary 在 restore 时重建、setup 是单个启动值（随启动环境管理）。
+
+State namespaces: global holds functions and data; variables is saved; temporary is rebuilt on restore; setup holds startup configuration. Script capture/restore covers variables only.`
+    },
+    "State.global": {
+      signature: "NarravaStateNamespace<NarravaGlobal>",
+      help: `一个 State 命名空间的读写接口；set/del 返回被替换的旧值（不存在时为 undefined）。
+
+Read and write a State namespace; set/del return the previous value, or undefined if absent.`
+    },
+    "State.global.get": {
+      signature: "(name: string) => NarravaGlobal",
+      help: "读取命名变量，不存在时返回 undefined。 Read a named value; missing keys return undefined."
+    },
+    "State.global.has": {
+      signature: "(name: string) => boolean",
+      help: "检查名称是否存在于此接口的集合中。 Check whether this named entry exists."
+    },
+    "State.global.set": {
+      signature: "(name: string, value: NarravaGlobal) => NarravaGlobal",
+      help: "写入变量并返回旧值。 Write a value and return its previous value."
+    },
+    "State.global.del": {
+      signature: "(name: string) => NarravaGlobal",
+      help: "删除变量并返回旧值。 Delete a key and return its previous value."
+    },
+    "State.global.extend": {
+      signature: "(values: Readonly<Record<string, NarravaGlobal>>) => NarravaImportReport",
+      help: "批量导入变量，返回新增和覆盖数量。 Import values and report inserted/replaced counts."
+    },
+    "State.variables": {
+      signature: "NarravaStateNamespace<NarravaData>",
+      help: `一个 State 命名空间的读写接口；set/del 返回被替换的旧值（不存在时为 undefined）。
+
+Read and write a State namespace; set/del return the previous value, or undefined if absent.`
+    },
+    "State.variables.get": {
+      signature: "(name: string) => NarravaData",
+      help: "读取命名变量，不存在时返回 undefined。 Read a named value; missing keys return undefined."
+    },
+    "State.variables.has": {
+      signature: "(name: string) => boolean",
+      help: "检查名称是否存在于此接口的集合中。 Check whether this named entry exists."
+    },
+    "State.variables.set": {
+      signature: "(name: string, value: NarravaData) => NarravaData",
+      help: "写入变量并返回旧值。 Write a value and return its previous value."
+    },
+    "State.variables.del": {
+      signature: "(name: string) => NarravaData",
+      help: "删除变量并返回旧值。 Delete a key and return its previous value."
+    },
+    "State.variables.extend": {
+      signature: "(values: Readonly<Record<string, NarravaData>>) => NarravaImportReport",
+      help: "批量导入变量，返回新增和覆盖数量。 Import values and report inserted/replaced counts."
+    },
+    "State.temporary": {
+      signature: "NarravaStateNamespace<NarravaData>",
+      help: `一个 State 命名空间的读写接口；set/del 返回被替换的旧值（不存在时为 undefined）。
+
+Read and write a State namespace; set/del return the previous value, or undefined if absent.`
+    },
+    "State.temporary.get": {
+      signature: "(name: string) => NarravaData",
+      help: "读取命名变量，不存在时返回 undefined。 Read a named value; missing keys return undefined."
+    },
+    "State.temporary.has": {
+      signature: "(name: string) => boolean",
+      help: "检查名称是否存在于此接口的集合中。 Check whether this named entry exists."
+    },
+    "State.temporary.set": {
+      signature: "(name: string, value: NarravaData) => NarravaData",
+      help: "写入变量并返回旧值。 Write a value and return its previous value."
+    },
+    "State.temporary.del": {
+      signature: "(name: string) => NarravaData",
+      help: "删除变量并返回旧值。 Delete a key and return its previous value."
+    },
+    "State.temporary.extend": {
+      signature: "(values: Readonly<Record<string, NarravaData>>) => NarravaImportReport",
+      help: "批量导入变量，返回新增和覆盖数量。 Import values and report inserted/replaced counts."
+    },
+    "State.setup": {
+      signature: "{ get(): NarravaData; set(value: NarravaData): NarravaData; }",
+      help: "启动配置读写接口。 Startup configuration access."
+    },
+    "State.setup.get": {
+      signature: "() => NarravaData",
+      help: "读取启动配置。 Read startup configuration."
+    },
+    "State.setup.set": {
+      signature: "(value: NarravaData) => NarravaData",
+      help: "整体替换启动配置。 Replace startup configuration."
+    },
+    V: {
+      signature: "{ [name: string]: NarravaData; }",
+      help: "`$variables` 的属性代理。点语法与动态方括号语法都直接读写活动 Rust State。\n\nA property proxy for $variables; dot and bracket access both read and write the active Rust State."
+    },
+    T: {
+      signature: "{ [name: string]: NarravaData; }",
+      help: "`_temporary` 的属性代理；恢复存档时会随临时变量一起清空。\n\nA property proxy for _temporary, cleared when a save is restored."
+    },
+    setup: {
+      signature: "{ [name: string]: NarravaData; }",
+      help: "启动配置对象的属性代理，与 Twee 中的 `setup.name` 指向同一份数据。\n\nA startup configuration proxy sharing the same data as setup.name in Twee."
+    },
+    Random: {
+      signature: "{ next(): number; seed(seed: number): void; current(): { readonly seed: string; readonly state: string; }; }",
+      help: "可保存、可回放的共享随机序列。 Shared, saved and replayable random sequence."
+    },
+    "Random.next": {
+      signature: "() => number",
+      help: `生成 [0, 1) 的随机数，与 Math.random 和 Twee random/either 共用序列。
+Draw from [0, 1), sharing the sequence with Math.random and Twee random/either.`
+    },
+    "Random.seed": {
+      signature: "(seed: number) => void",
+      help: `以非负安全整数重置序列；默认种子为 0。
+Reset with a nonnegative safe integer; the default seed is 0.`
+    },
+    "Random.current": {
+      signature: "() => { readonly seed: string; readonly state: string; }",
+      help: `只读序列快照；十进制字符串保留完整的 64 位状态。
+Read-only sequence snapshot; decimal strings preserve all 64 bits.`
+    },
+    Location: {
+      signature: "NarravaLocation",
+      help: `地点定义与移动查询；状态随故事事务、历史和存档恢复。
+
+Place definitions and movement queries; state follows story transactions, history, and saves.`
+    },
+    "Location.add": {
+      signature: "(place: NarravaPlaceDefinition) => void",
+      help: `仅初始脚本装载期间可注册；parent 可引用稍后注册的地点。
+
+Register only during initial script loading; parent may refer to a place registered later.`
+    },
+    "Location.get": {
+      signature: "(id: string) => NarravaPlaceDefinition | undefined",
+      help: `按 ID 查询独立快照；不存在时返回 undefined。
+
+Get a snapshot by ID, or undefined if absent.`
+    },
+    "Location.places": {
+      signature: "() => readonly NarravaPlaceDefinition[]",
+      help: `按 ID 排序的全部地点快照。
+
+Snapshots of all places sorted by ID.`
+    },
+    "Location.locate": {
+      signature: "(point: NarravaLocationPoint) => readonly NarravaPlaceDefinition[]",
+      help: `查询包含坐标的所有地点，父地点先于子地点；保留重叠地点。
+
+Find all places containing the point, with parents before children; overlapping places are retained.`
+    },
+    "Location.current": {
+      signature: "() => NarravaLocationPosition | null",
+      help: `当前位置快照；未进入地点时为 null。
+
+Current position snapshot, or null before entering a place.`
+    },
+    "Location.move": {
+      signature: "(point: NarravaLocationPoint) => NarravaLocationPosition",
+      help: `只在当前地点范围内移动；未进入地点或越界会抛出错误。 读档/语言刷新当前页时只校验并返回既有位置，不重复提交移动。
+
+Move within the current place; throws if no place is active or the point is outside it. Save/language refreshes validate and return the existing position without moving again.`
+    },
+    Reaction: {
+      signature: "{ add(definition: NarravaReactionDefinition): NarravaReactionStatus; get(id: string): NarravaReactionStatus | undefined; enable(id: string): boolean; disable(id: string): boolean; reset(id: string): boolean; }",
+      help: `声明式叙事反应规则；cond 与动态 emit.payload 内禁止 add/enable/disable/reset。
+
+Declarative narrative reactions; add/enable/disable/reset are forbidden inside cond and dynamic emit.payload callbacks.`
+    },
+    "Reaction.add": {
+      signature: "(definition: NarravaReactionDefinition) => NarravaReactionStatus",
+      help: "注册声明式反应规则。 Register a declarative reaction."
+    },
+    "Reaction.get": {
+      signature: "(id: string) => NarravaReactionStatus | undefined",
+      help: `回调内读取本轮解析开始时的状态；其他调用读取当前状态。
+
+Callbacks read the state at the start of this resolution; other calls read the current state.`
+    },
+    "Reaction.enable": {
+      signature: "(id: string) => boolean",
+      help: "启用已注册规则。 Enable a registered reaction."
+    },
+    "Reaction.disable": {
+      signature: "(id: string) => boolean",
+      help: "停用规则并保留定义。 Disable a reaction while keeping its definition."
+    },
+    "Reaction.reset": {
+      signature: "(id: string) => boolean",
+      help: "重置规则的触发次数。 Reset the reaction execution count."
+    },
+    Macro: {
+      signature: "NarravaMacro",
+      help: `作者宏注册表：脚本用 Macro.add 定义的新宏可在 .twee 中调用。
+
+The author macro registry; macros registered with Macro.add are callable from .twee.`
+    },
+    "Macro.add": {
+      signature: "(name: string, definition: NarravaMacroDefinition) => NarravaMacroDefinition | undefined",
+      help: `注册宏；返回同名旧定义（不存在时为 undefined）。
+
+Register a macro and return its previous definition, or undefined if absent.`
+    },
+    "Macro.update": {
+      signature: "(name: string, definition: NarravaMacroDefinition) => NarravaMacroDefinition",
+      help: `替换已存在的宏；宏不存在时抛错，返回旧定义。
+
+Replace an existing macro and return its previous definition; throws if absent.`
+    },
+    "Macro.del": {
+      signature: "(name: string) => NarravaMacroDefinition | undefined",
+      help: `删除宏；返回被删除的定义（不存在时为 undefined）。
+
+Delete a macro and return its definition, or undefined if absent.`
+    },
+    "Macro.get": {
+      signature: "(name: string) => NarravaMacroDefinition | undefined",
+      help: "按名称读取宏定义。 Read a macro definition by name."
+    },
+    "Macro.has": {
+      signature: "(name: string) => boolean",
+      help: "检查名称是否存在于此接口的集合中。 Check whether this named entry exists."
+    },
+    "Macro.before": {
+      signature: "(name: string, hook: (call: NarravaMacroCall) => void) => NarravaMacroSubscription",
+      help: `在宏执行前调用 hook，可观察但不能改写输出。
+
+Run a hook before execution; it may observe the call but cannot rewrite the output.`
+    },
+    "Macro.after": {
+      signature: "(name: string, hook: (output: NarravaData, call: NarravaMacroCall) => NarravaData) => NarravaMacroSubscription",
+      help: `在宏输出后调用 hook，返回的值为新的输出。
+
+Run a hook after output; its return value becomes the new output.`
+    },
+    "Macro.off": {
+      signature: "(subscription: NarravaMacroSubscription) => boolean",
+      help: `注销 before/after 订阅；返回是否成功。
+
+Remove a before/after subscription and report whether it was removed.`
+    },
+    Logger: {
+      signature: "NarravaLogger",
+      help: `按 target 记录有界日志，支持筛选订阅与读取。
+
+Record bounded logs by target; subscribe to and consume filtered records.`
+    },
+    "Logger.trace": {
+      signature: "(target: string, message: string) => void",
+      help: "记录跟踪日志，target 为来源标签。 Record a trace message under a source target."
+    },
+    "Logger.debug": {
+      signature: "(target: string, message: string) => void",
+      help: "记录调试日志，target 为来源标签。 Record a debug message under a source target."
+    },
+    "Logger.info": {
+      signature: "(target: string, message: string) => void",
+      help: "记录信息日志，target 为来源标签。 Record a info message under a source target."
+    },
+    "Logger.warn": {
+      signature: "(target: string, message: string) => void",
+      help: "记录警告日志，target 为来源标签。 Record a warn message under a source target."
+    },
+    "Logger.error": {
+      signature: "(target: string, message: string) => void",
+      help: "记录错误日志，target 为来源标签。 Record a error message under a source target."
+    },
+    "Logger.subscribe": {
+      signature: "(filter?: { minimumLevel?: NarravaLogLevel | undefined; target?: string | undefined; } | undefined) => NarravaLogSubscription",
+      help: `订阅后续符合条件的日志。
+
+Subscribe to subsequent matching log records.`
+    },
+    "Logger.take": {
+      signature: "(subscription: NarravaLogSubscription) => NarravaLogRecord[] | undefined",
+      help: `取走该订阅的待处理日志；订阅不存在时返回 undefined。
+
+Drain pending records; return undefined for an unknown subscription.`
+    },
+    "Logger.unsubscribe": {
+      signature: "(subscription: NarravaLogSubscription) => boolean",
+      help: `取消订阅，返回是否成功移除。
+
+Unsubscribe and report whether the subscription existed.`
+    },
+    Event: {
+      signature: "NarravaEvent",
+      help: `作者事件总线：emit 返回记录序号；订阅只接收之后发生的事件。
+
+The author event bus: emit returns a sequence number; subscriptions receive future events only.`
+    },
+    "Event.emit": {
+      signature: "(name: string, payload?: NarravaData) => number",
+      help: `发布作者事件；五个 passage:* 名称由 Engine 保留。
+
+Emit an author-defined event. The five passage:* names are Engine-reserved.`
+    },
+    "Event.subscribe": {
+      signature: "(filter?: { name?: string | undefined; } | undefined) => NarravaEventSubscription",
+      help: `只订阅之后发生的事件；省略 name 时接收作者和 Engine 事件。
+
+Subscribe to future events only; omit name to receive both author and Engine events.`
+    },
+    "Event.take": {
+      signature: "(subscription: NarravaEventSubscription) => NarravaEventRecord[] | undefined",
+      help: `取走待消费记录；仅当订阅不存在时返回 undefined。
+
+Drain pending records; returns undefined only if the subscription does not exist.`
+    },
+    "Event.unsubscribe": {
+      signature: "(subscription: NarravaEventSubscription) => boolean",
+      help: "移除事件订阅及其待处理队列。 Remove an event subscription and its pending queue."
+    },
+    Host: {
+      signature: "NarravaHost",
+      help: `Host 能力入口；目前只有 delay（配合 async 宏做时间等待）。
+
+Host capabilities; currently delay supports timed waits in async macros.`
+    },
+    "Host.delay": {
+      signature: "(milliseconds: number) => Promise<void>",
+      help: `挂起当前 Engine 事务并在 delay 毫秒后恢复；取值范围 0..=86400000。
+
+Suspend the current Engine transaction and resume after the given milliseconds; valid range is 0..86400000.`
+    },
+    Engine: {
+      signature: "NarravaEngine",
+      help: `引擎导航请求：goto/back/forward/restart 在当前事务结束后由 Host 执行。
+
+Navigation requests: the host executes goto/back/forward/restart after the current transaction.`
+    },
+    "Engine.started": {
+      signature: "boolean",
+      help: "当前游戏是否已启动。 Whether the story has started."
+    },
+    "Engine.goto": {
+      signature: "(target: string) => void",
+      help: `前往指定 Passage，保留当前变量。 Navigate to a passage, keeping current variables.
+示例 / Example: Engine.goto("Start")`
+    },
+    "Engine.back": {
+      signature: "() => void",
+      help: `返回上一条历史记录。 Restore the previous history entry.
+示例 / Example: Engine.back()`
+    },
+    "Engine.forward": {
+      signature: "() => void",
+      help: `前往下一条历史记录。 Restore the next history entry.
+示例 / Example: Engine.forward()`
+    },
+    "Engine.restart": {
+      signature: "() => void",
+      help: `恢复启动状态并重新开始游戏。 Restore startup state and start a new game.
+示例 / Example: Engine.restart()`
+    },
+    Story: {
+      signature: "NarravaStory",
+      help: `只读 Story 查询：has/get/current/visits。
+
+Readonly Story queries: has/get/current/visits.`
+    },
+    "Story.has": {
+      signature: "(name: string) => boolean",
+      help: "检查名称是否存在于此接口的集合中。 Check whether this named entry exists."
+    },
+    "Story.current": {
+      signature: "() => NarravaPassageInfo | undefined",
+      help: "取得当前 Passage 的名称与标签。 Get the current passage name and tags."
+    },
+    "Story.get": {
+      signature: "(name: string) => NarravaPassageInfo | undefined",
+      help: "按名称查询 Passage 元数据。 Look up passage metadata by name."
+    },
+    "Story.visits": {
+      signature: "(name: string) => number",
+      help: "查询 Passage 的访问次数。 Count visits to a passage."
+    },
+    Save: {
+      signature: "NarravaSave",
+      help: `存档入口：capture/restore 覆盖 variables 命名空间；export/import 走 Host。
+
+Save access: capture/restore covers variables; export/import goes through the host.`
+    },
+    "Save.capture": {
+      signature: "() => string",
+      help: `生成当前 variables 的存档 JSON 字符串。
+
+Serialize the current variables namespace as save JSON.`
+    },
+    "Save.restore": {
+      signature: "(json: string) => void",
+      help: `用存档 JSON 整体替换 variables；非法 JSON 抛错。
+
+Replace variables with save JSON; throws for invalid JSON.`
+    },
+    "Save.export": {
+      signature: "(target?: string | undefined) => void",
+      help: `请求 Host 把存档导出到 target（默认 manual）。
+
+Request a host save export to target (manual by default).
+示例 / Example: Save.export("manual")`
+    },
+    "Save.import": {
+      signature: "(target?: string | undefined) => void",
+      help: `请求 Host 从 target 导入存档。
+
+Request a host save import from target.
+示例 / Example: Save.import("manual")`
+    },
+    "Save.before": {
+      signature: "(operation: NarravaSaveOperation, hook: (context: NarravaSaveBeforeContext) => void | string) => NarravaSaveSubscription",
+      help: `操作前调用；返回字符串可改写 export/import 的目标。
+
+Run before an operation; returning a string rewrites the export/import target.`
+    },
+    "Save.after": {
+      signature: "(operation: NarravaSaveOperation, hook: (completion: NarravaSaveCompletion) => void) => NarravaSaveSubscription",
+      help: `操作获得实际完成结果后才调用。
+
+Run only after an operation has an actual completion result.`
+    },
+    "Save.off": {
+      signature: "(subscription: NarravaSaveSubscription) => boolean",
+      help: "移除存档钩子订阅。 Remove a save hook subscription."
+    },
+    Resource: {
+      signature: "NarravaResource",
+      help: `只读 Resource 查询：路径列表、存在性、候选选取与读取。
+
+Readonly Resource queries: paths, existence, candidate selection, and content.`
+    },
+    "Resource.paths": {
+      signature: "() => readonly string[]",
+      help: "列出已装载资源路径。 List loaded resource paths."
+    },
+    "Resource.has": {
+      signature: "(path: string) => boolean",
+      help: "检查资源路径是否存在。 Check whether a resource path exists."
+    },
+    "Resource.pick": {
+      signature: "(candidates: readonly string[]) => string | undefined",
+      help: `按顺序返回第一个存在的候选路径。
+
+Return the first existing candidate path, in order.`
+    },
+    "Resource.info": {
+      signature: "(path: string) => NarravaResourceInfo | undefined",
+      help: "查询资源类型与大小。 Inspect the resource media type and size."
+    },
+    "Resource.read": {
+      signature: "(path: string) => Uint8Array<ArrayBufferLike> | undefined",
+      help: `读取原始字节；路径不存在时为 undefined。
+
+Read raw bytes; returns undefined if the path does not exist.`
+    },
+    "Resource.text": {
+      signature: "(path: string) => string | undefined",
+      help: `按 UTF-8 读取为文本；路径不存在或非文本时为 undefined。
+
+Read UTF-8 text; returns undefined if the path is missing or not text.`
+    },
+    Audio: {
+      signature: "{ play(resource: string, options?: { channel?: string | undefined; loop?: boolean | undefined; volume?: number | undefined; tags?: readonly string[] | undefined; } | undefined): void; stop(channel: string): void; }",
+      help: `声明当前作用域所需的音频；事务成功后由 Host 接收播放差异，不进入 Surface 或存档。
+
+Declare desired audio for the current scope. After a successful transaction, the host receives playback changes; audio is not stored in Surface or saves.`
+    },
+    "Audio.play": {
+      signature: "(resource: string, options?: { channel?: string | undefined; loop?: boolean | undefined; volume?: number | undefined; tags?: readonly string[] | undefined; } | undefined) => void",
+      help: `声明资源与通道；默认 channel 为 bgm、loop 为 true、volume 为 1（范围 0..1）。
+tags 非空时至少匹配当前 Passage 的一个 Tag 才生效；相同播放声明不会重新启动音频。
+
+Declare a resource and channel; defaults are channel bgm, loop true, and volume 1 (range 0..1).
+Nonempty tags must match at least one current Passage tag; identical playback declarations do not restart audio.`
+    },
+    "Audio.stop": {
+      signature: "(channel: string) => void",
+      help: `声明停止指定通道；随当前作用域的音频声明一起生效。
+
+Declare that a channel should stop, alongside the current scope's audio declarations.`
+    },
+    I18n: {
+      signature: "NarravaI18n",
+      help: `本地化信息、语言切换请求与翻译模板导出。
+
+Locale information, language change requests, and translation template export.`
+    },
+    "I18n.defaultLocale": {
+      signature: "string",
+      help: "游戏配置的默认语言。 Default language from game configuration."
+    },
+    "I18n.locale": {
+      signature: "string",
+      help: "当前已生效的语言。 Currently active language."
+    },
+    "I18n.select": {
+      signature: "(locale: string) => void",
+      help: `请求 Host 切换运行语言；成功后 locale 与后续渲染同步更新。
+
+Request a host language change; on success, locale and subsequent rendering update together.`
+    },
+    "I18n.export": {
+      signature: "() => string",
+      help: `以格式化 JSON 返回完整翻译模板。
+
+Return the complete translator template as formatted JSON.`
+    },
+    Surface: {
+      signature: "NarravaSurface",
+      help: `作者侧语义展示 API：只表达语义，颜色与字形由 Host 决定。
+
+The author presentation API; the host interprets semantic colors and text styles.`
+    },
+    "Surface.text": {
+      signature: "(text: string, options?: { readonly key?: string | undefined; readonly styles?: readonly NarravaTextStyle[] | undefined; readonly color?: NarravaTextColor | undefined; readonly delay?: number | undefined; readonly heading?: 1 | ... 1 more ... | undefined; } | undefined) => NarravaSurfaceNode",
+      help: `普通文本；styles 为语义字形，color 为 0..=63 标准调色板索引。
+
+Text with semantic styles and a standard palette index from 0 to 63.`
+    },
+    "Surface.hardBreak": {
+      signature: "() => NarravaSurfaceNode",
+      help: `插入一个结构性硬换行。硬换行没有内容或稳定身份，因此不接受参数。
+
+Insert a structural hard break. It has no content or stable identity and accepts no arguments.`
+    },
+    "Surface.image": {
+      signature: "(resource: string, options?: { readonly key?: string | undefined; readonly alt?: string | undefined; } | undefined) => NarravaSurfaceNode",
+      help: `引用 Resource 逻辑路径的图片；alt 可选。
+
+An image addressed by a Resource logical path, with optional alt text.`
+    },
+    "Surface.region": {
+      signature: "(region: string, children: readonly (string | NarravaSurfaceNode)[], options?: { readonly key?: string | undefined; } | undefined) => NarravaSurfaceNode",
+      help: `把子节点放入开放逻辑区域；内建值包括 main/header/footer/bar/bar-stowed/dialog。
+
+Place children in an open logical region; built-ins include main/header/footer/bar/bar-stowed/dialog.`
+    },
+    "Surface.component": {
+      signature: "(capability: string, version: number, properties: Readonly<Record<string, NarravaData>>, fallback: readonly (string | NarravaSurfaceNode)[], options?: { ...; } | undefined) => NarravaSurfaceNode",
+      help: `请求 Host 渲染能力组件（capability + version）；Host 不认识时显示 fallback。
+
+Request a host component by capability and version; unsupported hosts display the fallback.`
+    },
+    "Surface.action": {
+      signature: '(label: string, action: "dismiss", options?: { readonly key?: string | undefined; readonly role?: "danger" | "default" | "primary" | "secondary" | undefined; } | undefined) => NarravaSurfaceNode',
+      help: `可交互按钮；action 目前仅支持 dismiss（关闭打开的 Dialog）。
+
+An interactive button; the only supported action is dismiss, which closes the open dialog.`
+    },
+    "Surface.fragment": {
+      signature: "(...children: readonly (string | NarravaSurfaceNode)[]) => NarravaSurfaceNode",
+      help: `组合多个节点为一段分组，常用于宏一次返回多段内容。
+
+Group multiple nodes, often to return several pieces of content from one macro.`
+    }
+  };
+
+  // crates/narrava-loom-script/bootstrap/console.ts
+  var globals = globalThis;
+  var stateProxies = new WeakSet;
+  function registerStateProxy(value) {
+    stateProxies.add(value);
+  }
+  function opaqueProxy(value) {
+    return typeof __narravaConsoleIsProxy === "function" && __narravaConsoleIsProxy(value) && !stateProxies.has(value);
+  }
+  var descriptions = console_api_generated_default;
+  function inspectConsoleResult(value, path = "") {
+    const seen = new WeakMap;
+    let remaining = 400;
+    function inspect(item, name, current, depth) {
+      const description = descriptions[current];
+      if (opaqueProxy(item))
+        return {
+          name,
+          kind: "proxy",
+          preview: "[Proxy]",
+          signature: "",
+          help: "未执行代理 trap / Proxy traps are not evaluated",
+          children: [],
+          truncated: false
+        };
+      const kind = item === null ? "null" : Array.isArray(item) ? "array" : typeof item;
+      const node = {
+        name,
+        kind,
+        preview: "",
+        signature: description?.signature ?? "",
+        help: description?.help ?? "",
+        children: [],
+        truncated: false
+      };
+      if (item instanceof Promise)
+        throw new TypeError("Promise 尚未结算 / Promise has not settled");
+      if (kind === "function") {
+        node.preview = `ƒ ${name || "anonymous"}${node.signature ? ` ${node.signature}` : "(…)"}`;
+        return node;
+      }
+      if (item === null || typeof item !== "object") {
+        node.preview = typeof item === "string" ? JSON.stringify(item.slice(0, 4096)) : String(item);
+        node.truncated = typeof item === "string" && item.length > 4096;
+        return node;
+      }
+      if (seen.has(item)) {
+        node.kind = "reference";
+        node.preview = `↩ ${seen.get(item)}`;
+        return node;
+      }
+      seen.set(item, current || "result");
+      const keys = Object.keys(item);
+      node.preview = Array.isArray(item) ? `Array(${item.length})` : `${current || "Object"} {${keys.length}}`;
+      if (depth >= 5 || remaining <= 0) {
+        node.truncated = keys.length > 0;
+        return node;
+      }
+      for (const key of keys.slice(0, 80)) {
+        if (--remaining < 0)
+          break;
+        const descriptor = Object.getOwnPropertyDescriptor(item, key);
+        const childPath = current ? `${current}.${key}` : key;
+        node.children.push(descriptor && "value" in descriptor ? inspect(descriptor.value, key, childPath, depth + 1) : {
+          name: key,
+          kind: "accessor",
+          preview: "[Getter]",
+          signature: "",
+          help: "未执行访问器 / Getter was not invoked",
+          children: [],
+          truncated: false
+        });
+      }
+      node.truncated = node.children.length < keys.length;
+      return node;
+    }
+    if (!path)
+      for (const name of Object.keys(descriptions).filter((candidate) => !candidate.includes("."))) {
+        if (Object.getOwnPropertyDescriptor(globals, name)?.value === value) {
+          path = name;
+          break;
+        }
+      }
+    return inspect(value, path, path, 0);
+  }
+  function completeConsole(path) {
+    if (path.length > 512 || path && !/^[\w$]+(?:\.[\w$]+)*$/.test(path))
+      return [];
+    let value = globals;
+    for (const name of path ? path.split(".") : []) {
+      if (typeof value !== "object" && typeof value !== "function" || value === null)
+        return [];
+      if (opaqueProxy(value))
+        return [];
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      if (!descriptor || !("value" in descriptor))
+        return [];
+      value = descriptor.value;
+    }
+    if (typeof value !== "object" && typeof value !== "function" || value === null)
+      return [];
+    if (opaqueProxy(value))
+      return [];
+    return Object.getOwnPropertyNames(value).filter((name) => !name.startsWith("__") && /^[\w$]+$/.test(name)).slice(0, 200).map((name) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      const key = path ? `${path}.${name}` : name;
+      const description = descriptions[key];
+      return {
+        name,
+        kind: descriptor && "value" in descriptor ? typeof descriptor.value : "accessor",
+        preview: "",
+        signature: description?.signature ?? "",
+        help: description?.help ?? (descriptor && "value" in descriptor ? "运行时成员 / Runtime member" : "访问器，补全不会执行 / Getter is not evaluated"),
+        children: [],
+        truncated: false
+      };
+    });
+  }
 
   // crates/narrava-loom-script/bootstrap/runtime.ts
   function runtime(contract) {
@@ -486,7 +1180,6 @@
       engine: null,
       save: null,
       events: eventRecords,
-      logs: logRecords,
       macros: macroDefinitions,
       configure(value) {
         Object.assign(runtimeConfiguration, value);
@@ -495,6 +1188,20 @@
       emitReaction: publishReaction,
       takeAuthorEvents: drainAuthorEvents,
       completeSave: finishSave,
+      inspectConsoleResult,
+      discardConsoleRequests() {
+        drainAuthorEvents();
+        hostOperationQueue.clear();
+        this.engine = null;
+        this.save = null;
+        this.language = null;
+      },
+      takeEngine() {
+        const request = this.engine;
+        this.engine = null;
+        return request;
+      },
+      completeConsole,
       takeAudio,
       beginAudio,
       rollbackAudio,
@@ -552,7 +1259,7 @@
     };
   }
   function stateProxy(namespace) {
-    return new Proxy(Object.create(null), {
+    const proxy = new Proxy(Object.create(null), {
       get: (_target, key) => typeof key === "string" ? decodeScriptValue(__narravaStateGet(namespace, key)) : undefined,
       set: (_target, key, value) => {
         if (typeof key !== "string")
@@ -579,6 +1286,8 @@
         };
       }
     });
+    registerStateProxy(proxy);
+    return proxy;
   }
   function state() {
     scriptGlobals.State = Object.seal({
@@ -637,21 +1346,22 @@
     });
   }
 
-  // crates/narrava-loom-script/bootstrap/world.ts
-  function world() {
-    scriptGlobals.World = Object.freeze({
-      add: (place) => __narravaWorldAdd(place),
-      get: (id) => __narravaWorldGet(id),
-      places: () => __narravaWorldPlaces(),
-      locate: (point) => __narravaWorldLocate(point),
-      current: () => __narravaWorldCurrent(),
-      move: (point) => __narravaWorldMove(point)
+  // crates/narrava-loom-script/bootstrap/location.ts
+  function location() {
+    scriptGlobals.Location = Object.freeze({
+      add: (place) => __narravaLocationAdd(place),
+      get: (id) => __narravaLocationGet(id),
+      places: () => __narravaLocationPlaces(),
+      locate: (point) => __narravaLocationLocate(point),
+      current: () => __narravaLocationCurrent(),
+      move: (point) => __narravaLocationMove(point)
     });
   }
 
   // crates/narrava-loom-script/bootstrap/index.ts
   state();
-  world();
+  random();
+  location();
   reaction();
   macro();
   logger();

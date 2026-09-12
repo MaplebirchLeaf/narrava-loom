@@ -8,6 +8,7 @@
     <title>Narrava</title>
     <link rel="stylesheet" href="main.css" />
     <script src="main.js" defer></script>
+    <script src="console.js" type="module"></script>
   </head>
   <body>
     <nv-story aria-busy="true">
@@ -92,5 +93,70 @@
         </div>
       </dialog>
     </nv-story>
+    <button
+      id="debug-open"
+      type="button"
+      title="脚本控制台 / Console (F10)"
+      aria-controls="debug-console"
+      aria-expanded="false"
+      hidden
+    >
+      ›_
+    </button>
+    <section id="debug-console" aria-label="脚本控制台 / Script console" hidden>
+      <header>
+        <span>Console</span>
+        <span id="debug-status" role="status"></span>
+        <button
+          id="debug-cancel"
+          type="button"
+          title="取消受管等待并回滚 / Cancel managed wait and roll back"
+          disabled
+        >
+          停止 / Stop
+        </button>
+        <button id="debug-refresh" type="button" title="刷新日志 / Refresh logs">↻</button>
+        <button id="debug-clear" type="button" title="清屏 / Clear (Ctrl+L)">清屏 / Clear</button>
+        <button id="debug-close" type="button" aria-label="关闭控制台 / Close console">×</button>
+      </header>
+      <div
+        id="debug-content"
+        role="log"
+        aria-label="日志与脚本结果 / Logs and script results"
+        tabindex="0"
+      ></div>
+      <div id="debug-examples" aria-label="命令示例 / Command examples">
+        <button type="button" data-command="State">State</button>
+        <button type="button" data-command="Save">Save</button>
+        <button type="button" data-command="Engine">Engine</button>
+        <button type="button" data-command="V">V</button>
+        <button type="button" data-command="Location">Location</button>
+      </div>
+      <div id="debug-help">
+        输入对象名查看成员；Tab 补全，Enter 执行 / Type an object; Tab completes, Enter executes
+      </div>
+      <div
+        id="debug-candidates"
+        role="listbox"
+        aria-label="成员补全 / Member completion"
+        hidden
+      ></div>
+      <label class="debug-prompt"
+        ><span aria-hidden="true">›</span
+        ><input
+          id="debug-input"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="debug-candidates"
+          aria-expanded="false"
+          type="text"
+          aria-label="JavaScript 命令 / JavaScript command"
+          placeholder="V · Location.current() · Random.current()"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          maxlength="16384"
+      /></label>
+    </section>
   </body>
 </html>

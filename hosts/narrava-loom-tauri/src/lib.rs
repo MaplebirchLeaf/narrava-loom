@@ -8,6 +8,7 @@ mod assets;
 #[path = "../../audio.rs"]
 mod audio;
 mod config;
+mod debug;
 mod package;
 mod resource_protocol;
 mod save_io;
@@ -22,26 +23,20 @@ use std::{
 };
 
 use narrava_loom_core::{nar::ValidatedNarPackage, resource::ResourceCatalog};
-use serde::Serialize;
 
 pub use assets::{HostAssetsDto, HostResourceDto, HostStyleDto};
 pub use config::{TauriConfigError, TauriProjectConfig, TauriWindowConfig};
 pub use narrava_loom_protocol::{
-    ContainerFlowDto, ContainerPresentationDto, HostErrorDto, HostNodeDto, HostReplaceTargetDto,
-    HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand, RuntimeUpdate, SaveOperation,
+    ContainerFlowDto, ContainerPresentationDto, HostDebugSnapshotDto, HostErrorDto, HostNodeDto,
+    HostReplaceTargetDto, HostUpdateDto, PendingOperation, PendingResult, RuntimeCommand,
+    RuntimeUpdate, SaveOperation,
 };
 
 use package::{load_release_package, load_tauri_config};
 use save_io::process_save_io;
 
-/// Host 管理面板展示的一条有界日志（只含级别与可显示消息）。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct HostLogDto {
-    /// 日志级别（如 `info`/`error`）。
-    pub level: String,
-    /// 人类可读的日志消息。
-    pub message: String,
-}
+/// 与 Runtime 共用结构化日志，保留来源和诊断位置。
+pub type HostLogDto = narrava_loom_protocol::HostLogRecordDto;
 
 /// 异步 Host facade；Runtime 状态固定由专用 Worker 串行持有。
 pub struct TauriHost {
@@ -51,6 +46,7 @@ pub struct TauriHost {
     game_path: Arc<PathBuf>,
     current_passage: Mutex<Option<String>>,
     developer: bool,
+    console_cancelled: std::sync::atomic::AtomicBool,
 }
 
 impl TauriHost {
@@ -100,6 +96,7 @@ impl TauriHost {
             game_path: host_game_path,
             current_passage: Mutex::new(None),
             developer,
+            console_cancelled: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -112,24 +109,11 @@ impl TauriHost {
 
     /// 按交互身份推进（导航/按钮/返回等），返回渲染后的语义更新。
     pub async fn activate(&self, interaction: &str) -> Result<HostUpdateDto, HostErrorDto> {
-        let previous: Option<String> = self.current_passage()?;
-        let update: HostUpdateDto = ready_update(
-            self.execute(RuntimeCommand::Activate {
-                interaction: interaction.to_owned(),
-            })
-            .await,
-        )?;
-        self.remember_passage(&update.current)?;
-        if previous.as_deref() != Some(update.current.as_str()) {
-            let autosave = RuntimeCommand::Save {
-                operation: SaveOperation::Export,
-                target: String::from("autosave"),
-            };
-            if let Err(error) = self.execute(autosave).await {
-                eprintln!("! {}：{}", error.code, error.message);
-            }
-        }
-        Ok(update)
+        self.execute_update(RuntimeCommand::Activate {
+            interaction: interaction.to_owned(),
+        })
+        .await?
+        .ok_or_else(update_expected)
     }
 
     /// 沿 Story 历史向前或向后移动。
@@ -144,15 +128,14 @@ impl TauriHost {
         Ok(update)
     }
 
-    /// 把输入控件的新值写回 Worker State。
+    /// 写回输入值；Reaction 产生的替换或导航帧必须一并交给 WebView。
     pub async fn input(
         &self,
         interaction: String,
         value: serde_json::Value,
-    ) -> Result<(), HostErrorDto> {
-        self.execute(RuntimeCommand::Input { interaction, value })
+    ) -> Result<Option<HostUpdateDto>, HostErrorDto> {
+        self.execute_update(RuntimeCommand::Input { interaction, value })
             .await
-            .map(|_| ())
     }
 
     /// 返回 Host 启动资产（标题、样式表、Resource 元数据）。
@@ -161,7 +144,11 @@ impl TauriHost {
     }
 
     /// 执行存档操作（`export`/`import`）。
-    pub async fn save(&self, operation: String, target: String) -> Result<(), HostErrorDto> {
+    pub async fn save(
+        &self,
+        operation: String,
+        target: String,
+    ) -> Result<Option<HostUpdateDto>, HostErrorDto> {
         let operation: SaveOperation = match operation.as_str() {
             "export" => SaveOperation::Export,
             "import" => SaveOperation::Import,
@@ -172,13 +159,8 @@ impl TauriHost {
                 ));
             }
         };
-        let update: RuntimeUpdate = self
-            .execute(RuntimeCommand::Save { operation, target })
-            .await?;
-        if let RuntimeUpdate::Ready { update } = update {
-            self.remember_passage(&update.current)?;
-        }
-        Ok(())
+        self.execute_update(RuntimeCommand::Save { operation, target })
+            .await
     }
 
     /// 拉取 Worker 当前日志快照。
@@ -200,14 +182,40 @@ impl TauriHost {
     }
 
     /// 切换运行时语言；若已经进入故事，则立即重绘当前完整呈现帧。
-    pub async fn select_language(&self, locale: String) -> Result<(), HostErrorDto> {
-        let update: RuntimeUpdate = self
-            .execute(RuntimeCommand::SelectLanguage { locale })
-            .await?;
-        if let RuntimeUpdate::Ready { update } = update {
-            self.remember_passage(&update.current)?;
+    pub async fn select_language(
+        &self,
+        locale: String,
+    ) -> Result<Option<HostUpdateDto>, HostErrorDto> {
+        self.execute_update(RuntimeCommand::SelectLanguage { locale })
+            .await
+    }
+
+    /// Applied 没有新画面；其他完成结果沿用必需帧校验，并更新当前 Passage。
+    async fn execute_update(
+        &self,
+        command: RuntimeCommand,
+    ) -> Result<Option<HostUpdateDto>, HostErrorDto> {
+        let navigation: bool = matches!(
+            &command,
+            RuntimeCommand::Activate { .. } | RuntimeCommand::Input { .. }
+        );
+        let previous: Option<String> = self.current_passage()?;
+        let result: RuntimeUpdate = self.execute(command).await?;
+        if matches!(result, RuntimeUpdate::Applied) {
+            return Ok(None);
         }
-        Ok(())
+        let update: HostUpdateDto = ready_update(Ok(result))?;
+        self.remember_passage(&update.current)?;
+        // 只在玩家交互真正导航后自动保存；读档、语言刷新和历史重放不覆盖存档。
+        if navigation && previous.as_deref() != Some(update.current.as_str()) {
+            let autosave: RuntimeCommand = RuntimeCommand::Save {
+                operation: SaveOperation::Export,
+                target: String::from("autosave"),
+            };
+            // Worker 已把 IO 失败记入统一日志，不能让保存失败撤销已完成导航。
+            let _result: Result<RuntimeUpdate, HostErrorDto> = self.execute(autosave).await;
+        }
+        Ok(Some(update))
     }
 
     fn current_passage(&self) -> Result<Option<String>, HostErrorDto> {
@@ -226,12 +234,24 @@ impl TauriHost {
     }
 
     async fn execute(&self, mut command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        let console: bool = matches!(command, RuntimeCommand::DebugScript { .. });
+        if console {
+            self.console_cancelled
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+        }
         loop {
+            let cancelled: bool = matches!(command, RuntimeCommand::Cancel { .. });
             let update: RuntimeUpdate = self.execute_step(command).await?;
+            if console && cancelled {
+                return Err(HostErrorDto::new(
+                    "console.cancelled",
+                    "已取消等待并回滚 / Wait cancelled and state rolled back",
+                ));
+            }
             let RuntimeUpdate::Pending { operation } = update else {
                 return Ok(update);
             };
-            command = self.process_pending_operation(operation).await;
+            command = self.process_pending_operation(operation, console).await;
         }
     }
 
@@ -243,11 +263,38 @@ impl TauriHost {
         receive_worker(result).await?
     }
 
-    async fn process_pending_operation(&self, operation: PendingOperation) -> RuntimeCommand {
+    async fn process_pending_operation(
+        &self,
+        operation: PendingOperation,
+        console: bool,
+    ) -> RuntimeCommand {
         let operation_id: u64 = operation.id();
         let result: Option<PendingResult> = match operation {
             PendingOperation::Delay { milliseconds, .. } => {
-                tokio::time::sleep(std::time::Duration::from_millis(milliseconds)).await;
+                let deadline =
+                    tokio::time::Instant::now() + std::time::Duration::from_millis(milliseconds);
+                loop {
+                    if console
+                        && self
+                            .console_cancelled
+                            .load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        return RuntimeCommand::Cancel {
+                            operation: operation_id,
+                        };
+                    }
+                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    // 仅开发命令检查取消；普通游戏等待仍只使用一个 timer。
+                    tokio::time::sleep(if console {
+                        remaining.min(std::time::Duration::from_millis(50))
+                    } else {
+                        remaining
+                    })
+                    .await;
+                }
                 None
             }
             PendingOperation::Save {
@@ -348,6 +395,10 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             commands::host_assets,
             commands::save_game,
             commands::host_logs,
+            commands::debug_snapshot,
+            commands::debug_execute,
+            commands::debug_complete,
+            commands::debug_cancel,
             commands::available_languages,
             commands::select_language,
             commands::developer_enabled,
@@ -421,16 +472,20 @@ fn ready_update(
 ) -> Result<HostUpdateDto, HostErrorDto> {
     match result? {
         RuntimeUpdate::Ready { update } => Ok(update),
-        RuntimeUpdate::Applied => Err(HostErrorDto::new(
-            "tauri_host.update_expected",
-            "Runtime 命令没有产生可展示更新",
-        )),
+        RuntimeUpdate::Applied => Err(update_expected()),
         RuntimeUpdate::Audio { .. } => unreachable!("Worker consumes audio effects"),
         RuntimeUpdate::Pending { .. } => Err(HostErrorDto::new(
             "tauri_host.pending_update",
             "Host facade 返回了未处理的 PendingOperation",
         )),
     }
+}
+
+fn update_expected() -> HostErrorDto {
+    HostErrorDto::new(
+        "tauri_host.update_expected",
+        "Runtime 命令没有产生可展示更新",
+    )
 }
 
 #[cfg(test)]

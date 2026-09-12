@@ -5,6 +5,8 @@
 mod assets;
 mod release;
 mod resource_protocol;
+mod town_demo;
+mod updates;
 
 #[path = "../../../tests/audio.rs"]
 mod audio;

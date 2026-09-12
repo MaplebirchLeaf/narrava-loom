@@ -5,16 +5,18 @@ import host from "./host"
 import type { BootstrapContract } from "./internal"
 import logger from "./logger"
 import macro from "./macro"
+import random from "./random"
 import reaction from "./reaction"
 import resources from "./resource"
 import runtime from "./runtime"
 import save from "./save"
 import state from "./state"
 import surface from "./surface"
-import world from "./world"
+import location from "./location"
 
 state()
-world()
+random()
+location()
 reaction()
 macro()
 logger()

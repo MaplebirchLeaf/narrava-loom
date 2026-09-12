@@ -1,4 +1,4 @@
-//! World 刷新视图跨挂起保留，并在恢复或取消后释放。
+//! Location 刷新视图跨挂起保留，并在恢复或取消后释放。
 
 use super::support::{action, navigate, ready, text, with_runtime};
 use narrava_loom_protocol::{
@@ -6,16 +6,16 @@ use narrava_loom_protocol::{
 };
 
 const SCRIPT: &str = r#"
-World.add({id:'town',bounds:[[0,0],[10,0],[10,10],[0,10]],entry:[2,3]});
+Location.add({id:'town',bounds:[[0,0],[10,0],[10,10],[0,10]],entry:[2,3]});
 let armed = false;
-Macro.add('bodyStep', {handler: () => { World.move([4,5]); return ''; }});
+Macro.add('bodyStep', {handler: () => { Location.move([4,5]); return ''; }});
 Macro.add('headerStep', {handler: () => {
-    if (World.current() !== null) World.move([1,1]);
+    if (Location.current() !== null) Location.move([1,1]);
     return '';
 }});
 Macro.add('arm', {handler: () => {
-    const before = World.current().point;
-    World.move([6,7]);
+    const before = Location.current().point;
+    Location.move([6,7]);
     armed = true;
     return `ARM_BEFORE=${JSON.stringify(before)};`;
 }});
@@ -23,17 +23,17 @@ Macro.add('pause', {handler: async () => {
     if (!armed) return '';
     armed = false;
     await Host.delay(1);
-    World.move([3,3]);
+    Location.move([3,3]);
     return '';
 }});
 Macro.add('step', {handler: () => {
-    return `MOVE=${JSON.stringify(World.move([7,8]).point)};`;
+    return `MOVE=${JSON.stringify(Location.move([7,8]).point)};`;
 }});
-Macro.add('where', {handler: () => `CURRENT=${JSON.stringify(World.current().point)};`});
+Macro.add('where', {handler: () => `CURRENT=${JSON.stringify(Location.current().point)};`});
 "#;
 
 #[test]
-fn world_refresh_pending_keeps_readonly_state_and_releases_it_after_resume_or_cancel() {
+fn location_refresh_pending_keeps_readonly_state_and_releases_it_after_resume_or_cancel() {
     for pause_in_header in [false, true] {
         for cancel in [false, true] {
             let body_pause: &str = if pause_in_header { "" } else { "<<pause>>" };

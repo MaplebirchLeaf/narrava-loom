@@ -1,0 +1,13 @@
+/* 作者主题 / Author theme. 仅覆盖宿主公开的语义 token；TUI 不依赖 CSS。 */
+nv-story {
+  --narrava-background: #141519;
+  --narrava-surface: #20232a;
+  --narrava-text: #ece9e2;
+  --narrava-muted: #b4b0a7;
+  --narrava-accent: #91b9ed;
+  --narrava-accent-hover: #c5dcff;
+  --narrava-positive: #91c79c;
+  --narrava-warning: #e2bb77;
+  --narrava-ui-850: #20232a;
+  --narrava-ui-900: #141519;
+}

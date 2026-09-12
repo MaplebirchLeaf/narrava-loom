@@ -1,264 +1,239 @@
-// 综合示例脚本：先定义供 Twee 调用的函数，再注册 Surface Macro，最后统一公开函数。
-
-// setup 是启动配置，不进入存档；脚本模块加载时建立本示例需要的稳定字段。
-setup.build = "grand-tour"
-V.reaction_enabled = V.reaction_enabled ?? true
-
-/** 记录客人名到 temporary 并返回欢迎语。 */
-function scriptedGreeting(name: string): string {
-  T.lastGuest = name
-  return `欢迎阅读，${name}`
+/** 小镇规则 / Town rules. 只有显式行动写入 State，页面和侧栏读取状态。 */
+type TownState = {
+  name: string
+  minutes: number
+  money: number
+  energy: number
+  stress: number
+  shifts: number
+  parcels: number
+  coat: boolean
+  quest: "available" | "accepted" | "complete"
+  notice: string
+  finds: number
 }
 
-/** 演示 V/T/setup 与 Twee 的 $/_/setup 共享同一份活动 Rust State。 */
-function inspectState(): string {
-  V.scriptChecks = typeof V.scriptChecks === "number" ? V.scriptChecks + 1 : 1
-  T.lastTool = "state"
-  return `脚本检查 ${V.scriptChecks} 次；build=${String(setup.build)}`
+function townState(): TownState {
+  return V.town as TownState
 }
 
-/** 按优先级挑选并读取指南文本；找不到时给出提示。 */
-function resourceSummary(): string {
-  const guide = Resource.pick(["data/guide.zh-CN.txt", "data/guide.txt"])
-  return guide === undefined ? "没有指南" : (Resource.text(guide) ?? "指南不是文本")
+/** 字符串种子固定映射到 32 位整数；存档继续保存 Runtime 的完整随机状态。 */
+function townBegin(): void {
+  const seed = String(V.town_seed ?? "town-morning")
+  let hash = 2166136261
+  for (let i = 0; i < seed.length; i++) hash = Math.imul(hash ^ seed.charCodeAt(i), 16777619)
+  Random.seed(hash >>> 0)
+  V.demo_screen = "game"
+  V.town = {
+    name:
+      String(V.town_name ?? "Alex")
+        .trim()
+        .slice(0, 24) || "Alex",
+    minutes: 8 * 60,
+    money: 20,
+    energy: 100,
+    stress: 0,
+    shifts: 0,
+    parcels: 0,
+    coat: false,
+    quest: "available",
+    notice: "窗外传来街道的声音。今天从一件小事开始吧。",
+    finds: 0,
+  }
+  // 新一局也重置声明式规则的触发次数；读档则由 Runtime 恢复这些次数。
+  for (const id of ["town.delivery", "town.delivery.notice", "town.tired"]) Reaction.reset(id)
+  Logger.info("demo.start", `小镇新一局；seed=${Random.current().seed}`)
 }
 
-/** 若大厅存在且当前不在大厅，则导航回大厅。 */
-function returnToHall(): void {
-  if (Story.has("Hall") && Story.current()?.name !== "Hall") Engine.goto("Hall")
+function townClock(): string {
+  const { minutes } = townState()
+  return `第 ${Math.floor(minutes / 1440) + 1} 天 · ${String(Math.floor((minutes % 1440) / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
 }
 
-/** 产生供 Reaction 示例消费的结构化 Event。 */
-function emitQuestCompleted(): void {
-  Event.emit("quest:completed", { quest: "old_mine", reward: 500 })
+function townOpen(): boolean {
+  const hour = Math.floor((townState().minutes % 1440) / 60)
+  return hour >= 8 && hour < 20
 }
 
-/** 产生一个会由 Reaction 导航的 Event。 */
-function emitReactionGoto(): void {
-  Event.emit("demo:reaction_goto")
+/** 把校验与扣款放在同一行动中，重复点击也不会产生负余额或重复奖励。 */
+function townAct(action: string): void {
+  const next: TownState = { ...townState() }
+  let delivery = false
+  switch (action) {
+    case "accept":
+      if (next.quest !== "available") return
+      next.quest = "accepted"
+      next.notice = "林澈 想修好公共休息室的旧收音机。去购物中心取一包零件吧。"
+      break
+    case "work":
+      if (!townOpen() || next.energy < 25 || next.shifts >= 2) return
+      next.minutes += 120
+      next.energy -= 25
+      next.stress = Math.min(100, next.stress + 12)
+      next.money += 18
+      next.shifts++
+      next.notice = "你在钟楼咖啡馆收拾桌子、整理杯碟。两小时后，领到了 £18 工钱。"
+      break
+    case "coffee":
+      if (!townOpen() || next.money < 4) return
+      next.minutes += 20
+      next.money -= 4
+      next.energy = Math.min(100, next.energy + 12)
+      next.stress = Math.max(0, next.stress - 10)
+      next.notice = "你捧着拿铁坐在窗边，看行人从玻璃另一侧经过。"
+      break
+    case "parcel":
+      if (!townOpen() || next.quest !== "accepted" || next.parcels > 0 || next.money < 8) return
+      next.money -= 8
+      next.parcels = 1
+      next.notice = "店员把收音机零件装进纸袋。该回去找林澈了。"
+      break
+    case "coat":
+      if (!townOpen() || next.coat || next.money < 12) return
+      next.money -= 12
+      next.coat = true
+      next.notice = "一件新的雨衣。林间行走时会少消耗一些体力。"
+      break
+    case "deliver":
+      if (next.quest !== "accepted" || next.parcels !== 1) return
+      next.quest = "complete"
+      next.parcels = 0
+      next.money += 15
+      next.stress = Math.max(0, next.stress - 15)
+      next.notice = "收音机终于发出了清晰的声音。林澈 付给你 £15，还留了晚餐的位置。"
+      delivery = true
+      break
+    case "explore": {
+      const cost = next.coat ? 10 : 15
+      if (next.energy < cost || !townOpen()) return
+      next.minutes += 30
+      next.energy -= cost
+      // 抽样只发生在探索行动里；打开地图、弹窗和侧栏不消耗随机数。
+      const roll = Random.next()
+      if (roll < 0.45) {
+        next.money += 6
+        next.finds++
+        next.notice = "你在路旁找到一枚旧纪念币。收藏摊愿意出 £6 收下它。"
+      } else if (roll < 0.8) {
+        next.stress = Math.max(0, next.stress - 8)
+        next.notice = "一只松鼠从枝头跃过。你停下来听了一会儿风声。"
+      } else {
+        next.stress = Math.min(100, next.stress + 6)
+        next.notice = "一阵雨打湿了小径。你绕过积水，花了些时间辨认路标。"
+      }
+      Logger.info("demo.explore", JSON.stringify({ roll, state: Random.current().state }))
+      break
+    }
+    case "clinic":
+      if (next.money < 5) return
+      next.minutes += 30
+      next.money -= 5
+      next.energy = Math.min(100, next.energy + 30)
+      next.stress = Math.max(0, next.stress - 20)
+      next.notice = "你在医院休息区补充了水和食物，精神恢复了不少。"
+      break
+    case "rest":
+      next.minutes = (Math.floor(next.minutes / 1440) + 1) * 1440 + 8 * 60
+      next.energy = 100
+      next.stress = 0
+      next.shifts = 0
+      next.notice = "一夜过去，新的一天从窗帘间的晨光开始。"
+      break
+    default:
+      throw new Error(`Unknown town action: ${action}`)
+  }
+  V.town = next
+  Logger.info("demo.action", JSON.stringify({ action, minutes: next.minutes, money: next.money }))
+  if (delivery) Event.emit("town:delivered", { recipient: "林澈" })
 }
 
-/** 跨过 State Reaction 示例的阈值。 */
-function raiseReputation(): void {
-  V.reputation = 50
-}
-
-Reaction.add({
-  id: "demo.quest.completed",
-  event: "quest:completed",
-  passage: /^reactiongallery$/i,
-  cond: (payload) =>
-    typeof payload === "object" &&
-    payload !== null &&
-    "quest" in payload &&
-    payload.quest === "old_mine" &&
-    V.reaction_enabled === true,
-  widget: '<<highlightCard "Event Reaction：旧矿井任务已结算。">>',
-  replace: "reaction-result",
-  emit: {
-    name: "quest:notice",
-    payload: (payload: NarravaData) => ({ source: "reaction", original: payload }),
-  },
-  limit: 3,
-  tags: ["example", "event"],
-})
-
-Reaction.add({
-  id: "demo.reputation.threshold",
-  state: "$reputation",
-  cond: ({ before, after }) =>
-    typeof before === "number" && typeof after === "number" && before < 50 && after >= 50,
-  include: "ReactionReputationNotice",
-  once: true,
-  tags: ["example", "state"],
-})
-
-Reaction.add({
-  id: "demo.quest.notice",
-  event: "quest:notice",
-  passage: "ReactionGallery",
-  cond: (payload) =>
-    typeof payload === "object" &&
-    payload !== null &&
-    "source" in payload &&
-    payload.source === "reaction",
-  widget: '<<highlightCard "动态 emit payload 已进入后续 Event 链。">>',
-  tags: ["example", "event-chain"],
-})
-
-Reaction.add({
-  id: "demo.lifecycle.guard",
-  lifecycle: true,
-  passage: { match: ["ReactionExitDemo"], tags: { all: ["reaction"] } },
-  include: "ReactionLockdown",
-  replace: "main",
-  exit: true,
-  tags: ["example", "lifecycle"],
-})
-
-Reaction.add({
-  id: "demo.goto",
-  event: "demo:reaction_goto",
-  goto: "ReactionGotoTarget",
-  tags: ["example", "navigation"],
-})
-
-// 内联宏：输出一个装饰字符，演示最简宏定义。
-Macro.add("sparkle", {
-  body: "inline",
-  arguments: "list",
-  execution: "sync",
-  handler: () => "✨",
-})
-
-// 展开态侧栏演示：填充 Bar 特殊 Passage 的语义文本。
-Macro.add("barDemo", {
-  body: "inline",
-  arguments: "raw",
-  execution: "sync",
-  handler: () => {
-    const english = I18n.locale === "en"
-    return Surface.fragment(
-      Surface.text(english ? "Hall status" : "大厅状态", {
-        key: "bar-heading",
-        styles: ["strong"],
-      }),
-      Surface.hardBreak(),
-      Surface.text(english ? "Weather: light rain · 17°C" : "天气：小雨 · 17°C", {
-        key: "bar-weather",
-        color: 34,
-      }),
-      Surface.hardBreak(),
-      Surface.text(english ? "Character: Author" : "人物：Author", {
-        key: "bar-character",
-        styles: ["strong"],
-      }),
-      Surface.hardBreak(),
-      Surface.text(english ? "Condition: mild pain" : "状态：轻微疼痛", {
-        key: "bar-condition",
-        color: 34,
-      }),
-      Surface.hardBreak(),
-      Surface.text(
-        english ? "Hint: something is stirring in the library." : "提示：藏书室似乎有动静。",
-        {
-          key: "bar-hint",
-          color: 3,
-        },
-      ),
-      Surface.hardBreak(),
-      Surface.text(
-        english
-          ? "The game script and Twee define the management interface."
-          : "管理界面由游戏脚本和 Twee 自行定义。",
-        {
-          key: "management-hint",
-          color: 3,
-        },
-      ),
-      Surface.hardBreak(),
-    )
-  },
-})
-
-// 收拢态侧栏演示：用极短文本填充 BarStowed 特殊 Passage。
-Macro.add("barStowedDemo", {
+Macro.add("townStatus", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
   handler: () => {
+    if (!V.town || V.demo_screen === "menu") return Surface.text("Narrava · 小镇的一天")
+    const state = townState()
     const english = I18n.locale === "en"
     return Surface.fragment(
-      Surface.text(english ? "R" : "雨", { key: "bar-stowed-weather", color: 34 }),
-      Surface.text(english ? "P" : "痛", {
-        key: "bar-stowed-condition",
-        styles: ["strong"],
-        color: 34,
-      }),
-      Surface.text("!", { key: "bar-stowed-hint", styles: ["strong"], color: 8 }),
+      Surface.text(state.name, { heading: 2 }),
+      Surface.text(townClock(), { color: 3 }),
+      Surface.hardBreak(),
+      Surface.text(`${english ? "Money" : "金钱"} £${state.money}`, { color: 24 }),
+      Surface.hardBreak(),
+      ...(
+        [
+          ["energy", english ? "Energy" : "体力", state.energy],
+          ["stress", english ? "Stress" : "压力", state.stress],
+        ] as const
+      ).map(([key, label, value]) =>
+        Surface.component(
+          "meter",
+          1,
+          { label, value, min: 0, max: 100 },
+          [`${label} ${value}/100`],
+          { key: `town-${key}` },
+        ),
+      ),
+      Surface.hardBreak(),
+      Surface.text(state.coat ? "装备：雨衣" : "装备：日常便服", { color: 3 }),
     )
   },
 })
 
-// 综合演示：region、component、image、语义字形与标准调色板。
-Macro.add("surfaceDemo", {
+Macro.add("townCompact", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
   handler: () =>
     Surface.fragment(
-      Surface.region(
-        "header",
-        [
-          Surface.text("Surface V2", {
-            key: "demo-title",
-            styles: ["strong"],
-            // color 只决定文字颜色；16 是 Host 色阶中的橙色。
-            color: 16,
-          }),
-        ],
-        { key: "demo-header" },
-      ),
-      Surface.region(
-        "bar",
-        [
-          Surface.text("测试工具", { key: "bar-heading", styles: ["strong"] }),
-          Surface.component(
-            "meter",
-            1,
-            {
-              label: "探索进度",
-              value: 72,
-              min: 0,
-              max: 100,
-            },
-            ["探索进度：72 / 100"],
-            { key: "exploration-meter" },
-          ),
-        ],
-        { key: "demo-bar" },
-      ),
-      Surface.text("强调文本。 ", { styles: ["emphasis"] }),
-      Surface.text("重要文本。 ", { styles: ["strong"] }),
-      Surface.text("const answer = 42", { styles: ["code"], color: 34 }),
-      Surface.hardBreak(),
-      Surface.text("新增内容。 ", { styles: ["inserted"], color: 32 }),
-      Surface.text("删除内容。 ", { styles: ["deleted"], color: 8 }),
-      // marked 自身表示高亮底色，不需要再叠加 color。
-      Surface.text("需要留意。 ", { styles: ["marked"] }),
-      Surface.text("危险状态。", { styles: ["strong"], color: 8 }),
-      Surface.hardBreak(),
-      Surface.image("loom.svg", {
-        key: "loom-image",
-        alt: "由经纬线组成的 Narrava Loom 示意图",
+      Surface.text("雨", { key: "town-weather", color: 40 }),
+      Surface.text(V.town ? String(townState().energy) : "—", {
+        key: "town-stowed-energy",
+        color: 32,
       }),
-      Surface.component(
-        "future-card",
-        1,
-        { title: "未知组件" },
-        [Surface.text("Host 不认识该组件，因此显示这段 fallback。", { color: 3 })],
-        { key: "fallback-demo" },
-      ),
-      Surface.region(
-        "footer",
-        [Surface.text("当前示例：语义渲染与 Resource", { key: "demo-footer", color: 3 })],
-        { key: "demo-footer-region" },
-      ),
+      Surface.text("£", { key: "town-money", color: 24 }),
     ),
 })
 
-const readyEvents = Event.subscribe({ name: "game:ready" })
-Event.emit("game:ready", { locale: I18n.locale, resources: Resource.paths().length })
-Logger.info("example.script", `综合示例脚本已加载：${I18n.locale}`)
-
-State.global.extend({
-  scriptedGreeting,
-  inspectState,
-  resourceSummary,
-  returnToHall,
-  emitQuestCompleted,
-  emitReactionGoto,
-  raiseReputation,
-  readyEvents,
-  difficulty: 3,
+// 真正的异步宏 / A real suspended macro; the host resumes this transaction.
+Macro.add("townWait", {
+  body: "inline",
+  arguments: "raw",
+  execution: "async",
+  handler: async () => {
+    await Host.delay(100)
+    return Surface.text("收音机里响起了晚间音乐。", { delay: 300, color: 40 })
+  },
 })
+
+Reaction.add({
+  id: "town.delivery",
+  event: "town:delivered",
+  widget: '<<crossFileCard "委托完成：旧收音机重新响起。">>',
+  emit: { name: "town:notice", payload: { kind: "delivery" } },
+  once: true,
+})
+Reaction.add({
+  id: "town.delivery.notice",
+  event: "town:notice",
+  include: "DeliveryNotice",
+  limit: 1,
+})
+Reaction.add({
+  id: "town.tired",
+  state: "$town.energy",
+  cond: ({ before, after }) =>
+    typeof before === "number" && typeof after === "number" && before >= 30 && after < 30,
+  widget: "体力不多了，可以喝咖啡、去医院或回家休息。<br>",
+  once: true,
+})
+Reaction.add({
+  id: "town.forest.closed",
+  lifecycle: true,
+  passage: "ForestTrail",
+  cond: () => !townOpen(),
+  goto: "ForestClosed",
+})
+
+State.global.extend({ townBegin, townClock, townOpen, townAct })

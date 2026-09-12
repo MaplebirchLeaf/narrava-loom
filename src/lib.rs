@@ -12,13 +12,16 @@ pub mod expression;
 pub mod hir;
 pub mod host;
 pub mod i18n;
+pub mod inspect;
 mod interpolation;
 pub mod lir;
+pub mod location;
 pub mod logger;
 pub mod macro_runtime;
 pub mod mir;
 pub mod nar;
 pub mod package_zip;
+pub mod random;
 pub mod reaction;
 pub mod release;
 pub mod resource;
@@ -31,7 +34,6 @@ pub mod state;
 pub mod story;
 pub mod twee;
 pub mod vm;
-pub mod world;
 
 pub use config::{
     ConfigError, GameCompatibility, GameCompatibilityError, GameConfig, GameIdentity,

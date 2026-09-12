@@ -8,6 +8,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         mut update: HostUpdate,
         mut next_special: usize,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
+        self.script.finish_refresh_body(&mut self.state);
         let specials: [(&str, RegionId); 4] = [
             (HEADER_PASSAGE, RegionId::header()),
             (FOOTER_PASSAGE, RegionId::footer()),
@@ -21,7 +22,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             }
             self.script
                 .audio_control("audioScope", serde_json::json!([name]))
-                .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+                .map_err(crate::ScriptError::into_host_error)?;
             let mut view_state: State = self.state.fork_view();
             let mut view_story: Story<'hir, 'source> = self.story.fork_view();
             let mut continuations = HostPendingExecutions::new();
@@ -82,7 +83,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         }
         self.script
             .audio_control("audioScope", serde_json::json!(["passage", false]))
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            .map_err(crate::ScriptError::into_host_error)?;
         let dto = encode_host_update(&update, self.story.can_back(), self.story.can_forward());
         self.presented = Some(Rc::new(update));
         Ok(RuntimeUpdate::Ready { update: dto })

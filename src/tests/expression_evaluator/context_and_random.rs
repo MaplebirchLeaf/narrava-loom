@@ -109,6 +109,20 @@ fn missing_scoped_variables_are_undefined_but_setup_is_required() {
 }
 
 #[test]
+fn state_context_supplies_random_to_regular_expression_evaluation() {
+    let mut state: crate::state::State = crate::state::State::new();
+    let expression: Expression<'_> = parse("random()").unwrap();
+    let value: Value = evaluate_with(&expression, &state).expect("活动 State 应提供随机源");
+    assert!(matches!(value, Value::Number(unit) if (0.0..1.0).contains(&unit)));
+
+    let expression: Expression<'_> = parse("$choice = either(10, 20)").unwrap();
+    let value: Value =
+        evaluate_with_mut(&expression, &mut state).expect("普通可写求值应使用同一 State 随机源");
+    assert!(matches!(value, Value::Number(10.0 | 20.0)));
+    assert_eq!(state.variables_get("choice"), Some(&value));
+}
+
+#[test]
 fn evaluates_random_and_either_with_injected_source() {
     let context: SingleGlobalContext = SingleGlobalContext {
         name: String::from("unused"),
@@ -131,6 +145,21 @@ fn evaluates_random_and_either_with_injected_source() {
 
         assert_eq!(value, expected, "表达式：{source}");
     }
+}
+
+#[test]
+fn injected_random_source_takes_priority_without_consuming_state() {
+    let state: crate::state::State = crate::state::State::new();
+    let before: crate::random::RandomState = state.random_state();
+    let mut random: FixedRandomSource = FixedRandomSource {
+        values: vec![0.25].into_iter(),
+    };
+    let expression: Expression<'_> = parse("random()").unwrap();
+    assert_eq!(
+        evaluate_with_random(&expression, &state, &mut random).unwrap(),
+        Value::Number(0.25)
+    );
+    assert_eq!(state.random_state(), before);
 }
 
 #[test]

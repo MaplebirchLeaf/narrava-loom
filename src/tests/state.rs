@@ -9,11 +9,77 @@ use crate::{
         parse,
         value::{ArrayValue, Value},
     },
+    location::{Environment, LocationPosition, Place},
+    random::RandomState,
     state::{State, StateCheckpoint, StateReset, StateSnapshot},
-    world::{Environment, Place, WorldPosition},
 };
 
-fn state_world_place(id: &str) -> Place {
+#[test]
+fn random_sequence_follows_snapshots_checkpoints_and_reset() {
+    let mut state: State = State::new();
+    state.seed_random(42);
+    let first: f64 = state.random();
+    let snapshot: StateSnapshot = state.snapshot();
+    let checkpoint: StateCheckpoint = state.checkpoint();
+    let second: f64 = state.random();
+    state.seed_random(900);
+
+    state.restore_snapshot(&snapshot);
+    assert_eq!(state.random(), second);
+    state.restore(snapshot);
+    assert_eq!(state.random(), second);
+    state.restore_checkpoint(checkpoint);
+    assert_eq!(state.random(), second);
+
+    let _reset: StateReset = state.reset_game();
+    assert_eq!(state.random_state().seed(), 42);
+    assert_eq!(state.random(), first);
+}
+
+#[test]
+fn random_replay_keeps_authoritative_tail_and_follows_pending_checkpoints() {
+    let mut state: State = State::new();
+    state.seed_random(7);
+    let entry: RandomState = state.random_state();
+    let first: f64 = state.random();
+    let second: f64 = state.random();
+    let mut tail: RandomState = state.random_state();
+    let expected_next: f64 = tail.next_unit();
+
+    state.begin_random_replay(entry);
+    assert_eq!(state.random(), first);
+    let checkpoint: StateCheckpoint = state.checkpoint();
+    let view: State = state.fork_view();
+    assert_eq!(view.random(), second);
+    assert_eq!(state.random(), second);
+    state.end_random_replay();
+    state.restore_checkpoint(checkpoint);
+    assert_eq!(state.random(), second);
+    assert_eq!(state.snapshot().random_state(), state.random_state());
+    state.seed_random(99);
+    let mut reseeded: RandomState = RandomState::new(99);
+    assert_eq!(state.random(), reseeded.next_unit());
+    state.end_random_replay();
+    assert_eq!(state.random_state().seed(), 7);
+    assert_eq!(state.random(), expected_next);
+}
+
+#[test]
+fn random_forks_and_persistent_restores_do_not_share_replay_cursors() {
+    let mut state: State = State::new();
+    state.seed_random(u64::MAX);
+    let view: State = state.fork_view();
+    assert_eq!(view.random(), state.random());
+    let _discarded: f64 = view.random();
+    let mut expected: RandomState = state.random_state();
+    let snapshot: StateSnapshot = state.snapshot();
+    state.begin_random_replay(RandomState::new(11));
+    let _discarded: f64 = state.random();
+    state.restore(snapshot);
+    assert_eq!(state.random(), expected.next_unit());
+}
+
+fn state_location_place(id: &str) -> Place {
     Place {
         id: id.to_owned(),
         name: None,
@@ -24,59 +90,74 @@ fn state_world_place(id: &str) -> Place {
 }
 
 #[test]
-fn world_position_follows_persistent_snapshots_without_replacing_definitions() {
+fn location_position_follows_persistent_snapshots_without_replacing_definitions() {
     let mut state: State = State::new();
-    state.world_mut().add(state_world_place("town")).unwrap();
-    let position: WorldPosition = WorldPosition {
+    state
+        .location_mut()
+        .add(state_location_place("town"))
+        .unwrap();
+    let position: LocationPosition = LocationPosition {
         place: String::from("town"),
         point: [2, 3],
         environment: Some(Environment::Outside),
     };
-    state.world_state_mut().position = Some(position.clone());
+    state.location_state_mut().position = Some(position.clone());
     let snapshot: StateSnapshot = state.snapshot();
-    state.world_state_mut().position = None;
-    state.world_mut().add(state_world_place("market")).unwrap();
+    state.location_state_mut().position = None;
+    state
+        .location_mut()
+        .add(state_location_place("market"))
+        .unwrap();
 
     state.restore_snapshot(&snapshot);
-    assert_eq!(state.world_state().position.as_ref(), Some(&position));
-    assert!(state.world().get("market").is_some());
-    state.world_state_mut().position = None;
+    assert_eq!(state.location_state().position.as_ref(), Some(&position));
+    assert!(state.location().get("market").is_some());
+    state.location_state_mut().position = None;
     state.restore(snapshot);
-    assert_eq!(state.world_state().position.as_ref(), Some(&position));
+    assert_eq!(state.location_state().position.as_ref(), Some(&position));
 }
 
 #[test]
-fn world_checkpoint_and_fork_isolate_definitions_and_position() {
+fn location_checkpoint_and_fork_isolate_definitions_and_position() {
     let mut state: State = State::new();
-    state.world_mut().add(state_world_place("town")).unwrap();
-    let position: WorldPosition = WorldPosition {
+    state
+        .location_mut()
+        .add(state_location_place("town"))
+        .unwrap();
+    let position: LocationPosition = LocationPosition {
         place: String::from("town"),
         point: [2, 3],
         environment: Some(Environment::Inside),
     };
-    state.world_state_mut().position = Some(position.clone());
+    state.location_state_mut().position = Some(position.clone());
     let checkpoint: StateCheckpoint = state.checkpoint();
     let mut view: State = state.fork_view();
-    view.world_mut()
-        .add(state_world_place("view-only"))
+    view.location_mut()
+        .add(state_location_place("view-only"))
         .unwrap();
-    view.world_state_mut().position = None;
-    assert!(state.world().get("view-only").is_none());
-    assert_eq!(state.world_state().position.as_ref(), Some(&position));
+    view.location_state_mut().position = None;
+    assert!(state.location().get("view-only").is_none());
+    assert_eq!(state.location_state().position.as_ref(), Some(&position));
 
-    state.world_mut().add(state_world_place("later")).unwrap();
-    state.world_state_mut().position = None;
+    state
+        .location_mut()
+        .add(state_location_place("later"))
+        .unwrap();
+    state.location_state_mut().position = None;
     state.restore_checkpoint(checkpoint);
-    assert!(state.world().get("later").is_none());
-    assert!(state.world().get("town").is_some());
-    assert_eq!(state.world_state().position.as_ref(), Some(&position));
+    assert!(state.location().get("later").is_none());
+    assert!(state.location().get("town").is_some());
+    assert_eq!(state.location_state().position.as_ref(), Some(&position));
 }
 
 #[test]
-fn reset_game_clears_world_position_and_keeps_registered_places() {
+fn reset_game_clears_location_position_and_keeps_registered_places() {
     let mut state: State = State::new();
-    state.world_mut().add(state_world_place("town")).unwrap();
-    state.world_state_mut().position = Some(WorldPosition {
+    state
+        .location_mut()
+        .add(state_location_place("town"))
+        .unwrap();
+    state.location_state_mut().position = Some(LocationPosition {
         place: String::from("town"),
         point: [2, 3],
         environment: None,
@@ -84,8 +165,8 @@ fn reset_game_clears_world_position_and_keeps_registered_places() {
 
     let _reset: StateReset = state.reset_game();
 
-    assert!(state.world_state().position.is_none());
-    assert!(state.world().get("town").is_some());
+    assert!(state.location_state().position.is_none());
+    assert!(state.location().get("town").is_some());
 }
 
 #[test]

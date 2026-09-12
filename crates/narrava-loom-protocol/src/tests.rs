@@ -82,6 +82,9 @@ fn session_identity_rejects_values_that_are_unsafe_for_external_registries() {
 #[test]
 fn runtime_protocol_discriminators_match_the_canonical_contract() {
     let commands = [
+        RuntimeCommand::DebugScript {
+            source: String::from("V"),
+        },
         RuntimeCommand::Start,
         RuntimeCommand::Back,
         RuntimeCommand::Forward,

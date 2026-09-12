@@ -1,6 +1,9 @@
 //! Host-neutral Narrava 生命周期编排。
 
 mod actions;
+mod console;
+mod inputs;
+mod inspect;
 mod passage;
 mod reactions;
 mod specials;
@@ -14,7 +17,7 @@ use narrava_loom_core::{
     bytecode::BytecodeProgram,
     diagnostic::{Diagnostic, DiagnosticSeverity},
     engine::{EngineExecutionLimits, EngineMirContinuation},
-    expression::{evaluator::assign_value_with_mut, parse as parse_expression, value::Value},
+    expression::{evaluator::assign_value_with_mut, value::Value},
     hir::HirStory,
     host::{
         HostApi, HostDriveResult, HostInput, HostMirAdvanceRequest, HostMirRequest,
@@ -35,7 +38,7 @@ use narrava_loom_protocol::{
 };
 
 use crate::{
-    EcmaBinding, ScriptMacroOutcome, ScriptPending,
+    EcmaBinding, ScriptError, ScriptMacroOutcome, ScriptPending,
     dispatch::{dispatch_macro, emit_passage_event, macro_value_execution},
     json_to_value,
     protocol_adapter::{diagnostic, encode_host_update},
@@ -52,13 +55,14 @@ fn limits() -> EngineExecutionLimits {
 }
 
 enum Pending<'hir, 'source> {
+    Console(ScriptPending),
     Action(Box<actions::PendingAction>),
     Main {
         operation: u64,
         execution: narrava_loom_core::host::HostExecutionToken,
     },
     Special(Box<SpecialExecution<'hir, 'source>>),
-    Host(Box<HostOperation>),
+    Host(Box<HostOperation<'hir, 'source>>),
 }
 
 enum HostAction {
@@ -71,12 +75,15 @@ enum HostAction {
     },
 }
 
-struct HostOperation {
+/// 输入或开发命令触发的保存仍属于原始事务，失败时恢复完整运行状态。
+type InputCheckpoint<'hir, 'source> = RuntimeTransaction<'hir, 'source>;
+
+struct HostOperation<'hir, 'source> {
     operation: u64,
     action: HostAction,
     after: RuntimeUpdate,
     script_save: bool,
-    input_checkpoint: Option<StateCheckpoint>,
+    input_checkpoint: Option<InputCheckpoint<'hir, 'source>>,
 }
 
 struct SpecialExecution<'hir, 'source> {
@@ -92,6 +99,8 @@ struct SpecialExecution<'hir, 'source> {
 
 /// 从命令进入到 Reaction 安全点完成的一次事务；Pending 期间整体保留。
 struct RuntimeTransaction<'hir, 'source> {
+    /// 输入与开发命令需把检查点保留到平台存档完成；Pending 期间沿用。
+    input: bool,
     before: Rc<StateSnapshot>,
     state: StateCheckpoint,
     story: narrava_loom_core::story::StorySnapshot<'hir, 'source>,
@@ -117,6 +126,10 @@ pub struct RuntimeSession<'hir, 'source> {
     presented: Option<Rc<HostUpdate>>,
     language: Option<Rc<I18nRuntimeLanguage>>,
     sequence: u64,
+    initial_state: State,
+    initial_reactions: Vec<narrava_loom_core::reaction::ReactionRuntimeState>,
+    console_sequence: u64,
+    console_result: Option<narrava_loom_protocol::HostDebugEvaluationDto>,
     data: Option<RuntimeData>,
     notices: Vec<HostErrorDto>,
     transaction: Option<RuntimeTransaction<'hir, 'source>>,
@@ -142,6 +155,8 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         data: Option<RuntimeData>,
     ) -> Self {
         state.attach_script_dispatcher(script.clone());
+        let initial_state: State = state.fork_view();
+        let initial_reactions = script.reaction_state();
         Self {
             hir,
             bytecode,
@@ -154,6 +169,10 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             presented: None,
             language: None,
             sequence: 1,
+            initial_state,
+            initial_reactions,
+            console_sequence: 0,
+            console_result: None,
             data,
             notices: Vec::new(),
             transaction: None,
@@ -173,6 +192,18 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
 
     /// 执行一条平台无关命令；Pending 必须以返回的 operation ID 恢复或取消。
     pub fn execute(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
+        let previous_notices: usize = self.notices.len();
+        let result: Result<RuntimeUpdate, HostErrorDto> = self.execute_command(command);
+        if let Err(error) = &result {
+            self.record_host_error(error);
+        }
+        for notice in self.notices.iter().skip(previous_notices) {
+            self.record_host_error(notice);
+        }
+        result
+    }
+
+    fn execute_command(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
         // 错误 operation ID 不能清除仍在等待恢复的事务音频。
         match &command {
             RuntimeCommand::Resume { operation, .. } | RuntimeCommand::Cancel { operation } => {
@@ -182,11 +213,16 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         }
         self.script
             .audio_control("beginAudio", serde_json::json!([]))
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            .map_err(crate::ScriptError::into_host_error)?;
         let cancel: bool = matches!(command, RuntimeCommand::Cancel { .. });
         let result = self.execute_inner(command);
         if !matches!(result, Ok(RuntimeUpdate::Pending { .. })) {
-            self.script.set_world_refresh(None);
+            self.script.set_refresh(None);
+            self.state.end_random_replay();
+        }
+        if result.is_err() {
+            self.script.cancel_console();
+            self.console_result = None;
         }
         if result.is_err() || cancel {
             let _discarded = self
@@ -201,7 +237,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         let effects = self
             .script
             .take_audio()
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            .map_err(crate::ScriptError::into_host_error)?;
         if effects.is_empty() {
             return Ok(update);
         }
@@ -223,24 +259,33 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         let executes_story: bool = matches!(
             &command,
             RuntimeCommand::Start
+                | RuntimeCommand::DebugScript { .. }
                 | RuntimeCommand::Back
                 | RuntimeCommand::Forward
                 | RuntimeCommand::Activate { .. }
                 | RuntimeCommand::Input { .. }
                 | RuntimeCommand::Resume { .. }
         );
-        let is_input: bool = matches!(&command, RuntimeCommand::Input { .. });
+        let is_input: bool = matches!(
+            &command,
+            RuntimeCommand::Input { .. } | RuntimeCommand::DebugScript { .. }
+        );
         if executes_story {
             self.begin_transaction();
+            self.transaction
+                .as_mut()
+                .expect("执行命令必须持有事务")
+                .input |= is_input;
         }
         let result: Result<RuntimeUpdate, HostErrorDto> = match command {
+            RuntimeCommand::DebugScript { source } => self.execute_console(&source),
             RuntimeCommand::Start => self.start(),
             RuntimeCommand::Back => self.history(true),
             RuntimeCommand::Forward => self.history(false),
             RuntimeCommand::Activate { interaction } => self.activate(&interaction),
             RuntimeCommand::Input { interaction, value } => self.input(&interaction, value),
             RuntimeCommand::Save { operation, target } => {
-                self.begin_save(operation, target, RuntimeUpdate::Applied, false, None)
+                self.begin_save(operation, target, RuntimeUpdate::Applied, false)
             }
             RuntimeCommand::SelectLanguage { locale } => {
                 self.begin_language(locale, RuntimeUpdate::Applied)
@@ -268,12 +313,12 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 }
             };
         }
-        let mut input_checkpoint: Option<StateCheckpoint> = None;
+        let mut input_checkpoint: Option<InputCheckpoint<'hir, 'source>> = None;
         if executes_story && !matches!(update, RuntimeUpdate::Pending { .. }) {
-            let committed = self.transaction.take();
-            if is_input {
-                input_checkpoint = committed.map(|transaction| transaction.state);
-            }
+            input_checkpoint = self
+                .transaction
+                .take()
+                .filter(|transaction| transaction.input);
         }
         if executes_story && !matches!(update, RuntimeUpdate::Pending { .. }) {
             match self.process_script_save(update.clone(), &mut input_checkpoint) {
@@ -281,7 +326,8 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 Ok(None) => {}
                 Err(error) => {
                     if let Some(checkpoint) = input_checkpoint {
-                        self.state.restore_checkpoint(checkpoint);
+                        self.transaction = Some(checkpoint);
+                        self.rollback_transaction();
                         return Err(error);
                     }
                     self.notices.push(error);
@@ -301,6 +347,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
     fn begin_transaction(&mut self) {
         if self.transaction.is_none() {
             self.transaction = Some(RuntimeTransaction {
+                input: false,
                 before: Rc::new(self.state.snapshot()),
                 state: self.state.checkpoint(),
                 story: self.story.snapshot(),
@@ -378,6 +425,13 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         let waiting: Pending<'hir, 'source> = self.pending.take().expect("命令入口已确认挂起操作");
         match waiting {
+            Pending::Console(pending) => {
+                let outcome = self
+                    .script
+                    .resume_console(pending, &mut self.state)
+                    .map_err(ScriptError::into_host_error)?;
+                self.finish_console(outcome)
+            }
             Pending::Main { execution, .. } => {
                 let resumed = HostApi::resume_pending(
                     &mut self.continuations,
@@ -402,6 +456,10 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
     fn cancel(&mut self, _operation: u64) -> Result<RuntimeUpdate, HostErrorDto> {
         let waiting: Pending<'hir, 'source> = self.pending.take().expect("命令入口已确认挂起操作");
         match waiting {
+            Pending::Console(_) => {
+                self.script.cancel_console();
+                self.console_result = None;
+            }
             Pending::Main { execution, .. } => {
                 HostApi::cancel_pending(
                     &mut self.continuations,
@@ -423,11 +481,19 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             }
             Pending::Host(waiting) => {
                 if waiting.script_save {
+                    let input: bool = waiting.input_checkpoint.is_some();
+                    if let Some(checkpoint) = waiting.input_checkpoint {
+                        self.transaction = Some(checkpoint);
+                    }
                     let error =
                         HostErrorDto::new("runtime_session.platform_cancelled", "平台操作已取消");
                     self.finish_script_save(&waiting.action, Err(error.clone()))?;
                     self.notices.push(error);
-                    return Ok(waiting.after);
+                    return Ok(if input {
+                        RuntimeUpdate::Applied
+                    } else {
+                        waiting.after
+                    });
                 }
             }
         }
@@ -491,6 +557,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             )
         })?;
         let expected: u64 = match &waiting {
+            Pending::Console(pending) => pending.id(),
             Pending::Main { operation, .. } => *operation,
             Pending::Action(waiting) => waiting.operation(),
             Pending::Special(waiting) => waiting.operation,
@@ -512,14 +579,16 @@ fn resume_script(
     state: &mut State,
 ) -> Result<
     MacroHandlerOutcome<narrava_loom_core::runtime::RuntimeMacroExecution, ScriptPending>,
-    String,
+    narrava_loom_core::diagnostic::Diagnostic,
 > {
     match script.resume_macro(handle, state) {
         Ok(ScriptMacroOutcome::Complete(value)) => macro_value_execution(&value)
             .map(MacroHandlerOutcome::Complete)
-            .map_err(|error| error.to_string()),
+            .map_err(|error| crate::protocol_adapter::core_diagnostic(&error.into_host_error())),
         Ok(ScriptMacroOutcome::Pending(next)) => Ok(MacroHandlerOutcome::Pending(next)),
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(crate::protocol_adapter::core_diagnostic(
+            &error.into_host_error(),
+        )),
     }
 }
 

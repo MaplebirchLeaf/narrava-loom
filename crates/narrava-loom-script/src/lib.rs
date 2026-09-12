@@ -9,16 +9,20 @@ use narrava_loom_core::{
 };
 
 mod binding;
+mod console;
 pub mod dispatch;
 mod ecma;
+mod location_adapter;
+mod logger_adapter;
 pub mod protocol_adapter;
+mod random_adapter;
 mod reaction_adapter;
 mod reaction_runtime;
+mod refresh;
 mod resource_adapter;
 mod session;
 mod state_adapter;
 mod value;
-mod world_adapter;
 
 pub use ecma::transpile;
 pub use session::{RuntimeData, RuntimeSession};
@@ -35,6 +39,9 @@ pub struct ScriptError {
     pub code: String,
     /// 面向开发者的错误说明。
     pub message: String,
+    /// 原始诊断级别与源码归属，供宿主展示；未知位置保持为空。
+    pub severity: Option<narrava_loom_protocol::DiagnosticSeverityDto>,
+    pub location: Option<Box<narrava_loom_protocol::DiagnosticLocationDto>>,
 }
 
 impl ScriptError {
@@ -43,6 +50,18 @@ impl ScriptError {
         Self {
             code: code.to_owned(),
             message: message.into(),
+            severity: None,
+            location: None,
+        }
+    }
+
+    /// 穿过脚本边界时保留诊断信息，不重新压成只有错误文本的值。
+    pub fn into_host_error(self) -> narrava_loom_protocol::HostErrorDto {
+        narrava_loom_protocol::HostErrorDto {
+            code: self.code,
+            message: self.message,
+            severity: self.severity,
+            location: self.location,
         }
     }
 }
@@ -55,11 +74,23 @@ impl fmt::Display for ScriptError {
 
 impl Error for ScriptError {}
 
+impl narrava_loom_core::host::HostDispatchError for ScriptError {
+    fn into_diagnostic(
+        self,
+        _fallback_code: &str,
+        _fallback_message: &str,
+    ) -> narrava_loom_core::diagnostic::Diagnostic {
+        protocol_adapter::core_diagnostic(&self.into_host_error())
+    }
+}
+
 impl From<narrava_loom_protocol::HostErrorDto> for ScriptError {
     fn from(error: narrava_loom_protocol::HostErrorDto) -> Self {
         Self {
             code: error.code,
             message: error.message,
+            severity: error.severity,
+            location: error.location,
         }
     }
 }
@@ -73,6 +104,8 @@ fn bootstrap_source() -> &'static str {
 
 /// 持有 Boa 引擎上下文的脚本运行时（一次启动一个）。
 pub struct EcmaRuntime {
+    console_value: Option<boa_engine::JsValue>,
+    console_path: String,
     context: Context,
     reactions: Rc<RefCell<ReactionRegistry<ScriptCallable>>>,
 }

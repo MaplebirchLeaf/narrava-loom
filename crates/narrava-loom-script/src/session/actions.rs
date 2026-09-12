@@ -136,7 +136,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                         &mut requests,
                         std::mem::take(&mut execution.scopes),
                     )
-                    .map_err(|error| failure(error.error))?;
+                    .map_err(|error| diagnostic(*error.error))?;
                     if requests.pending_include_count() != 0 || requests.take_goto().is_some() {
                         return Err(failure("无导航 link 正文不能发起 Passage 请求"));
                     }
@@ -177,7 +177,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         let outcome = resume_macro_suspension(execution.identity, suspension, |handle, _scopes| {
             resume_script(self.script.as_ref(), handle, &mut self.state)
         })
-        .map_err(failure)?;
+        .map_err(|error| diagnostic(error.diagnostic(Clone::clone)))?;
         match outcome {
             MacroResumeOutcome::Pending(suspension) => {
                 Ok(self.suspend_action(execution, suspension))

@@ -137,3 +137,29 @@ fn keeps_optional_diagnostic_and_clears_events() {
     logger.clear();
     assert!(logger.get().is_empty());
 }
+
+#[test]
+fn history_and_unread_subscriptions_keep_only_latest_records() {
+    let mut logger: Logger = Logger::with_capacity(2);
+    let subscription = logger.subscribe(LogFilter::default());
+    for message in ["first", "second", "third"] {
+        logger.log(LogEvent::new(LogLevel::Info, "game", message));
+    }
+    assert_eq!(logger.get().len(), 2);
+    assert_eq!(logger.get()[0].sequence.get(), 2);
+    assert_eq!(logger.get()[1].event.message, "third");
+    let pending = logger.take(subscription).unwrap();
+    assert_eq!(pending, logger.get());
+    assert!(logger.take(subscription).unwrap().is_empty());
+}
+
+#[test]
+fn clearing_bounded_history_preserves_sequence_and_subscription() {
+    let mut logger: Logger = Logger::with_capacity(1);
+    let subscription = logger.subscribe(LogFilter::default());
+    logger.log(LogEvent::new(LogLevel::Warn, "game", "before"));
+    logger.clear();
+    logger.log(LogEvent::new(LogLevel::Error, "game", "after"));
+    assert_eq!(logger.get()[0].sequence.get(), 2);
+    assert_eq!(logger.take(subscription).unwrap()[0].event.message, "after");
+}

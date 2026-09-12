@@ -1,36 +1,36 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::geometry::{contains, contains_polygon, valid_point, validate_polygon};
-use crate::{Environment, Place, Point, WorldError, WorldPosition, WorldState};
+use crate::{Environment, LocationError, LocationPosition, LocationState, Place, Point};
 
 /// 地点注册表；玩家位置由调用方纳入事务管理。
 #[derive(Clone, Debug, Default)]
-pub struct World {
+pub struct Location {
     places: HashMap<String, Place>,
     ordered_ids: Vec<String>,
 }
 
-impl World {
+impl Location {
     /// 注册地点；前向父引用留到 `validate` 统一检查。
-    pub fn add(&mut self, place: Place) -> Result<(), WorldError> {
+    pub fn add(&mut self, place: Place) -> Result<(), LocationError> {
         validate_id(&place.id)?;
         if self.places.contains_key(&place.id) {
-            return Err(WorldError::new(
-                "world.duplicate_place",
+            return Err(LocationError::new(
+                "location.duplicate_place",
                 format!("place '{}' is already registered", place.id),
             ));
         }
         if let Some(parent) = &place.parent {
             validate_id(parent)?;
         }
-        validate_polygon(&place.bounds).map_err(|error: WorldError| {
-            WorldError::new(error.code(), format!("place '{}': {error}", place.id))
+        validate_polygon(&place.bounds).map_err(|error: LocationError| {
+            LocationError::new(error.code(), format!("place '{}': {error}", place.id))
         })?;
         if let Some(entry) = place.entry
             && !contains(&place.bounds, entry)
         {
-            return Err(WorldError::new(
-                "world.invalid_entry",
+            return Err(LocationError::new(
+                "location.invalid_entry",
                 format!("entry of place '{}' is outside its bounds", place.id),
             ));
         }
@@ -53,14 +53,14 @@ impl World {
     }
 
     /// 游戏启动前检查完整父子关系及区域包含关系。
-    pub fn validate(&self) -> Result<(), WorldError> {
+    pub fn validate(&self) -> Result<(), LocationError> {
         for place in self.places() {
             self.ancestors(&place.id)?;
             if let Some(parent_id) = &place.parent {
                 let parent: &Place = self.require(parent_id)?;
                 if !contains_polygon(&parent.bounds, &place.bounds) {
-                    return Err(WorldError::new(
-                        "world.outside_parent",
+                    return Err(LocationError::new(
+                        "location.outside_parent",
                         format!("place '{}' extends outside parent '{parent_id}'", place.id),
                     ));
                 }
@@ -94,14 +94,14 @@ impl World {
     }
 
     /// 返回根地点到自身的链路，拒绝缺失父地点和循环引用。
-    pub fn ancestors(&self, id: &str) -> Result<Vec<&Place>, WorldError> {
+    pub fn ancestors(&self, id: &str) -> Result<Vec<&Place>, LocationError> {
         let mut chain: Vec<&Place> = Vec::new();
         let mut visited: HashSet<&str> = HashSet::new();
         let mut current: &Place = self.require(id)?;
         loop {
             if !visited.insert(current.id.as_str()) {
-                return Err(WorldError::new(
-                    "world.parent_cycle",
+                return Err(LocationError::new(
+                    "location.parent_cycle",
                     format!("parent cycle includes place '{}'", current.id),
                 ));
             }
@@ -119,10 +119,10 @@ impl World {
     /// 省略环境时，同地点保留原环境，切换地点则清空。
     pub fn enter(
         &self,
-        state: &mut WorldState,
+        state: &mut LocationState,
         id: &str,
         environment: Option<Environment>,
-    ) -> Result<bool, WorldError> {
+    ) -> Result<bool, LocationError> {
         let place: &Place = self.require(id)?;
         if let Some(position) = state.position.as_ref()
             && position.place == id
@@ -139,7 +139,7 @@ impl World {
             }
             return Ok(changed);
         }
-        state.position = Some(WorldPosition {
+        state.position = Some(LocationPosition {
             place: id.to_owned(),
             point: place.entry.unwrap_or(place.bounds[0]),
             environment,
@@ -148,14 +148,17 @@ impl World {
     }
 
     /// 在当前地点内移动，失败时不修改状态。
-    pub fn move_to(&self, state: &mut WorldState, point: Point) -> Result<bool, WorldError> {
-        let position: &mut WorldPosition = state.position.as_mut().ok_or_else(|| {
-            WorldError::new("world.no_position", "cannot move before entering a place")
+    pub fn move_to(&self, state: &mut LocationState, point: Point) -> Result<bool, LocationError> {
+        let position: &mut LocationPosition = state.position.as_mut().ok_or_else(|| {
+            LocationError::new(
+                "location.no_position",
+                "cannot move before entering a place",
+            )
         })?;
         let place: &Place = self.require(&position.place)?;
         if !contains(&place.bounds, point) {
-            return Err(WorldError::new(
-                "world.invalid_position",
+            return Err(LocationError::new(
+                "location.invalid_position",
                 format!(
                     "point is outside place '{}' or the safe integer range",
                     place.id
@@ -168,12 +171,12 @@ impl World {
     }
 
     /// 恢复存档前，按当前地点定义校验玩家位置。
-    pub fn validate_state(&self, state: &WorldState) -> Result<(), WorldError> {
+    pub fn validate_state(&self, state: &LocationState) -> Result<(), LocationError> {
         if let Some(position) = &state.position {
             let place: &Place = self.require(&position.place)?;
             if !contains(&place.bounds, position.point) {
-                return Err(WorldError::new(
-                    "world.invalid_position",
+                return Err(LocationError::new(
+                    "location.invalid_position",
                     format!(
                         "saved point is outside place '{}' or the safe integer range",
                         place.id
@@ -184,25 +187,25 @@ impl World {
         Ok(())
     }
 
-    fn require(&self, id: &str) -> Result<&Place, WorldError> {
+    fn require(&self, id: &str) -> Result<&Place, LocationError> {
         self.get(id).ok_or_else(|| {
-            WorldError::new(
-                "world.unknown_place",
+            LocationError::new(
+                "location.unknown_place",
                 format!("place '{id}' is not registered"),
             )
         })
     }
 }
 
-fn validate_id(id: &str) -> Result<(), WorldError> {
+fn validate_id(id: &str) -> Result<(), LocationError> {
     let mut bytes: std::str::Bytes<'_> = id.bytes();
     let valid: bool = bytes
         .next()
         .is_some_and(|byte: u8| byte.is_ascii_alphabetic())
         && bytes.all(|byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'));
     if !valid {
-        return Err(WorldError::new(
-            "world.invalid_id",
+        return Err(LocationError::new(
+            "location.invalid_id",
             format!(
                 "place ID '{id}' must start with an ASCII letter and contain only letters, digits, '_', '-', or '.'"
             ),
@@ -220,8 +223,8 @@ fn validate_id(id: &str) -> Result<(), WorldError> {
             | "Bar"
             | "BarStowed"
     ) {
-        return Err(WorldError::new(
-            "world.reserved_id",
+        return Err(LocationError::new(
+            "location.reserved_id",
             format!("place ID '{id}' is reserved"),
         ));
     }

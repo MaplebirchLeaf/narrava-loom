@@ -22,6 +22,10 @@ pub struct HostErrorDto {
     pub code: String,
     /// 面向玩家或开发者的可显示消息。
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<DiagnosticSeverityDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<Box<DiagnosticLocationDto>>,
 }
 
 impl HostErrorDto {
@@ -30,12 +34,98 @@ impl HostErrorDto {
         Self {
             code: code.to_owned(),
             message: message.into(),
+            severity: None,
+            location: None,
         }
     }
 }
 
+/// 诊断对执行的影响；与日志详细级别分开表达。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DiagnosticSeverityDto {
+    Error,
+    Warning,
+    Note,
+}
+
+/// 已知源码位置。缺失信息保持 None；generated 坐标不能当作原 TypeScript 行列。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticLocationDto {
+    pub source: String,
+    pub start: Option<usize>,
+    pub end: Option<usize>,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+    pub generated: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HostLogLevelDto {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+/// 日志查询返回独立快照；sequence 在一局游戏中单调递增。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostLogRecordDto {
+    pub sequence: u64,
+    pub level: HostLogLevelDto,
+    pub target: String,
+    pub message: String,
+    pub diagnostic: Option<HostErrorDto>,
+}
+
+/// 有界、只读的对象预览；不持有 VM 引用，展开不会执行脚本。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HostDebugValueDto {
+    pub name: String,
+    pub kind: String,
+    pub preview: String,
+    pub signature: String,
+    pub help: String,
+    pub children: Vec<HostDebugValueDto>,
+    pub truncated: bool,
+}
+
+/// 独立于 Logger 的执行结果；sequence 用于宿主去重。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HostDebugEvaluationDto {
+    pub sequence: u64,
+    pub value: HostDebugValueDto,
+}
+
+/// Host 调试查询的独立快照，不创建故事事务或暴露可写 Runtime 对象。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HostDebugSnapshotDto {
+    pub evaluation: Option<HostDebugEvaluationDto>,
+    pub current: Option<String>,
+    pub state: serde_json::Value,
+    pub location: serde_json::Value,
+    pub random: serde_json::Value,
+    pub truncated: bool,
+    pub logs: Vec<HostLogRecordDto>,
+}
+
 impl fmt::Display for HostErrorDto {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(location) = &self.location {
+            write!(formatter, "{}", location.source)?;
+            if let Some(line) = location.line {
+                write!(formatter, ":{line}")?;
+                if let Some(column) = location.column {
+                    write!(formatter, ":{column}")?;
+                }
+            }
+            if location.generated {
+                write!(formatter, " (generated)")?;
+            }
+            write!(formatter, ": ")?;
+        }
         write!(formatter, "{}: {}", self.code, self.message)
     }
 }
@@ -238,6 +328,10 @@ pub struct HostUpdateDto {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RuntimeCommand {
+    /// 在作者 realm 执行 JavaScript；宿主必须先检查 developer 权限。
+    DebugScript {
+        source: String,
+    },
     /// 启动一局游戏。
     Start,
     /// 沿 Story 历史移动，不新增访问记录。

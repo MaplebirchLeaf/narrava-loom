@@ -8,6 +8,19 @@ import type {} from "./narrava-contract.generated"
 export {}
 
 declare global {
+  /** 可保存、可回放的共享随机序列。 Shared, saved and replayable random sequence. */
+  const Random: {
+    /** 生成 [0, 1) 的随机数，与 Math.random 和 Twee random/either 共用序列。
+     * Draw from [0, 1), sharing the sequence with Math.random and Twee random/either. */
+    next(): number
+    /** 以非负安全整数重置序列；默认种子为 0。
+     * Reset with a nonnegative safe integer; the default seed is 0. */
+    seed(seed: number): void
+    /** 只读序列快照；十进制字符串保留完整的 64 位状态。
+     * Read-only sequence snapshot; decimal strings preserve all 64 bits. */
+    current(): { readonly seed: string; readonly state: string }
+  }
+
   /**
    * 脚本层可往返的 JSON 兼容原始值。
    *
@@ -39,9 +52,9 @@ declare global {
   /**
    * 世界坐标，允许负值；两个分量都必须在 ±(2^53 - 1) 的安全整数范围内。
    *
-   * World coordinates may be negative; both components must be safe integers within ±(2^53 - 1).
+   * Location coordinates may be negative; both components must be safe integers within ±(2^53 - 1).
    */
-  type NarravaWorldPoint = readonly [number, number]
+  type NarravaLocationPoint = readonly [number, number]
   /**
    * 世界地点定义；id 为英文裸 Tag，bounds 为包含边界的简单多边形。
    *
@@ -69,15 +82,15 @@ declare global {
     /**
      * 同一世界坐标系中的多边形顶点。
      *
-     * Polygon vertices in the shared world coordinate system.
+     * Polygon vertices in the shared location coordinate system.
      */
-    readonly bounds: readonly NarravaWorldPoint[]
+    readonly bounds: readonly NarravaLocationPoint[]
     /**
      * 默认入口；省略时使用首顶点。
      *
      * Entry point; defaults to the first vertex.
      */
-    readonly entry?: NarravaWorldPoint
+    readonly entry?: NarravaLocationPoint
   }
   /**
    * 地点注册后的独立快照。
@@ -88,11 +101,11 @@ declare global {
   /**
    * 当前世界位置；inside/outside 来自 Passage 环境 Tag。
    *
-   * The current world position; inside/outside comes from Passage environment tags.
+   * The current location position; inside/outside comes from Passage environment tags.
    */
-  interface NarravaWorldPosition {
+  interface NarravaLocationPosition {
     readonly place: string
-    readonly point: NarravaWorldPoint
+    readonly point: NarravaLocationPoint
     readonly environment: "inside" | "outside" | null
   }
   /**
@@ -100,7 +113,7 @@ declare global {
    *
    * Place definitions and movement queries; state follows story transactions, history, and saves.
    */
-  interface NarravaWorld {
+  interface NarravaLocation {
     /**
      * 仅初始脚本装载期间可注册；parent 可引用稍后注册的地点。
      *
@@ -124,21 +137,21 @@ declare global {
      *
      * Find all places containing the point, with parents before children; overlapping places are retained.
      */
-    locate(point: NarravaWorldPoint): readonly NarravaPlace[]
+    locate(point: NarravaLocationPoint): readonly NarravaPlace[]
     /**
      * 当前位置快照；未进入地点时为 null。
      *
      * Current position snapshot, or null before entering a place.
      */
-    current(): NarravaWorldPosition | null
+    current(): NarravaLocationPosition | null
     /**
      * 只在当前地点范围内移动；未进入地点或越界会抛出错误。 读档/语言刷新当前页时只校验并返回既有位置，不重复提交移动。
      *
      * Move within the current place; throws if no place is active or the point is outside it. Save/language refreshes validate and return the existing position without moving again.
      */
-    move(point: NarravaWorldPoint): NarravaWorldPosition
+    move(point: NarravaLocationPoint): NarravaLocationPosition
   }
-  const World: NarravaWorld
+  const Location: NarravaLocation
 
   /**
    * 语义字形（8 个）：emphasis 强调 / strong 加粗 / code 等宽 / quote 引用 / marked 高亮 / small 小字 / inserted 新增 / deleted 删除；视觉由 Host 决定。
@@ -347,10 +360,15 @@ declare global {
    * Read and write a State namespace; set/del return the previous value, or undefined if absent.
    */
   interface NarravaStateNamespace<T> {
+    /** 读取命名变量，不存在时返回 undefined。 Read a named value; missing keys return undefined. */
     get(name: string): T | undefined
+    /** 检查名称是否存在于此接口的集合中。 Check whether this named entry exists. */
     has(name: string): boolean
+    /** 写入变量并返回旧值。 Write a value and return its previous value. */
     set(name: string, value: T): T | undefined
+    /** 删除变量并返回旧值。 Delete a key and return its previous value. */
     del(name: string): T | undefined
+    /** 批量导入变量，返回新增和覆盖数量。 Import values and report inserted/replaced counts. */
     extend(values: Readonly<Record<string, T>>): NarravaImportReport
   }
   /**
@@ -362,7 +380,13 @@ declare global {
     readonly global: NarravaStateNamespace<NarravaGlobal>
     readonly variables: NarravaStateNamespace<NarravaData>
     readonly temporary: NarravaStateNamespace<NarravaData>
-    readonly setup: { get(): NarravaData; set(value: NarravaData): NarravaData }
+    /** 启动配置读写接口。 Startup configuration access. */
+    readonly setup: {
+      /** 读取启动配置。 Read startup configuration. */
+      get(): NarravaData
+      /** 整体替换启动配置。 Replace startup configuration. */
+      set(value: NarravaData): NarravaData
+    }
   }
   const State: NarravaState
 
@@ -525,6 +549,7 @@ declare global {
    * Declarative narrative reactions; add/enable/disable/reset are forbidden inside cond and dynamic emit.payload callbacks.
    */
   const Reaction: {
+    /** 注册声明式反应规则。 Register a declarative reaction. */
     add(definition: NarravaReactionDefinition): NarravaReactionStatus
     /**
      * 回调内读取本轮解析开始时的状态；其他调用读取当前状态。
@@ -532,8 +557,11 @@ declare global {
      * Callbacks read the state at the start of this resolution; other calls read the current state.
      */
     get(id: string): NarravaReactionStatus | undefined
+    /** 启用已注册规则。 Enable a registered reaction. */
     enable(id: string): boolean
+    /** 停用规则并保留定义。 Disable a reaction while keeping its definition. */
     disable(id: string): boolean
+    /** 重置规则的触发次数。 Reset the reaction execution count. */
     reset(id: string): boolean
   }
 
@@ -595,7 +623,9 @@ declare global {
      * Delete a macro and return its definition, or undefined if absent.
      */
     del(name: string): NarravaMacroDefinition | undefined
+    /** 按名称读取宏定义。 Read a macro definition by name. */
     get(name: string): NarravaMacroDefinition | undefined
+    /** 检查名称是否存在于此接口的集合中。 Check whether this named entry exists. */
     has(name: string): boolean
     /**
      * 在宏执行前调用 hook，可观察但不能改写输出。
@@ -627,10 +657,19 @@ declare global {
    * Navigation requests: the host executes goto/back/forward/restart after the current transaction.
    */
   interface NarravaEngine {
+    /** 当前游戏是否已启动。 Whether the story has started. */
     readonly started: boolean
+    /** 前往指定 Passage，保留当前变量。 Navigate to a passage, keeping current variables.
+     * @example Engine.goto("Start") */
     goto(target: string): void
+    /** 返回上一条历史记录。 Restore the previous history entry.
+     * @example Engine.back() */
     back(): void
+    /** 前往下一条历史记录。 Restore the next history entry.
+     * @example Engine.forward() */
     forward(): void
+    /** 恢复启动状态并重新开始游戏。 Restore startup state and start a new game.
+     * @example Engine.restart() */
     restart(): void
   }
   const Engine: NarravaEngine
@@ -650,9 +689,13 @@ declare global {
    * Readonly Story queries: has/get/current/visits.
    */
   interface NarravaStory {
+    /** 检查名称是否存在于此接口的集合中。 Check whether this named entry exists. */
     has(name: string): boolean
+    /** 取得当前 Passage 的名称与标签。 Get the current passage name and tags. */
     current(): NarravaPassageInfo | undefined
+    /** 按名称查询 Passage 元数据。 Look up passage metadata by name. */
     get(name: string): NarravaPassageInfo | undefined
+    /** 查询 Passage 的访问次数。 Count visits to a passage. */
     visits(name: string): number
   }
   const Story: NarravaStory
@@ -681,32 +724,37 @@ declare global {
     readonly message: string
   }
   /**
-   * 按 target 记录日志；subscribe/take/unsubscribe 为预留契约，订阅投递尚未实现。
+   * 按 target 记录有界日志，支持筛选订阅与读取。
    *
-   * Record logs by target. The subscribe/take/unsubscribe contract is reserved; delivery is not implemented yet.
+   * Record bounded logs by target; subscribe to and consume filtered records.
    */
   interface NarravaLogger {
+    /** 记录跟踪日志，target 为来源标签。 Record a trace message under a source target. */
     trace(target: string, message: string): void
+    /** 记录调试日志，target 为来源标签。 Record a debug message under a source target. */
     debug(target: string, message: string): void
+    /** 记录信息日志，target 为来源标签。 Record a info message under a source target. */
     info(target: string, message: string): void
+    /** 记录警告日志，target 为来源标签。 Record a warn message under a source target. */
     warn(target: string, message: string): void
+    /** 记录错误日志，target 为来源标签。 Record a error message under a source target. */
     error(target: string, message: string): void
     /**
-     * 预留订阅入口；当前只分配句柄，不投递日志。
+     * 订阅后续符合条件的日志。
      *
-     * Reserved subscription entry; currently allocates a handle without delivering logs.
+     * Subscribe to subsequent matching log records.
      */
     subscribe(filter?: { minimumLevel?: NarravaLogLevel; target?: string }): NarravaLogSubscription
     /**
-     * 预留读取入口；当前返回空数组。
+     * 取走该订阅的待处理日志；订阅不存在时返回 undefined。
      *
-     * Reserved reader; currently returns an empty array.
+     * Drain pending records; return undefined for an unknown subscription.
      */
     take(subscription: NarravaLogSubscription): NarravaLogRecord[] | undefined
     /**
-     * 预留取消入口；当前返回 false。
+     * 取消订阅，返回是否成功移除。
      *
-     * Reserved cancellation entry; currently returns false.
+     * Unsubscribe and report whether the subscription existed.
      */
     unsubscribe(subscription: NarravaLogSubscription): boolean
   }
@@ -777,6 +825,7 @@ declare global {
      * Drain pending records; returns undefined only if the subscription does not exist.
      */
     take(subscription: NarravaEventSubscription): NarravaEventRecord[] | undefined
+    /** 移除事件订阅及其待处理队列。 Remove an event subscription and its pending queue. */
     unsubscribe(subscription: NarravaEventSubscription): boolean
   }
   const Event: NarravaEvent
@@ -812,7 +861,9 @@ declare global {
    * Readonly Resource queries: paths, existence, candidate selection, and content.
    */
   interface NarravaResource {
+    /** 列出已装载资源路径。 List loaded resource paths. */
     paths(): readonly string[]
+    /** 检查资源路径是否存在。 Check whether a resource path exists. */
     has(path: string): boolean
     /**
      * 按顺序返回第一个存在的候选路径。
@@ -820,6 +871,7 @@ declare global {
      * Return the first existing candidate path, in order.
      */
     pick(candidates: readonly string[]): string | undefined
+    /** 查询资源类型与大小。 Inspect the resource media type and size. */
     info(path: string): NarravaResourceInfo | undefined
     /**
      * 读取原始字节；路径不存在时为 undefined。
@@ -890,12 +942,14 @@ declare global {
      * 请求 Host 把存档导出到 target（默认 manual）。
      *
      * Request a host save export to target (manual by default).
+     * @example Save.export("manual")
      */
     export(target?: string): void
     /**
      * 请求 Host 从 target 导入存档。
      *
      * Request a host save import from target.
+     * @example Save.import("manual")
      */
     import(target?: string): void
     /**
@@ -916,6 +970,7 @@ declare global {
       operation: NarravaSaveOperation,
       hook: (completion: NarravaSaveCompletion) => void,
     ): NarravaSaveSubscription
+    /** 移除存档钩子订阅。 Remove a save hook subscription. */
     off(subscription: NarravaSaveSubscription): boolean
   }
   const Save: NarravaSave
@@ -926,7 +981,9 @@ declare global {
    * Locale information, language change requests, and translation template export.
    */
   interface NarravaI18n {
+    /** 游戏配置的默认语言。 Default language from game configuration. */
     readonly defaultLocale: string
+    /** 当前已生效的语言。 Currently active language. */
     readonly locale: string
     /**
      * 请求 Host 切换运行语言；成功后 locale 与后续渲染同步更新。

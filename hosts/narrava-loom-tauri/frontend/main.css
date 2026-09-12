@@ -661,3 +661,178 @@ nv-story #dialog-close .ui-icon {
     scroll-behavior: auto !important;
   }
 }
+
+/* 开发控制台停靠底部，字号独立于游戏主题；单行输入直接操作作者 Runtime。 */
+#debug-open {
+  position: fixed;
+  right: 8px;
+  bottom: 6px;
+  z-index: 40;
+  padding: 2px 8px;
+  font: 13px monospace;
+}
+#debug-console {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 50;
+  height: min(32vh, 320px);
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  background: #181a1d;
+  color: #d7dae0;
+  border-top: 1px solid #50545c;
+  font:
+    13px/1.5 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+#debug-console[hidden],
+#debug-open[hidden] {
+  display: none;
+}
+#debug-console header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid #30343b;
+}
+#debug-status {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #a0a5b0;
+}
+#debug-console button {
+  font: inherit;
+  padding: 0 5px;
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+#debug-console button:hover {
+  background: #30343b;
+}
+#debug-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 3px 10px;
+}
+.debug-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid #24272d;
+  padding: 1px 0;
+}
+.debug-error {
+  color: #ff9f9f;
+}
+.debug-warn {
+  color: #ebc67a;
+}
+.debug-command {
+  color: #9ecbff;
+}
+.debug-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-top: 1px solid #30343b;
+  color: #9ecbff;
+}
+#debug-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: #eee;
+  font: inherit;
+}
+#debug-input:focus-visible {
+  outline: none;
+}
+.debug-prompt:focus-within {
+  box-shadow: inset 2px 0 #9ecbff;
+}
+
+/* 取消模态框的平移包含块，让挂入其中的 fixed 控制台仍停靠视口底部。 */
+#nv-dialog:has(#debug-console:not([hidden])) {
+  transform: none;
+}
+body:has(#debug-console:not([hidden])) {
+  padding-bottom: max(150px, min(32vh, 320px));
+}
+
+.debug-value {
+  padding: 2px 0 2px 12px;
+  overflow-wrap: anywhere;
+}
+.debug-value > .debug-value {
+  border-left: 1px solid #30343b;
+}
+.debug-value > summary {
+  cursor: pointer;
+}
+.debug-value-string > span {
+  color: #b2d69b;
+}
+.debug-value-number > span,
+.debug-value-boolean > span {
+  color: #accbff;
+}
+.debug-value-function > span {
+  color: #e3bb86;
+}
+.debug-description {
+  display: block;
+  white-space: pre-wrap;
+  color: #a9b2c1;
+  padding: 3px 8px;
+}
+#debug-console .debug-use-path {
+  margin-left: 8px;
+  color: #9bb7d4;
+  font-size: 11px;
+}
+#debug-examples {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid #30343b;
+}
+#debug-help {
+  padding: 2px 10px;
+  color: #a9b2c1;
+  max-height: 60px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+#debug-candidates {
+  position: absolute;
+  bottom: 30px;
+  left: 16px;
+  min-width: 170px;
+  max-width: calc(100% - 32px);
+  max-height: 145px;
+  overflow: auto;
+  background: #22262d;
+  border: 1px solid #50545c;
+  box-shadow: 0 2px 6px #0008;
+}
+#debug-candidates [role="option"] {
+  padding: 2px 8px;
+  cursor: pointer;
+}
+#debug-candidates [aria-selected="true"] {
+  background: #34455e;
+  color: #fff;
+}

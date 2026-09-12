@@ -7,6 +7,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use narrava_loom_protocol::HostDebugSnapshotDto;
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -20,6 +21,18 @@ use crate::{TuiDialogPage, TuiFrame, TuiInput, TuiInteraction, TuiOperation, Tui
 
 const ACCENT: Color = Color::Cyan;
 
+/// 检查结果不替换故事帧；关闭覆盖层时保留原焦点与弹窗。
+pub(crate) enum ScreenUpdate {
+    Frame(Box<TuiFrame>),
+    Inspect(Box<HostDebugSnapshotDto>),
+}
+
+#[derive(Debug)]
+struct Inspection {
+    lines: Vec<String>,
+    scroll: u16,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct ScreenState {
     focus: Option<usize>,
@@ -30,9 +43,34 @@ pub(crate) struct ScreenState {
     dialog_key: Option<String>,
     dialog_page: usize,
     dialog_scroll: u16,
+    inspection: Option<Inspection>,
 }
 
 impl ScreenState {
+    pub(crate) fn open_inspection(&mut self, snapshot: &HostDebugSnapshotDto) {
+        self.inspection = Some(Inspection {
+            lines: crate::debug::snapshot_lines(snapshot),
+            scroll: 0,
+        });
+    }
+
+    /// 检查期间消费全部键盘输入，防止操作穿透到原故事帧。
+    pub(crate) fn handle_inspection_key(&mut self, key: KeyEvent) -> bool {
+        let Some(inspection) = self.inspection.as_mut() else {
+            return false;
+        };
+        match key.code {
+            KeyCode::Esc | KeyCode::F(10) => self.inspection = None,
+            KeyCode::Up => inspection.scroll = inspection.scroll.saturating_sub(1),
+            KeyCode::Down => inspection.scroll = inspection.scroll.saturating_add(1),
+            KeyCode::PageUp => inspection.scroll = inspection.scroll.saturating_sub(10),
+            KeyCode::PageDown => inspection.scroll = inspection.scroll.saturating_add(10),
+            KeyCode::Home => inspection.scroll = 0,
+            _ => {}
+        }
+        true
+    }
+
     fn normalize(&mut self, frame: &TuiFrame) {
         if self.dialog_key != frame.dialog_key {
             self.dialog_key.clone_from(&frame.dialog_key);
@@ -187,7 +225,7 @@ impl ScreenState {
 
 pub(crate) fn run_screen<F, E>(mut frame: TuiFrame, mut dispatch: F) -> Result<(), HostScreenError>
 where
-    F: FnMut(TuiOperation) -> Result<Option<TuiFrame>, E>,
+    F: FnMut(TuiOperation) -> Result<Option<ScreenUpdate>, E>,
     E: fmt::Display,
 {
     let mut terminal = TerminalGuard::enter()?;
@@ -200,6 +238,9 @@ where
             continue;
         };
         if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        if state.handle_inspection_key(key) {
             continue;
         }
         let editor_operation: Option<Option<TuiOperation>> = handle_editor(key, &frame, &mut state);
@@ -265,6 +306,7 @@ where
                 KeyCode::F(2) => Some(TuiOperation::QuickSave),
                 KeyCode::F(3) => Some(TuiOperation::QuickLoad),
                 KeyCode::F(4) => Some(TuiOperation::NextLanguage),
+                KeyCode::F(10) => Some(TuiOperation::Inspect),
                 _ => None,
             }
         };
@@ -279,16 +321,20 @@ where
             state.normalize(&frame);
             continue;
         }
-        state.status = String::from("…");
+        let previous_status: String = std::mem::replace(&mut state.status, String::from("…"));
         terminal.draw(|surface: &mut Frame<'_>| draw(surface, &frame, &state))?;
         let feedback: TuiOperation = operation.clone();
         match dispatch(operation) {
-            Ok(Some(next)) => {
-                frame = next;
+            Ok(Some(ScreenUpdate::Frame(next))) => {
+                frame = *next;
                 state.main_scroll = 0;
                 state.status.clear();
                 state.focus = None;
                 state.normalize(&frame);
+            }
+            Ok(Some(ScreenUpdate::Inspect(snapshot))) => {
+                state.status = previous_status;
+                state.open_inspection(&snapshot);
             }
             Ok(None) => {
                 apply_input_feedback(&mut frame, &feedback);
@@ -393,7 +439,7 @@ pub(crate) fn draw(surface: &mut Frame<'_>, frame: &TuiFrame, state: &ScreenStat
         .unwrap_or_default();
     let help: String = if editor.is_empty() {
         format!(
-            "q退出  ↑↓选择  ←→分组  Enter确认  PgUp/Dn滚动  F2存  F3读  F4语言  s侧栏  {}",
+            "q退出  ↑↓选择  ←→分组  Enter确认  PgUp/Dn滚动  F2存  F3读  F4语言  F10检查  s侧栏  {}",
             state.status
         )
     } else {
@@ -434,6 +480,22 @@ pub(crate) fn draw(surface: &mut Frame<'_>, frame: &TuiFrame, state: &ScreenStat
             page_layout[0],
         );
         draw_actions(surface, page_layout[1], frame, state);
+    }
+    if let Some(inspection) = &state.inspection {
+        let popup: Rect = centered_rect(92, 86, area);
+        surface.render_widget(Clear, popup);
+        surface.render_widget(
+            Paragraph::new(inspection.lines.join("\n"))
+                .wrap(Wrap { trim: false })
+                .scroll((inspection.scroll, 0))
+                .block(
+                    Block::default()
+                        .title(" 只读检查 · ↑↓ / PgUp/Dn 滚动 · Esc / F10 关闭 ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(ACCENT)),
+                ),
+            popup,
+        );
     }
 }
 

@@ -91,7 +91,7 @@ pub enum EngineMacroInteractionBoundary<'hir, 'source> {
     MacroPending(EngineMacroInteractionResumed<'hir, 'source>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 /// 驱动 Interaction 正文失败的细分原因。
 pub enum EngineMacroInteractionDriveFailureKind {
     /// VM 步进失败。

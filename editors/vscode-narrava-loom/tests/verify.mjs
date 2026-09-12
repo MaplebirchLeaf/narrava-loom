@@ -16,11 +16,8 @@ const evaluator = await readFile(new URL("src/expression/evaluator/chain.rs", re
 const expressionDts = await readFile(new URL("references/narrava-expression.d.ts", root), "utf8")
 const providers = await readFile(new URL("src/providers.js", root), "utf8")
 const extension = await readFile(new URL("extension.js", root), "utf8")
-const gallery = await readFile(new URL("examples/contents/story/main.twee", repository), "utf8")
-const sharedWidgets = await readFile(
-  new URL("examples/contents/story/widgets.twee", repository),
-  "utf8",
-)
+const gallery = await readFile(new URL("tests/fixtures/highlight.twee", root), "utf8")
+const sharedWidgets = await readFile(new URL("tests/fixtures/widgets.twee", root), "utf8")
 const specialPassages = await readFile(new URL("src/story/special.rs", repository), "utf8")
 const wasm = await readFile(new URL("node_modules/vscode-oniguruma/release/onig.wasm", root))
 

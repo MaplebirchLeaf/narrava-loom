@@ -425,7 +425,7 @@ pub fn checkbox(
 ) -> Result<BodyExecution, Diagnostic> {
     let unchecked: SemanticValue = input_value(unchecked)?;
     let checked: SemanticValue = input_value(checked)?;
-    let selected: bool = input_value(current)? == checked;
+    let selected: bool = checked.matches_value(current);
     input_output(
         receiver,
         "checkbox",
@@ -448,7 +448,7 @@ pub fn radiobutton(
     occurrence: usize,
 ) -> Result<BodyExecution, Diagnostic> {
     let value: SemanticValue = input_value(value)?;
-    let selected: bool = input_value(current)? == value;
+    let selected: bool = value.matches_value(current);
     let group: InputGroupId = InputGroupId::from_key(format!(
         "radio-group:{}:{}:{receiver}",
         identity.story, identity.chain
@@ -492,14 +492,7 @@ fn input_output(
     occurrence: usize,
     kind: SemanticInputKind,
 ) -> Result<BodyExecution, Diagnostic> {
-    if receiver.starts_with('@') {
-        return Err(input_error(
-            "状态绑定输入暂不支持已经结束调用帧的 `@` receiver",
-        ));
-    }
-    if !(receiver.starts_with('$') || receiver.starts_with('_')) {
-        return Err(input_error("输入 receiver 必须以 `$` 或 `_` 开头"));
-    }
+    let _receiver: crate::expression::Expression<'_> = parse_input_receiver(receiver)?;
     let id: InteractionId = InteractionId::from_key(format!(
         "input:{}:{}:{occurrence}:{control}:{receiver}",
         identity.story, identity.chain
@@ -514,6 +507,28 @@ fn input_output(
             },
         }]),
     })
+}
+
+/// 在任何读取或赋值前验证输入路径，供控件创建、提交与呈现同步共用。
+pub fn parse_input_receiver(
+    receiver: &str,
+) -> Result<crate::expression::Expression<'_>, Diagnostic> {
+    let expression: crate::expression::Expression<'_> = crate::expression::parse(receiver)
+        .map_err(|error| {
+            Diagnostic::new(
+                "macro.input.invalid_receiver",
+                DiagnosticSeverity::Error,
+                &format!("输入 receiver 无法解析：{error:?}"),
+            )
+        })?;
+    if !expression.is_input_receiver() {
+        return Err(Diagnostic::new(
+            "macro.input.invalid_receiver",
+            DiagnosticSeverity::Error,
+            "输入 receiver 必须是 $ 或 _ 变量路径；索引允许变量与纯运算，不能调用函数、赋值或自增",
+        ));
+    }
+    Ok(expression)
 }
 
 /// 把运行时值递归转换为可呈现的输入值；函数与命名空间被拒绝。

@@ -23,6 +23,13 @@ const dialogSurface = document.querySelector("#dialog-surface")
 const objectUrls = new Set()
 let resourcePaths = new Set()
 let barRegions = { expanded: [], stowed: [] }
+let latestUpdate = null
+let runtimeBusy = false
+const runRuntimeCommand = createRuntimeDispatcher(invoke, renderHostUpdate, setHostBusy)
+// 开发脚本与交互共用队列，保证渲染响应不会越过前一条输入。
+window.narravaDebug = Object.freeze({
+  execute: (source) => runRuntimeCommand("debug_execute", { source }),
+})
 
 /** 同步侧栏视觉状态与无障碍状态；不改变 Core Story。 */
 function setSidebarStowed(stowed) {
@@ -37,7 +44,7 @@ function setSidebarStowed(stowed) {
 barToggle.addEventListener("click", () => setSidebarStowed(!bar.classList.contains("stowed")))
 if (window.matchMedia("(max-width: 39.5em)").matches) setSidebarStowed(true)
 
-/** 开发者模式只注册 F12 开关 WebView DevTools；调试 State 请使用游戏内表现或未来控制台能力。 */
+/** 开发者模式注册 F12 开关 WebView DevTools；F10 控制台操作游戏脚本 Runtime。 */
 function configureDeveloperMode(enabled) {
   if (!enabled) return
   window.addEventListener("keydown", (event) => {
@@ -50,6 +57,7 @@ function configureDeveloperMode(enabled) {
 
 /** 按 key 协调 Surface DTO，保留仍存在的控件与焦点。 */
 function renderHostUpdate(update) {
+  latestUpdate = update
   const focusedKey = document.activeElement?.closest?.("[data-surface-key]")?.dataset.surfaceKey
   passageRoot.dataset.passage = update.current
   passageRoot.setAttribute("aria-label", update.current)
@@ -86,7 +94,7 @@ function renderHostUpdate(update) {
   wrapPanelRows(passage)
 
   status.textContent = update.nodes.length === 0 ? "当前 Passage 没有可显示内容" : ""
-  story.setAttribute("aria-busy", "false")
+  story.setAttribute("aria-busy", String(runtimeBusy))
   const restoredFocus =
     focusedKey === undefined
       ? null
@@ -102,6 +110,7 @@ function renderHostUpdate(update) {
       dialogTabs.querySelector('[aria-selected="true"]')?.focus()
   } else if (restoredFocus instanceof HTMLElement) restoredFocus.focus({ preventScroll: true })
   else if (!passageRoot.contains(document.activeElement)) passageRoot.focus({ preventScroll: true })
+  window.dispatchEvent(new Event("narrava:updated"))
 }
 
 /** 64 级色阶（0..=63）→ RGB；与 TUI 的 palette_rgb 使用同一映射。
@@ -320,47 +329,19 @@ function createSurfaceElement(node) {
   } else if (node.type === "checkbox" || node.type === "radiobutton") {
     element = document.createElement("input")
     element.type = node.type === "checkbox" ? "checkbox" : "radio"
-    element.addEventListener("change", async () => {
+    element.addEventListener("change", () => {
       const value =
         node.type === "checkbox"
           ? JSON.parse(
               element.checked ? element.dataset.checkedValue : element.dataset.uncheckedValue,
             )
           : JSON.parse(element.dataset.inputValue)
-      try {
-        await submitInputValue(element.dataset.interaction, value)
-        if (node.type === "radiobutton") {
-          for (const radio of story.querySelectorAll(
-            `input[type="radio"][name="${CSS.escape(element.name)}"]`,
-          )) {
-            radio.dataset.committedChecked = String(radio === element)
-          }
-        } else {
-          element.dataset.committedChecked = String(element.checked)
-        }
-      } catch (error) {
-        const controls =
-          node.type === "radiobutton"
-            ? story.querySelectorAll(`input[type="radio"][name="${CSS.escape(element.name)}"]`)
-            : [element]
-        for (const control of controls)
-          control.checked = control.dataset.committedChecked === "true"
-        showHostError(error)
-      }
+      return submitInputValue(element, value)
     })
   } else if (node.type === "textbox") {
     element = document.createElement("input")
     element.type = "text"
-    element.addEventListener("change", async () => {
-      const previous = element.dataset.committedValue ?? ""
-      try {
-        await submitInputValue(element.dataset.interaction, element.value)
-        element.dataset.committedValue = element.value
-      } catch (error) {
-        element.value = previous
-        showHostError(error)
-      }
-    })
+    element.addEventListener("change", () => submitInputValue(element, element.value))
   } else if (node.type === "navigation" || node.type === "button" || node.type === "safeReturn") {
     element = document.createElement("button")
     element.type = "button"
@@ -518,44 +499,120 @@ function applySurfaceReplacements() {
   }
 }
 
-/** 把交互 ID 送回 Worker 执行；成功后渲染并返回新的 Surface 更新。 */
+/** 同一命令的 Pending/Resume 完成后才开始下一条；返回帧是控件状态的最终依据。 */
+function createRuntimeDispatcher(invokeCommand, render, busy) {
+  let queue = Promise.resolve()
+  let pending = 0
+  return (command, args, { message = "", current, applied, rollback } = {}) => {
+    pending += 1
+    busy(true, message)
+    const result = queue.then(async () => {
+      try {
+        // 前一条命令可能已经导航，旧画面的事件不能再提交给新交互表。
+        if (current && !current()) return null
+        let update
+        try {
+          update = await invokeCommand(command, args)
+        } catch (error) {
+          rollback?.()
+          throw error
+        }
+        if (update) render(update)
+        else applied?.()
+        return update
+      } finally {
+        pending -= 1
+        busy(pending > 0)
+      }
+    })
+    // 失败只终止本条命令；下一次有效输入仍可继续执行。
+    queue = result.catch(() => {})
+    return result
+  }
+}
+
+/** 把当前画面的交互 ID 送回 Worker；已经被新帧移除的动作不再执行。 */
 async function activateInteraction(interaction) {
-  setHostBusy(true, "正在处理行动…")
   try {
-    const update = await invoke("activate", { interaction })
-    renderHostUpdate(update)
+    await runRuntimeCommand(
+      "activate",
+      { interaction },
+      {
+        message: "正在处理行动…",
+        current: () => !!story.querySelector(`[data-interaction="${CSS.escape(interaction)}"]`),
+      },
+    )
   } catch (error) {
     showHostError(error)
-  } finally {
-    setHostBusy(false)
   }
 }
 
 /** Story 历史由 RuntimeSession 重放；WebView 不使用浏览器 history 冒充游戏状态。 */
 async function navigateHistory(backward) {
-  setHostBusy(true, backward ? "正在返回上一页…" : "正在前往下一页…")
-  historyBackward.disabled = true
-  historyForward.disabled = true
   try {
-    renderHostUpdate(await invoke("history", { backward }))
+    await runRuntimeCommand(
+      "history",
+      { backward },
+      {
+        message: backward ? "正在返回上一页…" : "正在前往下一页…",
+      },
+    )
   } catch (error) {
     showHostError(error)
-  } finally {
-    setHostBusy(false)
   }
 }
 
 historyBackward.addEventListener("click", () => void navigateHistory(true))
 historyForward.addEventListener("click", () => void navigateHistory(false))
 
-/** 输入先由 Worker 校验并写入 State；失败时调用方负责恢复控件的已提交值。 */
-async function submitInputValue(interaction, value) {
-  await invoke("input", { interaction, value })
+/** 没有新帧时才提交本地显示值；新帧和失败恢复都不能写回已失效的旧控件。 */
+async function submitInputValue(element, value) {
+  const interaction = element.dataset.interaction
+  const text = element.type === "text"
+  const selected = element.checked
+  const controls =
+    element.type === "radio"
+      ? [...story.querySelectorAll(`input[type="radio"][name="${CSS.escape(element.name)}"]`)]
+      : [element]
+  const identities = controls.map((control) => [control, control.dataset.interaction])
+  const current = () => element.isConnected && element.dataset.interaction === interaction
+  const forCurrentControls = (update) => {
+    for (const [control, id] of identities) {
+      if (control.isConnected && control.dataset.interaction === id) update(control)
+    }
+  }
+  try {
+    await runRuntimeCommand(
+      "input",
+      { interaction, value },
+      {
+        current,
+        applied: () =>
+          forCurrentControls((control) => {
+            if (text) control.dataset.committedValue = value
+            else
+              control.dataset.committedChecked = String(
+                element.type === "radio" ? control === element : selected,
+              )
+          }),
+        rollback: () =>
+          forCurrentControls((control) => {
+            if (text) control.value = control.dataset.committedValue ?? ""
+            else control.checked = control.dataset.committedChecked === "true"
+          }),
+      },
+    )
+  } catch (error) {
+    showHostError(error)
+  }
 }
 
 /** 忙碌期间禁用全部交互控件并同步 aria-busy；message 非空时写入状态行。 */
 function setHostBusy(isBusy, message = "") {
+  runtimeBusy = isBusy
   story.setAttribute("aria-busy", String(isBusy))
+  historyBackward.disabled = isBusy || !latestUpdate?.can_back
+  historyForward.disabled = isBusy || !latestUpdate?.can_forward
   for (const control of story.querySelectorAll(
     "button[data-interaction], button[data-surface-action], input[data-interaction]",
   )) {
@@ -580,10 +637,16 @@ function showHostError(error) {
   errorTab.setAttribute("aria-selected", "true")
   dialogTabs.append(errorTab)
   dialogMessage.hidden = false
-  dialogMessage.textContent = `${code}：${message}`
+  const location = error?.location
+  const source = typeof location?.source === "string" ? location.source : ""
+  const position = [source, location?.line, location?.column]
+    .filter((part) => part != null && part !== "")
+    .join(":")
+  const origin = position ? `${position}${location?.generated ? "（生成位置）" : ""}\n` : ""
+  dialogMessage.textContent = `${origin}${code}：${message}`
   dialog.showModal()
   status.textContent = "运行失败"
-  story.setAttribute("aria-busy", "false")
+  story.setAttribute("aria-busy", String(runtimeBusy))
 }
 
 /** 作者 CSS 只在 Host 默认主题后追加；resource() 被收敛到只读自定义协议。 */

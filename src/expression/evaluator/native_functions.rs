@@ -1,6 +1,6 @@
 //! Expression 内置函数的参数检查与受控求值。
 
-use super::{EvalError, EvaluationSession, RandomSource, to_number, to_string};
+use super::{EvalError, EvaluationSession, to_number, to_string};
 use crate::expression::{
     Expression, Span,
     value::{NativeFunction, TextValue, Value},
@@ -129,11 +129,13 @@ fn evaluate_random_function(
     call_span: Span,
     session: &mut EvaluationSession<'_>,
 ) -> Result<Value, EvalError> {
-    let random: &mut dyn RandomSource = session
-        .random
-        .as_deref_mut()
-        .ok_or(EvalError::MissingRandomSource(call_span))?;
-    let unit: f64 = random.next_unit();
+    let unit: f64 = match session.random.as_deref_mut() {
+        Some(random) => random.next_unit(),
+        None => session
+            .context
+            .next_random()
+            .ok_or(EvalError::MissingRandomSource(call_span))?,
+    };
     if !unit.is_finite() || !(0.0..1.0).contains(&unit) {
         return Err(EvalError::InvalidRandomValue(call_span));
     }

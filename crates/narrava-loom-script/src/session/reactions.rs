@@ -19,11 +19,11 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             let mut reactions = self
                 .script
                 .resolve_queued_event_reactions(self.story.current(), &mut self.state)
-                .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+                .map_err(crate::ScriptError::into_host_error)?;
             reactions.extend(
                 self.script
                     .resolve_state_reactions(self.story.current(), &before, &mut self.state)
-                    .map_err(|error| HostErrorDto::new(&error.code, error.message))?,
+                    .map_err(crate::ScriptError::into_host_error)?,
             );
             if reactions.is_empty() {
                 settled = true;
@@ -61,45 +61,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                 .as_mut()
                 .expect("Reaction 导航延续当前事务")
                 .output = output;
-            let params = Value::Null;
-            let identity = self.identity(STORY_ID);
-            let language = self.language.clone();
-            let result = HostApi::navigate_mir_with_reaction(
-                &mut self.continuations,
-                &mut self.state,
-                &mut self.story,
-                self.bytecode,
-                &target,
-                HostMirRequest {
-                    params: &params,
-                    identity,
-                    limits: limits(),
-                    language: language.as_deref(),
-                },
-                |phase, context, _state| emit_passage_event(self.script.as_ref(), phase, context),
-                |passage, state, requests| {
-                    crate::reaction_runtime::apply_lifecycle_reactions(
-                        self.script.as_ref(),
-                        self.hir,
-                        passage,
-                        state,
-                        requests,
-                    )
-                },
-                |invocation, state, requests, scopes| {
-                    dispatch_macro(
-                        self.script.as_ref(),
-                        self.hir,
-                        &mut self.interactions,
-                        invocation,
-                        state,
-                        requests,
-                        scopes,
-                    )
-                },
-            )
-            .map_err(|error| diagnostic(error.diagnostic.clone()));
-            let driven = self.drive_main(result)?;
+            let driven = self.navigate(&target)?;
             return if matches!(driven, RuntimeUpdate::Pending { .. }) {
                 Ok(driven)
             } else {
@@ -107,13 +69,18 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             };
         }
 
-        if !output.is_empty()
-            && let Some(presented) = self.presented.as_ref()
-        {
+        let has_output: bool = !output.is_empty();
+        if has_output && let Some(presented) = self.presented.as_ref() {
             let mut amended = presented.as_ref().clone();
             amended.append_surface(output);
-            let dto = encode_host_update(&amended, self.story.can_back(), self.story.can_forward());
             self.presented = Some(Rc::new(amended));
+        }
+        let inputs_changed: bool = self.sync_presented_inputs()?;
+        if (has_output || inputs_changed)
+            && let Some(presented) = self.presented.as_ref()
+        {
+            let dto =
+                encode_host_update(presented, self.story.can_back(), self.story.can_forward());
             return Ok(RuntimeUpdate::Ready { update: dto });
         }
         Ok(update)

@@ -2,7 +2,7 @@
   "locale": "en",
   "version": "1.0.0",
   "game": {
-    "id": "example.grand-tour",
-    "versions": ">=0.5.0, <0.7.0"
+    "id": "example.town-day",
+    "versions": ">=0.1.0, <0.2.0"
   }
 }

@@ -6,6 +6,8 @@ use crate::{
     GameIdentity,
     expression::value::{ArrayValue, ScriptCallable, Value},
     hir::{HirPassage, HirStory},
+    location::{Environment, LocationPosition, Place},
+    random::RandomState,
     reaction::ReactionRuntimeState,
     save::{
         SaveCompletion, SaveController, SaveDocument, SaveError, SaveLifecycleController,
@@ -14,7 +16,6 @@ use crate::{
     source::Source,
     state::State,
     story::{Story, StoryHistoryId},
-    world::{Environment, Place, WorldPosition},
 };
 
 #[test]
@@ -39,7 +40,7 @@ fn save_document_binary_has_a_versioned_header_and_round_trips() {
         }])
         .to_bytes()
         .expect("存档应可编码");
-    assert_eq!(&encoded[..8], b"NRSAVE\0\x03");
+    assert_eq!(&encoded[..8], b"NRSAVE\0\x04");
     let decoded: SaveDocument = SaveDocument::from_bytes(&encoded).expect("存档应可解码");
     assert_eq!(decoded.reactions()[0].id, "quest.once");
     assert_eq!(decoded.to_bytes().expect("应可再次编码"), encoded);
@@ -56,7 +57,8 @@ fn save_version_two_restores_variables_and_history() {
     .expect("测试 Source 应可读取");
     let compiled: HirStory<'_> = test_story(&source);
     let mut story: Story<'_, '_> = Story::new(&compiled);
-    let mut state: State = world_test_state();
+    let mut state: State = location_test_state();
+    state.seed_random(77);
     let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
     let saved: SaveDocument = SaveDocument::from_bytes(bytes).expect("v2 存档仍应可解码");
 
@@ -65,23 +67,26 @@ fn save_version_two_restores_variables_and_history() {
     assert_eq!(state.variables_get("score"), Some(&Value::Boolean(true)));
     assert_eq!(story.current().map(|passage| passage.name), Some("Start"));
     assert_eq!(story.history().len(), 1);
-    assert!(state.world_state().position.is_none());
-    assert!(state.world().get("town").is_some());
+    assert!(state.location_state().position.is_none());
+    assert_eq!(state.random_state(), RandomState::default());
+    assert!(state.location().get("town").is_some());
     let history_id: StoryHistoryId = story.current_entry().unwrap().id();
     assert_eq!(story.state_snapshot(history_id).unwrap().variables_len(), 0);
     assert!(
         story
             .state_snapshot(history_id)
             .unwrap()
-            .world_state()
+            .location_state()
             .position
             .is_none()
     );
-    assert_eq!(&saved.to_bytes().unwrap()[..8], b"NRSAVE\0\x03");
+    assert_eq!(&saved.to_bytes().unwrap()[..8], b"NRSAVE\0\x04");
 }
 
 #[test]
-fn save_world_round_trip_restores_current_and_history_positions() {
+fn save_version_three_keeps_location_positions_and_defaults_random_state() {
+    // 固定 v3 线格式：score=true；历史地点 town[2,3] outside，当前位置 town[4,5]。
+    let bytes: &[u8] = b"NRSAVE\0\x03\x0cexample.save\x051.2.3\x01\x05score\x02\x01\0\x01\x05Start\x01\0\0\x01\x04town\x04\x06\x01\x01\x01\0\0\x01\x04town\x08\x0a\0";
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),
@@ -89,18 +94,100 @@ fn save_world_round_trip_restores_current_and_history_positions() {
     .unwrap();
     let compiled: HirStory<'_> = test_story(&source);
     let mut story: Story<'_, '_> = Story::new(&compiled);
-    let mut state: State = world_test_state();
+    let mut state: State = location_test_state();
+    state.seed_random(77);
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
+
+    let saved: SaveDocument = SaveDocument::from_bytes(bytes).unwrap();
+    saved.restore(&game, &mut state, &mut story).unwrap();
+
+    assert_eq!(state.variables_get("score"), Some(&Value::Boolean(true)));
+    assert_eq!(
+        state.location_state().position.as_ref().unwrap().point,
+        [4, 5]
+    );
+    assert_eq!(state.random_state(), RandomState::default());
+    let snapshot: &crate::state::StateSnapshot = story
+        .state_snapshot(story.current_entry().unwrap().id())
+        .unwrap();
+    assert_eq!(
+        snapshot.location_state().position.as_ref().unwrap().point,
+        [2, 3]
+    );
+    assert_eq!(
+        snapshot
+            .location_state()
+            .position
+            .as_ref()
+            .unwrap()
+            .environment,
+        Some(Environment::Outside)
+    );
+    assert_eq!(snapshot.random_state(), RandomState::default());
+}
+
+#[test]
+fn save_random_state_round_trips_current_history_and_full_width_seed() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .unwrap();
+    let compiled: HirStory<'_> = test_story(&source);
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = State::new();
+    state.seed_random(u64::MAX);
     let start_id: StoryHistoryId = story.goto("Start").unwrap().id();
     story.record_state_snapshot(start_id, state.snapshot());
-    state.world_state_mut().position.as_mut().unwrap().point = [4, 5];
+    let first: f64 = state.random();
     let map_id: StoryHistoryId = story.goto("Map").unwrap().id();
     story.record_state_snapshot(map_id, state.snapshot());
-    state.world_state_mut().position.as_mut().unwrap().point = [8, 9];
+    let _second: f64 = state.random();
+    let tail: RandomState = state.random_state();
+    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
+    state.begin_random_replay(RandomState::new(123));
+    let _replayed: f64 = state.random();
+    let bytes: Vec<u8> = SaveDocument::capture(&game, &state, &story)
+        .and_then(|document: SaveDocument| document.to_bytes())
+        .unwrap();
+    state.end_random_replay();
+    let next: f64 = state.random();
+    state.seed_random(9);
+
+    SaveDocument::from_bytes(&bytes)
+        .unwrap()
+        .restore(&game, &mut state, &mut story)
+        .unwrap();
+
+    assert_eq!(state.random_state(), tail);
+    assert_eq!(state.random(), next);
+    let previous_id: StoryHistoryId = story.back().unwrap().id();
+    state.restore_snapshot(story.state_snapshot(previous_id).unwrap());
+    assert_eq!(state.random_state().seed(), u64::MAX);
+    assert_eq!(state.random(), first);
+}
+
+#[test]
+fn save_location_round_trip_restores_current_and_history_positions() {
+    let source: Source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .unwrap();
+    let compiled: HirStory<'_> = test_story(&source);
+    let mut story: Story<'_, '_> = Story::new(&compiled);
+    let mut state: State = location_test_state();
+    let start_id: StoryHistoryId = story.goto("Start").unwrap().id();
+    story.record_state_snapshot(start_id, state.snapshot());
+    state.location_state_mut().position.as_mut().unwrap().point = [4, 5];
+    let map_id: StoryHistoryId = story.goto("Map").unwrap().id();
+    story.record_state_snapshot(map_id, state.snapshot());
+    state.location_state_mut().position.as_mut().unwrap().point = [8, 9];
     let end_id: StoryHistoryId = story.goto("End").unwrap().id();
     story.record_state_snapshot(end_id, state.snapshot());
-    state.world_state_mut().position.as_mut().unwrap().point = [9, 9];
+    state.location_state_mut().position.as_mut().unwrap().point = [9, 9];
     state
-        .world_state_mut()
+        .location_state_mut()
         .position
         .as_mut()
         .unwrap()
@@ -110,25 +197,33 @@ fn save_world_round_trip_restores_current_and_history_positions() {
         .and_then(|document: SaveDocument| document.to_bytes())
         .unwrap();
     let saved: SaveDocument = SaveDocument::from_bytes(&bytes).unwrap();
-    state.world_state_mut().position = None;
+    state.location_state_mut().position = None;
 
     saved.restore(&game, &mut state, &mut story).unwrap();
 
-    let position: &WorldPosition = state.world_state().position.as_ref().unwrap();
+    let position: &LocationPosition = state.location_state().position.as_ref().unwrap();
     assert_eq!(position.point, [9, 9]);
     assert_eq!(position.environment, None);
-    assert!(state.world().get("town").is_some());
+    assert!(state.location().get("town").is_some());
     let restored_map_id: StoryHistoryId = story.back().unwrap().id();
     state.restore_snapshot(story.state_snapshot(restored_map_id).unwrap());
-    assert_eq!(state.world_state().position.as_ref().unwrap().point, [4, 5]);
     assert_eq!(
-        state.world_state().position.as_ref().unwrap().environment,
+        state.location_state().position.as_ref().unwrap().point,
+        [4, 5]
+    );
+    assert_eq!(
+        state
+            .location_state()
+            .position
+            .as_ref()
+            .unwrap()
+            .environment,
         Some(Environment::Outside)
     );
 }
 
 #[test]
-fn save_rejects_invalid_world_positions_before_replacing_any_runtime_state() {
+fn save_rejects_invalid_location_positions_before_replacing_any_runtime_state() {
     let source: Source = Source::load(
         Path::new("src/tests/fixtures/game"),
         Path::new("story/main.twee"),
@@ -136,7 +231,7 @@ fn save_rejects_invalid_world_positions_before_replacing_any_runtime_state() {
     .unwrap();
     let compiled: HirStory<'_> = test_story(&source);
     let mut story: Story<'_, '_> = Story::new(&compiled);
-    let mut state: State = world_test_state();
+    let mut state: State = location_test_state();
     let start_id: StoryHistoryId = story.goto("Start").unwrap().id();
     story.record_state_snapshot(start_id, state.snapshot());
     let _old: Option<Value> = state.variables_set("score", Value::Number(5.0));
@@ -157,19 +252,19 @@ fn save_rejects_invalid_world_positions_before_replacing_any_runtime_state() {
             serde_json::json!({"place":"town", "point":[20,30], "environment":null}),
         ] {
             let mut altered: serde_json::Value = original.clone();
-            let world: &mut serde_json::Value = if history {
-                &mut altered["story"]["history"][0]["world"]
+            let location: &mut serde_json::Value = if history {
+                &mut altered["story"]["history"][0]["location"]
             } else {
-                &mut altered["world"]
+                &mut altered["location"]
             };
-            world["position"] = position;
+            location["position"] = position;
             let altered: SaveDocument = serde_json::from_value(altered).unwrap();
             let bytes: Vec<u8> = altered.to_bytes().unwrap();
             let invalid: SaveDocument = SaveDocument::from_bytes(&bytes).unwrap();
 
             let error: SaveError = invalid.restore(&game, &mut state, &mut story).unwrap_err();
 
-            assert_eq!(error.diagnostic().code, "save.invalid_world");
+            assert_eq!(error.diagnostic().code, "save.invalid_location");
             let after: Vec<u8> = SaveDocument::capture(&game, &state, &story)
                 .and_then(|document: SaveDocument| document.to_bytes())
                 .unwrap();
@@ -182,10 +277,10 @@ fn save_rejects_invalid_world_positions_before_replacing_any_runtime_state() {
     }
 }
 
-fn world_test_state() -> State {
+fn location_test_state() -> State {
     let mut state: State = State::new();
     state
-        .world_mut()
+        .location_mut()
         .add(Place {
             id: String::from("town"),
             name: None,
@@ -194,7 +289,7 @@ fn world_test_state() -> State {
             entry: None,
         })
         .unwrap();
-    state.world_state_mut().position = Some(WorldPosition {
+    state.location_state_mut().position = Some(LocationPosition {
         place: String::from("town"),
         point: [2, 3],
         environment: Some(Environment::Outside),

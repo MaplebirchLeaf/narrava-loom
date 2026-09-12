@@ -15,11 +15,13 @@ try {
     foreign,
     "declare namespace Mocha { interface HookFunction<T = void> { (fn: () => T): void } }\ndeclare var setup: Mocha.HookFunction;\n",
   )
-  const script = join(root, "examples/contents/scripts/main.ts")
+  const script = join(root, "examples/contents/scripts/reference.ts")
   const snapshot = api.updateSnapshot({ openFiles: [foreign, script] })
   const project = snapshot.getDefaultProjectForFile(script)
   const source = await readFile(script, "utf8")
-  const setupType = project.checker.getTypeAtPosition(script, source.indexOf("setup.build"))
+  const setupPosition = source.indexOf("setup.build")
+  assert.ok(setupPosition >= 0, "author fixture must exercise setup.build")
+  const setupType = project.checker.getTypeAtPosition(script, setupPosition)
   assert.match(project.checker.typeToString(setupType), /NarravaData/)
   assert.equal(normalize(project.configFileName), join(root, "examples/tsconfig.json"))
   assert.equal(project.program.getSourceFileNames().map(normalize).includes(foreign), false)

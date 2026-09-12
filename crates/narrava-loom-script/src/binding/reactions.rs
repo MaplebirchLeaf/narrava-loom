@@ -6,9 +6,11 @@ use crate::{
 };
 use boa_engine::Source;
 use narrava_loom_core::{
+    expression::evaluator::ScriptCallError,
     expression::value::{ScriptCallable, Value},
     reaction::{
-        ReactionEffect, resolve_event_queue, resolve_lifecycle_reactions, resolve_state_changes,
+        ReactionEffect, ReactionResolveError, resolve_event_queue, resolve_lifecycle_reactions,
+        resolve_state_changes,
     },
     state::{State, StateSnapshot},
 };
@@ -95,7 +97,7 @@ impl EcmaBinding {
                 Ok(())
             },
         )
-        .map_err(|error| ScriptError::new("script.reaction_resolve", format!("{error:?}")))?;
+        .map_err(resolution_error)?;
         runtime.publish_reaction_events(&resolved)?;
         Ok(resolved)
     }
@@ -133,7 +135,7 @@ impl EcmaBinding {
                 Ok(())
             },
         )
-        .map_err(|error| ScriptError::new("script.reaction_resolve", format!("{error:?}")))?;
+        .map_err(resolution_error)?;
         runtime.publish_reaction_events(&resolved)?;
         Ok(resolved)
     }
@@ -167,7 +169,7 @@ impl EcmaBinding {
                 Ok(())
             },
         )
-        .map_err(|error| ScriptError::new("script.reaction_resolve", format!("{error:?}")))?;
+        .map_err(resolution_error)?;
         runtime.publish_reaction_events(&resolved)?;
         Ok(resolved)
     }
@@ -195,8 +197,8 @@ impl EcmaRuntime {
             let accepted = self
                 .call(condition, arguments.clone(), state)
                 .map(|value: Value| value.is_truthy())
-                .map_err(|_| {
-                    ScriptError::new("script.reaction_condition", "Reaction cond 执行失败")
+                .map_err(|error| {
+                    callback_error(error, "script.reaction_condition", "Reaction cond 执行失败")
                 })?;
             if !accepted {
                 return Ok(None);
@@ -205,8 +207,9 @@ impl EcmaRuntime {
 
         let mut resolved: ReactionEffect = effect.clone();
         if let Some(emit_payload) = emit_payload {
-            let payload = self.call(emit_payload, arguments, state).map_err(|_| {
-                ScriptError::new(
+            let payload = self.call(emit_payload, arguments, state).map_err(|error| {
+                callback_error(
+                    error,
                     "script.reaction_emit_payload",
                     "Reaction emit payload 执行失败",
                 )
@@ -234,5 +237,21 @@ impl EcmaRuntime {
             .eval(Source::from_bytes(expression.as_bytes()))
             .map(|_| ())
             .map_err(|error| script_error("script.reaction_event", error))
+    }
+}
+
+fn callback_error(error: ScriptCallError, code: &str, message: &str) -> ScriptError {
+    match error {
+        ScriptCallError::Diagnostic(diagnostic) => {
+            crate::protocol_adapter::diagnostic(*diagnostic).into()
+        }
+        ScriptCallError::Unavailable | ScriptCallError::Failed => ScriptError::new(code, message),
+    }
+}
+
+fn resolution_error(error: ReactionResolveError<ScriptError>) -> ScriptError {
+    match error {
+        ReactionResolveError::Operation(error) => error,
+        error => ScriptError::new("script.reaction_resolve", format!("{error:?}")),
     }
 }

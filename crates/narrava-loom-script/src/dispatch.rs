@@ -12,20 +12,23 @@ use narrava_loom_core::{
     },
     expression::{
         evaluator::{assign_value_with_mut, evaluate_with_mut, value_to_text},
-        parse as parse_expression,
         value::Value,
     },
     hir::{HirBodyKind, HirBodyNode, HirMacro, HirMacroArguments, HirStory, OwnedHirMacro},
     macro_runtime::{
         MacroDefinition, MacroDefinitions, MacroInteractions, MacroLocalScopes, MacroLogicContext,
         MacroResumeOutcome, MacroSuspension, RuntimeMacroHandler, button_with_body, checkbox,
-        image, link_with_body, meter, parse_argument_list, prepare_argument_values, print,
-        radiobutton, replace, slot, textbox,
+        image, link_with_body, meter, parse_argument_list, parse_input_receiver,
+        prepare_argument_values, print, radiobutton, register_story_widgets, replace, slot,
+        textbox,
     },
-    runtime::{BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeMacroExecution},
+    runtime::{
+        BodyControl, BodyExecution, RuntimeExecutionContext, RuntimeExecutionError,
+        RuntimeMacroExecution,
+    },
     semantic::{SemanticNode, SemanticOutput},
     state::State,
-    story::StoryRuntimeRequests,
+    story::{StoryRuntimeRequestError, StoryRuntimeRequests},
 };
 
 use crate::ScriptError;
@@ -80,7 +83,7 @@ pub fn dispatch_macro<'hir, 'source>(
     mut scopes: MacroLocalScopes<Value>,
 ) -> Result<
     MacroResumeOutcome<RuntimeMacroExecution, crate::ScriptPending>,
-    EngineMirMacroCallbackFailure<String>,
+    EngineMirMacroCallbackFailure<Box<Diagnostic>>,
 > {
     let call: HirMacro<'_> = invocation.call.as_hir();
     let raw: &str = match &call.arguments {
@@ -88,14 +91,17 @@ pub fn dispatch_macro<'hir, 'source>(
         HirMacroArguments::None => "",
         HirMacroArguments::Expression(_) => {
             return Err(EngineMirMacroCallbackFailure {
-                error: format!("脚本 Macro 暂不接受编译器 Expression 参数：{}", call.name),
+                error: dispatch_diagnostic(format!(
+                    "脚本 Macro 暂不接受编译器 Expression 参数：{}",
+                    call.name
+                )),
                 scopes,
             });
         }
     };
     if matches!(call.name, "print" | "image" | "meter" | "audio") {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("{} 参数无效：{error:?}", call.name),
+            error: Box::new(error.issue(raw.len()).diagnostic),
             scopes: scopes.clone(),
         })?;
         let arguments: Vec<Value> = {
@@ -104,7 +110,7 @@ pub fn dispatch_macro<'hir, 'source>(
                 evaluate_with_mut(expression, &mut context)
             })
             .map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("{} 参数无法求值：{error:?}", call.name),
+                error: Box::new(error.issue(raw.len()).diagnostic),
                 scopes: scopes.clone(),
             })?
         };
@@ -112,7 +118,7 @@ pub fn dispatch_macro<'hir, 'source>(
             script
                 .request_audio(&arguments)
                 .map_err(|error| EngineMirMacroCallbackFailure {
-                    error: error.to_string(),
+                    error: dispatch_diagnostic(error),
                     scopes: scopes.clone(),
                 })?;
             return Ok(MacroResumeOutcome::Complete {
@@ -134,7 +140,7 @@ pub fn dispatch_macro<'hir, 'source>(
             print(&arguments)
         })
         .map_err(|error| EngineMirMacroCallbackFailure {
-            error: error.to_string(),
+            error: dispatch_diagnostic(error),
             scopes: scopes.clone(),
         })?;
         return Ok(MacroResumeOutcome::Complete {
@@ -147,7 +153,7 @@ pub fn dispatch_macro<'hir, 'source>(
     }
     if matches!(call.name, "replace" | "slot") {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("{} 参数无效：{error:?}", call.name),
+            error: Box::new(error.issue(raw.len()).diagnostic),
             scopes: scopes.clone(),
         })?;
         let arguments: Vec<Value> = {
@@ -156,7 +162,7 @@ pub fn dispatch_macro<'hir, 'source>(
                 evaluate_with_mut(expression, &mut context)
             })
             .map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("{} 参数无法求值：{error:?}", call.name),
+                error: Box::new(error.issue(raw.len()).diagnostic),
                 scopes: scopes.clone(),
             })?
         };
@@ -172,13 +178,13 @@ pub fn dispatch_macro<'hir, 'source>(
             ] if call.name == "slot" => (target, Some(presentation), Some(flow)),
             _ => {
                 return Err(EngineMirMacroCallbackFailure {
-                    error: if call.name == "slot" {
+                    error: dispatch_diagnostic(if call.name == "slot" {
                         String::from(
                             "slot 必须接收文字 key、可选的 plain/panel 表现与 stack/row 排列",
                         )
                     } else {
                         String::from("replace 必须接收一个文字目标")
-                    },
+                    }),
                     scopes,
                 });
             }
@@ -187,7 +193,7 @@ pub fn dispatch_macro<'hir, 'source>(
             target
                 .to_unicode_string()
                 .ok_or_else(|| EngineMirMacroCallbackFailure {
-                    error: format!("{} key 必须是有效 Unicode", call.name),
+                    error: dispatch_diagnostic(format!("{} key 必须是有效 Unicode", call.name)),
                     scopes: scopes.clone(),
                 })?;
         let slot_presentation = if call.name == "slot" {
@@ -196,7 +202,7 @@ pub fn dispatch_macro<'hir, 'source>(
                     value
                         .to_unicode_string()
                         .ok_or_else(|| EngineMirMacroCallbackFailure {
-                            error: String::from("slot 表现必须是有效 Unicode"),
+                            error: dispatch_diagnostic(String::from("slot 表现必须是有效 Unicode")),
                             scopes: scopes.clone(),
                         })?
                 }
@@ -207,7 +213,7 @@ pub fn dispatch_macro<'hir, 'source>(
                 "panel" => narrava_loom_core::semantic::ContainerPresentation::Panel,
                 _ => {
                     return Err(EngineMirMacroCallbackFailure {
-                        error: String::from("slot 表现只支持 plain 或 panel"),
+                        error: dispatch_diagnostic(String::from("slot 表现只支持 plain 或 panel")),
                         scopes,
                     });
                 }
@@ -219,7 +225,7 @@ pub fn dispatch_macro<'hir, 'source>(
             && slot_presentation != Some(narrava_loom_core::semantic::ContainerPresentation::Panel)
         {
             return Err(EngineMirMacroCallbackFailure {
-                error: String::from("slot 排列参数只适用于 panel"),
+                error: dispatch_diagnostic(String::from("slot 排列参数只适用于 panel")),
                 scopes,
             });
         }
@@ -229,7 +235,7 @@ pub fn dispatch_macro<'hir, 'source>(
                     value
                         .to_unicode_string()
                         .ok_or_else(|| EngineMirMacroCallbackFailure {
-                            error: String::from("slot 排列必须是有效 Unicode"),
+                            error: dispatch_diagnostic(String::from("slot 排列必须是有效 Unicode")),
                             scopes: scopes.clone(),
                         })?
                 }
@@ -240,7 +246,7 @@ pub fn dispatch_macro<'hir, 'source>(
                 "row" => narrava_loom_core::semantic::ContainerFlow::Row,
                 _ => {
                     return Err(EngineMirMacroCallbackFailure {
-                        error: String::from("slot 排列只支持 stack 或 row"),
+                        error: dispatch_diagnostic(String::from("slot 排列只支持 stack 或 row")),
                         scopes,
                     });
                 }
@@ -250,7 +256,7 @@ pub fn dispatch_macro<'hir, 'source>(
         };
         let source_call: &'hir HirMacro<'source> = find_hir_macro(hir, invocation.call)
             .ok_or_else(|| EngineMirMacroCallbackFailure {
-                error: format!("无法从原始 HIR 找回 {} 容器正文", call.name),
+                error: dispatch_diagnostic(format!("无法从原始 HIR 找回 {} 容器正文", call.name)),
                 scopes: scopes.clone(),
             })?;
         let definitions: MacroDefinitions<MacroDefinition<RuntimeMacroHandler<'hir, 'source, ()>>> =
@@ -261,7 +267,7 @@ pub fn dispatch_macro<'hir, 'source>(
             runtime.execute_fragment(source_call.body.as_slice())
         }
         .map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("{} 正文执行失败：{error:?}", call.name),
+            error: dispatch_diagnostic(format!("{} 正文执行失败：{error:?}", call.name)),
             scopes: scopes.clone(),
         })?;
         if !matches!(
@@ -269,7 +275,10 @@ pub fn dispatch_macro<'hir, 'source>(
             BodyControl::Continue | BodyControl::ExitScope
         ) {
             return Err(EngineMirMacroCallbackFailure {
-                error: format!("{} 正文不能中断 Passage 或发起导航", call.name),
+                error: dispatch_diagnostic(format!(
+                    "{} 正文不能中断 Passage 或发起导航",
+                    call.name
+                )),
                 scopes,
             });
         }
@@ -284,7 +293,7 @@ pub fn dispatch_macro<'hir, 'source>(
             replace(target.as_str(), body_execution.output)
         }
         .map_err(|error| EngineMirMacroCallbackFailure {
-            error: error.to_string(),
+            error: dispatch_diagnostic(error),
             scopes: scopes.clone(),
         })?;
         return Ok(MacroResumeOutcome::Complete {
@@ -297,7 +306,7 @@ pub fn dispatch_macro<'hir, 'source>(
     }
     if matches!(call.name, "checkbox" | "radiobutton" | "textbox") {
         let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("{} 参数无效：{error:?}", call.name),
+            error: Box::new(error.issue(raw.len()).diagnostic),
             scopes: scopes.clone(),
         })?;
         let arguments: Vec<Value> = {
@@ -307,7 +316,7 @@ pub fn dispatch_macro<'hir, 'source>(
                 evaluate_with_mut(expression, &mut context)
             })
             .map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("{} 参数无法求值：{error:?}", call.name),
+                error: Box::new(error.issue(raw.len()).diagnostic),
                 scopes: scopes.clone(),
             })?
         };
@@ -316,41 +325,36 @@ pub fn dispatch_macro<'hir, 'source>(
                 value
                     .to_unicode_string()
                     .ok_or_else(|| EngineMirMacroCallbackFailure {
-                        error: format!("{} receiver 必须是有效 Unicode", call.name),
+                        error: dispatch_diagnostic(format!(
+                            "{} receiver 必须是有效 Unicode",
+                            call.name
+                        )),
                         scopes: scopes.clone(),
                     })?
             }
             _ => {
                 return Err(EngineMirMacroCallbackFailure {
-                    error: format!("{} 第一个参数必须是带引号的 receiver", call.name),
+                    error: dispatch_diagnostic(format!(
+                        "{} 第一个参数必须是带引号的 receiver",
+                        call.name
+                    )),
                     scopes,
                 });
             }
         };
-        if receiver.starts_with('@') {
-            return Err(EngineMirMacroCallbackFailure {
-                error: format!("{} 暂不支持 @ receiver", call.name),
-                scopes,
-            });
-        }
-        let receiver_expression =
-            parse_expression(receiver.as_str()).map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("{} receiver 无效：{error:?}", call.name),
+        let receiver_expression = parse_input_receiver(receiver.as_str()).map_err(|error| {
+            EngineMirMacroCallbackFailure {
+                error: dispatch_diagnostic(error),
                 scopes: scopes.clone(),
-            })?;
-        if !receiver_expression.is_assignable_target() {
-            return Err(EngineMirMacroCallbackFailure {
-                error: format!("{} receiver 不是可写目标", call.name),
-                scopes,
-            });
-        }
+            }
+        })?;
         let current_result = {
             let mut context: MacroLogicContext<'_, StoryRuntimeRequests<'_, 'hir, 'source>> =
                 MacroLogicContext::new(state, requests, &mut scopes);
             evaluate_with_mut(&receiver_expression, &mut context)
         };
         let mut current: Value = current_result.map_err(|error| EngineMirMacroCallbackFailure {
-            error: format!("{} receiver 无法读取：{error:?}", call.name),
+            error: Box::new(error.diagnostic()),
             scopes: scopes.clone(),
         })?;
         if call.name == "textbox" && matches!(current, Value::Undefined) {
@@ -359,7 +363,7 @@ pub fn dispatch_macro<'hir, 'source>(
                     .get(1)
                     .cloned()
                     .ok_or_else(|| EngineMirMacroCallbackFailure {
-                        error: "textbox 需要 receiver 与默认值".to_owned(),
+                        error: dispatch_diagnostic("textbox 需要 receiver 与默认值".to_owned()),
                         scopes: scopes.clone(),
                     })?;
             let assignment = {
@@ -368,7 +372,7 @@ pub fn dispatch_macro<'hir, 'source>(
                 assign_value_with_mut(&receiver_expression, default.clone(), &mut context)
             };
             assignment.map_err(|error| EngineMirMacroCallbackFailure {
-                error: format!("textbox 默认值无法写入：{error:?}"),
+                error: Box::new(error.diagnostic()),
                 scopes: scopes.clone(),
             })?;
             current = default;
@@ -402,7 +406,7 @@ pub fn dispatch_macro<'hir, 'source>(
             )),
         }
         .map_err(|error| EngineMirMacroCallbackFailure {
-            error: error.to_string(),
+            error: dispatch_diagnostic(error),
             scopes: scopes.clone(),
         })?;
         return Ok(MacroResumeOutcome::Complete {
@@ -418,18 +422,45 @@ pub fn dispatch_macro<'hir, 'source>(
             script
                 .has_macro(call.name)
                 .map_err(|error| EngineMirMacroCallbackFailure {
-                    error: error.to_string(),
+                    error: dispatch_diagnostic(error),
                     scopes: scopes.clone(),
                 })?;
         if !exists {
+            // Twee 定义属于共享 HIR；脚本没有覆盖同名宏时，复用 Core 的 Widget 调用域。
+            let mut definitions: MacroDefinitions<
+                MacroDefinition<RuntimeMacroHandler<'hir, 'source, ()>>,
+            > = MacroDefinitions::new();
+            register_story_widgets(&mut definitions, hir);
+            if definitions.has(call.name) {
+                let mut runtime: RuntimeExecutionContext<
+                    '_,
+                    'hir,
+                    'source,
+                    StoryRuntimeRequests<'_, 'hir, 'source>,
+                    (),
+                > = RuntimeExecutionContext::new(&definitions, state, requests, &mut scopes);
+                let result: Result<
+                    RuntimeMacroExecution,
+                    RuntimeExecutionError<StoryRuntimeRequestError>,
+                > = runtime.execute_macro_with_includes(&call, 256);
+                let output: RuntimeMacroExecution =
+                    result.map_err(|error| EngineMirMacroCallbackFailure {
+                        error: dispatch_diagnostic(format!(
+                            "Widget `{}` 执行失败：{error:?}",
+                            call.name
+                        )),
+                        scopes: scopes.clone(),
+                    })?;
+                return Ok(MacroResumeOutcome::Complete { output, scopes });
+            }
             return Err(EngineMirMacroCallbackFailure {
-                error: format!("Macro 不存在：{}", call.name),
+                error: dispatch_diagnostic(format!("Macro 不存在：{}", call.name)),
                 scopes,
             });
         }
         let outcome = script.call_macro(call.name, raw, state).map_err(|error| {
             EngineMirMacroCallbackFailure {
-                error: error.to_string(),
+                error: dispatch_diagnostic(error),
                 scopes: scopes.clone(),
             }
         })?;
@@ -441,7 +472,7 @@ pub fn dispatch_macro<'hir, 'source>(
                     scopes
                         .suspend()
                         .map_err(|error| EngineMirMacroCallbackFailure {
-                            error: format!("Macro 局部域无法暂停：{error:?}"),
+                            error: dispatch_diagnostic(format!("Macro 局部域无法暂停：{error:?}")),
                             scopes: MacroLocalScopes::new(),
                         })?;
                 return Ok(MacroResumeOutcome::Pending(MacroSuspension {
@@ -453,7 +484,7 @@ pub fn dispatch_macro<'hir, 'source>(
         };
         let execution: RuntimeMacroExecution =
             macro_value_execution(&value).map_err(|error| EngineMirMacroCallbackFailure {
-                error: error.to_string(),
+                error: dispatch_diagnostic(error),
                 scopes: scopes.clone(),
             })?;
         return Ok(MacroResumeOutcome::Complete {
@@ -462,7 +493,7 @@ pub fn dispatch_macro<'hir, 'source>(
         });
     }
     let parsed = parse_argument_list(raw).map_err(|error| EngineMirMacroCallbackFailure {
-        error: format!("link 参数无效：{error:?}"),
+        error: Box::new(error.issue(raw.len()).diagnostic),
         scopes: scopes.clone(),
     })?;
     let arguments: Vec<Value> = {
@@ -472,12 +503,12 @@ pub fn dispatch_macro<'hir, 'source>(
         })
     }
     .map_err(|error| EngineMirMacroCallbackFailure {
-        error: format!("link 参数不能求值：{error:?}"),
+        error: Box::new(error.issue(raw.len()).diagnostic),
         scopes: scopes.clone(),
     })?;
     let source_call: &'hir HirMacro<'source> =
         find_hir_macro(hir, invocation.call).ok_or_else(|| EngineMirMacroCallbackFailure {
-            error: format!("无法从原始 HIR 找回 {} 容器正文", call.name),
+            error: dispatch_diagnostic(format!("无法从原始 HIR 找回 {} 容器正文", call.name)),
             scopes: scopes.clone(),
         })?;
     let execution: BodyExecution = if call.name == "button" {
@@ -498,7 +529,7 @@ pub fn dispatch_macro<'hir, 'source>(
         )
     }
     .map_err(|error| EngineMirMacroCallbackFailure {
-        error: format!("{} 执行失败：{error:?}", call.name),
+        error: dispatch_diagnostic(format!("{} 执行失败：{error:?}", call.name)),
         scopes: scopes.clone(),
     })?;
     Ok(MacroResumeOutcome::Complete {
@@ -574,4 +605,8 @@ pub fn macro_value_execution(value: &Value) -> Result<RuntimeMacroExecution, Scr
         },
         includes_entered: 0,
     })
+}
+
+fn dispatch_diagnostic(error: impl narrava_loom_core::host::HostDispatchError) -> Box<Diagnostic> {
+    Box::new(error.into_diagnostic("host.pending.dispatch_failed", "Macro 分派失败"))
 }

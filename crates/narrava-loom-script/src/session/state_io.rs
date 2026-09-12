@@ -7,14 +7,14 @@ use narrava_loom_core::{
     i18n::{I18nCatalog, I18nRuntimeLanguage, NlangValidatedPackage},
     reaction::ReactionRuntimeState,
     save::SaveDocument,
-    state::{State, StateCheckpoint},
+    state::State,
     story::Story,
 };
 use narrava_loom_protocol::{
     HostErrorDto, PendingOperation, PendingResult, RuntimeUpdate, SaveOperation,
 };
 
-use super::{HostAction, HostOperation, Pending, RuntimeSession};
+use super::{HostAction, HostOperation, InputCheckpoint, Pending, RuntimeSession};
 
 /// Runtime 自己持有的 Save/I18n 数据；不包含路径、文件句柄或 UI。
 pub struct RuntimeData {
@@ -95,7 +95,6 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         target: String,
         after: RuntimeUpdate,
         script_save: bool,
-        input_checkpoint: Option<StateCheckpoint>,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         let document: Option<Vec<u8>> = self
             .data
@@ -120,7 +119,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             action: HostAction::Save { operation, target },
             after,
             script_save,
-            input_checkpoint,
+            input_checkpoint: None,
         })));
         Ok(RuntimeUpdate::Pending { operation: pending })
     }
@@ -157,7 +156,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             .select_language(locale)?;
         self.script
             .select_locale(locale)
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))?;
+            .map_err(crate::ScriptError::into_host_error)?;
         self.language = language.map(Rc::new);
         Ok(())
     }
@@ -165,17 +164,22 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
     pub(super) fn process_script_save(
         &mut self,
         after: RuntimeUpdate,
-        input_checkpoint: &mut Option<StateCheckpoint>,
+        input_checkpoint: &mut Option<InputCheckpoint<'hir, 'source>>,
     ) -> Result<Option<RuntimeUpdate>, HostErrorDto> {
         let Some((operation, target)) = self
             .script
             .take_save()
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))?
+            .map_err(crate::ScriptError::into_host_error)?
         else {
             return Ok(None);
         };
-        self.begin_save(operation, target, after, true, input_checkpoint.take())
-            .map(Some)
+        // 先完成编码，只有成功挂起后才转移检查点，保证立即失败也能回滚。
+        let update: RuntimeUpdate = self.begin_save(operation, target, after, true)?;
+        let Some(Pending::Host(waiting)) = self.pending.as_mut() else {
+            unreachable!("begin_save 成功后必须持有平台保存操作")
+        };
+        waiting.input_checkpoint = input_checkpoint.take();
+        Ok(Some(update))
     }
 
     pub(super) fn process_script_language(
@@ -185,7 +189,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         let Some(locale) = self
             .script
             .take_language()
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))?
+            .map_err(crate::ScriptError::into_host_error)?
         else {
             return Ok(None);
         };
@@ -194,7 +198,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
 
     pub(super) fn resume_host(
         &mut self,
-        waiting: HostOperation,
+        waiting: HostOperation<'hir, 'source>,
         result: Option<PendingResult>,
     ) -> Result<RuntimeUpdate, HostErrorDto> {
         let outcome: Result<(), HostErrorDto> = match &waiting.action {
@@ -223,16 +227,18 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
             self.begin_transaction();
         }
         if waiting.script_save {
-            self.finish_script_save(&waiting.action, outcome.clone())?;
-            if let Err(error) = outcome {
-                if let Some(checkpoint) = waiting.input_checkpoint {
-                    self.transaction
-                        .as_mut()
-                        .expect("Resume 持有命令事务")
-                        .state = checkpoint;
+            let completion: Result<(), HostErrorDto> =
+                self.finish_script_save(&waiting.action, outcome.clone());
+            if let Some(checkpoint) = waiting.input_checkpoint {
+                if let Err(error) = completion.and(outcome) {
+                    self.transaction = Some(checkpoint);
                     return Err(error);
                 }
-                self.notices.push(error);
+            } else {
+                completion?;
+                if let Err(error) = outcome {
+                    self.notices.push(error);
+                }
             }
             return Ok(waiting.after);
         }
@@ -263,13 +269,13 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         if let Some(reactions) = reactions
             && let Err(error) = self.script.restore_reaction_state(&reactions)
         {
-            return Err(HostErrorDto::new(&error.code, error.message));
+            return Err(error.into_host_error());
         }
         Ok(())
     }
 
     pub(super) fn finish_script_save(
-        &self,
+        &mut self,
         action: &HostAction,
         outcome: Result<(), HostErrorDto>,
     ) -> Result<(), HostErrorDto> {
@@ -284,8 +290,9 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
                     .as_ref()
                     .map(|_| ())
                     .map_err(|error| error.message.as_str()),
+                &mut self.state,
             )
-            .map_err(|error| HostErrorDto::new(&error.code, error.message))
+            .map_err(crate::ScriptError::into_host_error)
     }
 }
 

@@ -1,16 +1,16 @@
-:: p4:Hall:body.1
+:: p4:Hall:body.2
 [source]
 你已第 {$visits} 次来到大厅。
 [translation]
 This is your visit number {$visits} to the hall.
 
-:: p4:Hall:body.6.branch.0.0
+:: p4:Hall:body.7.branch.0.0
 [source]
 门后的机关已经启动。
 [translation]
 The mechanism behind the door is already active.
 
-:: p4:Hall:body.6.branch.0.2
+:: p4:Hall:body.7.branch.0.2
 [source]
 
 你发现了
@@ -18,17 +18,11 @@ The mechanism behind the door is already active.
 
 You found
 
-:: p4:Hall:body.6.branch.0.5
+:: p4:Hall:body.7.branch.0.5
 [source]
 。
 [translation]
 .
-
-:: p5:Start:body.2
-[source]
-欢迎，{$hero}。这是 Narrava Loom 综合示例。
-[translation]
-Welcome, {$hero}. This is the Narrava Loom grand tour.
 
 :: p18:AuthorToolsGallery:body.22
 [source]
@@ -51,3 +45,41 @@ Default locale: {value_1}; active locale: {value_2}.
 [translation]
 
 After selection, the current page is redrawn immediately without adding a Story history entry.
+
+:: p5:Start:body.4
+[source]
+
+雨云停在海边。熟悉的街道，重新写成一段可以选择的生活。
+[translation]
+
+Welcome to a day in town. Rain clouds linger by the sea; familiar streets become a new set of choices.
+
+:: p5:Start:body.7
+[source]
+
+在旅舍醒来，去街上谋生，或沿小路走进森林。
+[translation]
+
+Wake at the guesthouse, earn your keep in town, or follow the forest trail.
+
+:: p12:TownSettings:body.1
+[source]
+保存的是这段旅程的状态、地点、随机序列和 Reaction 次数。
+[translation]
+Your save keeps story state, location, the random sequence, and Reaction counts.
+
+:: p12:TownSettings:body.9
+[source]
+
+提示：
+[translation]
+
+Hints:
+
+:: p12:TownSettings:body.18
+[source]
+
+英文包展示本页与部分手册条目的翻译；完整剧情目前使用中文。
+[translation]
+
+This sample language pack translates this page and selected handbook entries. The full story is currently in Chinese.

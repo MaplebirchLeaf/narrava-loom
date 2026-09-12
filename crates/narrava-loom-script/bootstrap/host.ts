@@ -34,7 +34,10 @@ export default function host(): void {
   scriptGlobals.Story = Object.seal({
     has: (name: string) =>
       runtimeConfiguration.story.passages.some((passage) => passage.name === name),
-    current: () => runtimeConfiguration.story.current ?? undefined,
+    current: () =>
+      runtimeConfiguration.story.passages.find(
+        (passage) => passage.name === runtimeConfiguration.story.current,
+      ),
     get: (name: string) =>
       runtimeConfiguration.story.passages.find((passage) => passage.name === name),
     visits: (name: string) => runtimeConfiguration.story.visits[name] ?? 0,

@@ -1,5 +1,16 @@
 :: StoryInit
-/% 启动配置由 scripts/main.ts 的 setup Proxy 建立；这里保留生命周期 Passage 示例。 %/
+/% 游戏数据在“开始这一天”时初始化；开始菜单没有地点。 %/
+<<set $hero to "Author">>
+
+:: Start
+<<set $demo_screen to "menu">>
+<<print "Narrava · 小镇的一天" {heading: 1}>>
+<<print "A Day in Town · Narrava Loom Demo" 3 "small">><br>
+雨云停在海边。熟悉的街道，重新写成一段可以选择的生活。<br>
+在旅舍醒来，去街上谋生，或沿小路走进森林。<br>
+<<link [[新的一天|NewGame]]>><</link>><br>
+<<button [[读取小镇存档|Start]]>><<run importSave("town-day")>><</button>><br>
+<<link [[作者手册 · 全能力示例|Hall]]>><</link>>
 
 :: Bar
 <<barDemo>>
@@ -7,241 +18,228 @@
 :: BarStowed
 <<barStowedDemo>>
 
-:: Start
-<<set $hero to "Author">>
-<<set $visits to 1>>
-欢迎，<<print $hero>>。这是 Narrava Loom 综合示例。<br>
-<<link [[进入大厅|Hall]]>><</link>>
-
-:: Hall [hub]
-<<set $visits to $visits + 1>>
-你已第 <<print $visits>> 次来到大厅。<br>
-<<if $visits > 1>>
-门后的机关已经启动。<br>
-你发现了<<print " 发光的钥匙" 32 "strong">>。<br>
-<</if>>
-<<link [[查看藏书室|Library]]>><</link>><br>
-<<link [[查看语义渲染|SurfaceGallery]]>><</link>><br>
-<<link [[查看弹窗与按钮|DialogGallery]]>><</link>><br>
-<<link [[查看状态绑定表单|FormGallery]]>><</link>><br>
-<<link [[查看内容替换|ReplaceGallery]]>><</link>><br>
-<<link [[查看脚本状态代理|StateGallery]]>><</link>><br>
-<<link [[查看作者能力演示|AuthorToolsGallery]]>><</link>><br>
-<<link [[查看 Reaction 规则系统|ReactionGallery]]>><</link>><br>
-<<link [[查看世界地点与坐标|WorldGallery]]>><</link>><br>
-<<link [[查看 Twee 内 Surface|TextGallery]]>><</link>><br>
-<<link [[查看控制流范本|MacroGallery]]>><</link>>
-
-<<link [[本地音频示例|AudioGallery]]>><</link>>
-
-:: SurfaceGallery [reference]
-<<surfaceDemo>>
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: DialogGallery [reference]
-点击查看角色，默认打开“装备”。关闭后可以重复打开。<br>
-<<link "查看角色">>
-<<dialog "装备">>
-<<page "属性">>
-<<meter "体力" 72 0 100>>
-<<page "装备">>
-<<image "loom.svg" "织机">>
-装备正文。<br>
-<<page "经历">>
-经历正文。普通标题不会拆出新页。<br>
-<<print "回忆" {heading: 2}>>
-<<page "说明">>
-Tauri 点击页签或用左右键；TUI 用左右键切页、Esc 关闭。<br>
-纯文字页也能独立选择。
-<</dialog>>
-<</link>>
-<br>
-<<link "单页提示">>
-<<dialog "提示">>
-<<page "提示">>
-这是一个单页弹窗。使用 Host 自带关闭按钮或 Esc 返回。
-<</dialog>>
-<</link>>
-<br>
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: FormGallery [reference]
-<<set $tips_enabled to $tips_enabled ?? false>>
-<<set $route to $route ?? "quiet">>
-提示开关：<<checkbox "$tips_enabled" false true>><br>
-安静路线：<<radiobutton "$route" "quiet">><br>
-探索路线：<<radiobutton "$route" "explore">><br>
-玩家姓名：<<textbox "$player_name" "Author">><br>
-当前值：提示=<<print $tips_enabled>>，路线=<<print $route>>，姓名=<<print $player_name>>。<br>
-<<button [[确认表单并返回|Hall]]>>
-  <<set $form_confirmed to true>>
-<</button>>
-<br><<link [[刷新当前值|FormGallery]]>><</link>><br>
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: ReplaceGallery [reference]
-<<slot "plain-status">>
-  默认 plain 槽只建立稳定 key，不增加额外视觉边界。
-<</slot>>
-<<slot "status-panel" "panel" "row">>
-  这段默认内容会被同一份 Surface 中稍后的 replace 替换。
-<</slot>>
-<<replace "status-panel">>
-  任务状态：已按 Surface Key 替换。
-<</replace>>
-<<slot "location-panel" "panel" "row">>
-  所在地点：大厅。
-<</slot>>
-<<replace "header">>
-  替换后的页眉：这是由 replace 容器正文产生的 Surface。
-<</replace>>
-横排方框结束后，正文从下一行继续；TUI 与 WebView 都能把 header 映射到自己的区域。<br>
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: TextGallery [reference]
-这是由 print Macro 提供的 Twee 内 Surface：内容 + 可选 color + 零到多个 style，<br>
-不需要写脚本。图片和状态条可用原生 image、meter 宏；弹窗使用原生 dialog/page；Region 示例使用 scripts 构建。<br>
-
-<br>标准调色板是 0..=63：0-7 是默认色与灰阶，8-63 是红到深紫的色谱。<br>
-8-63 是光谱（红8→橙16→黄24→绿32→蓝40→紫48→深紫56→63，每色相 8 级）；0 为正文默认。<br>
-<<print "3" 3>> <<print "8" 8>> <<print "16" 16>> <<print "24" 24>><br>
-<<print "32" 32>> <<print "40" 40>> <<print "48" 48>> <<print "63" 63>><br>
-常用锚点：3=浅灰（弱化）、16=橙（强调）、24=黄、32=绿（正面）、40=蓝（信息）、8=红（负面）。<br>
-
-<br>style 是语义字形，可任意组合：<br>
-<<print "强调" 0 "emphasis">> <<print "加粗" 0 "strong">><br>
-<<print "代码(等宽)" 0 "code">> <<print "引用" 0 "quote">><br>
-<<print "标记" 0 "marked">> <<print "小字" 0 "small">><br>
-<<print "新增内容" 0 "inserted">> <<print "删除内容" 0 "deleted">><br>
-
-<br>标题示例（色阶 16 是橙色，strong 只负责加粗）：<br>
-<<print "橙色标题演示" 16 "strong">><br>
-
-<br>color 与 style 互不排斥，可以同时指定。位置形式（内容、color、style...）：<br>
-<<print "正面加粗" 32 "strong">><br>
-对象形式把 color 与多个 style 写在一个对象里：<br>
-<<print "警告对象形式" {color: 24, styles: ["strong", "code"]}>><br>
-
-<br>变量内容：<<print $hero 16 "strong">>。<br>
-
-<br>延迟显示：对象形式加 delay（毫秒），Host 在此之前不呈现内容。<br>
-<<print "两秒后出现的文字" {color: 40, delay: 2000}>><br>
-<<print "一秒后出现的文字" {color: 32, styles: ["strong"], delay: 1000}>><br>
-
-<br>动画属于 Host 视觉层：Surface 的 delay 只表达内容到期前不可见。<br>
-作者可在 styles/*.css 里用 [data-color="N"] 覆盖任意色阶。<br>
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: MacroGallery [reference]
-switch：按值严格匹配，命中输出该分支：<br>
-<<set $weather to "rain">>
-<<switch $weather>>
-<<case "sunny">>
-晴天<br>
-<<case "rain">>
-下雨<br>
-<<default>>
-其他天气<br>
-<</switch>>
-
-<br>for：三种遍历形式<br>
-<<set $items to ["钥匙", "火把", "地图"]>>
-背包：<br>
-<<for $item of $items>>
-  <<print $item>><br>
-<</for>>
-序号：<br>
-<<for $index in $items>>
-  <<print $index>><br>
-<</for>>
-范围：<br>
-<<for $step range 1 to 3>>
-  <<print $step>><br>
-<</for>>
-
-<br>while + break / continue（2 被 continue 跳过，随后 break 提前结束，输出 1、3）：<br>
-<<set $count to 0>>
-<<while $count < 10>>
-<<set $count to $count + 1>>
-<<if $count == 2>>
-<<continue>>
-<</if>>
-<<if $count >= 4>>
-<<break>>
-<</if>>
-<<print $count>><br>
-<</while>>
-
-<br>unset：删除变量后 defined() 为 false：<br>
-<<set $count to 3>>
-<<unset $count>>
-<<print defined($count)>><br>
-
-<br>include：原地执行另一 Passage，不发生导航<br>
-<<include "SharedTip">>
-
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: GotoDemo [reference]
-/% 进入后立即导航到 Library，当前 Passage 不再输出。 %/
-<<goto "Library">>
-
-:: SharedTip
-（被 include 的提示正文：显示在调用位置，不产生导航，也不进入 Story 历史。）<br>
-
-:: Library [quiet]
-书架上写着：<<print scriptedGreeting($hero)>><br>
-<<silently>>
-<<set $found_book to true>>
-<</silently>>
-<<link [[返回大厅|Hall]]>><</link>>
-
-:: Cleanup [exit]
-<<set $finished to true>>
-
-:: HighlightWidgets [widget]
-<<widget "highlightCard">>
-  <<print @args[0]>>
-<</widget>>
-
-/%
-  HighlightGallery 只用于检查 VS Code 高亮，不会从正常故事进入。
-  本注释中的 <<set $ignored to true>> 不应按 Macro 着色。
-%/
-:: HighlightGallery [reference exit]
-<<set $hero.profile.name to "Author">>
-<<set _counter to 42>>
-<<set @choice.label to 'Library'>>
-<<set setup.build.channel to "nightly">>
-
-<<if defined($hero.profile.name) and _counter >= 1>>
-  <<print scriptedGreeting($hero.profile.name)>>
-<<elseif empty(@choice.label)>>
-  <<print string(number(3.14))>>
-<<else>>
-  <<run Object.assign($hero.profile, { ready: true })>>
-<</if>>
-
-<<print `反引号字符串：${$hero.profile.name} / ${string(_counter)}`>>
-
-<<highlightCard "自定义 Widget Macro">>
-<<crossFileCard "跨文件 Widget Macro">>
-
-<<link [[进入大厅|Hall]]>><</link>>
-<<link [[查看藏书室|Library]]>><</link>>
-<span class="highlight-demo" data-passage="HighlightGallery">HTML 标签、属性和文本</span>
-
-
-:: AudioGallery [forest]
-<<audio "chime.wav" "ambience" "forest">>
-当前页面带有 forest 标签，循环播放背景音。<br>
-<<link [[走向林间深处（连续播放）|AudioForest]]>><</link>><br>
-<<link [[离开森林（自动停止）|Hall]]>><</link>>
-
-:: AudioForest [forest]
-上一页与这里需要相同的音频，所以不中断、不从头播放。<br>
-<<link [[返回林间入口|AudioGallery]]>><</link>><br>
-<<link [[离开森林（自动停止）|Hall]]>><</link>>
-
 :: Header
 <<audio "chime.wav" "ambience" "forest">>
+
+:: NewGame
+<<set $demo_screen to "menu">>
+<<print "你将怎样度过今天？" {heading: 1}>>
+姓名：<<textbox "$town_name" "Alex">><br>
+世界种子：<<textbox "$town_seed" "town-morning">><br>
+相同种子与相同行动会得到相同的探索结果。<br>
+<<set $town_hints to $town_hints ?? true>>
+<<set $town_route to $town_route ?? "work">>
+显示行动提示：<<checkbox "$town_hints" false true>><br>
+今日打算：<<radiobutton "$town_route" "work">> 先挣一份工钱
+<<radiobutton "$town_route" "explore">> 先去城外走走<br>
+<<button [[开始这一天|Bedroom]]>><<run townBegin()>><</button>><br>
+<<link [[返回菜单|Start]]>><</link>>
+
+:: Bedroom [guesthouse inside]
+<<print "你的卧室" {heading: 1}>>
+窗帘透进灰白的晨光，桌上放着一本空白日记。楼下已经有人在打扫。<br>
+<<print $town.notice 3>><br>
+<<if $town_hints>>
+<<if $town_route == "explore">>
+今天想去森林走走。先看看地图；雨衣能让探索轻松一些。<br>
+<<else>>
+今天想先赚工钱。钟楼咖啡馆八点开门，每天可以做两次短班。<br>
+<</if>>
+<</if>>
+<<link [[下楼找 林澈|Guesthouse]]>><</link>><br>
+<<button [[睡到明早|Bedroom]]>><<run townAct("rest")>><</button>><br>
+<<set $town_return to "Bedroom">>
+<<include "TownMenu">>
+
+:: Guesthouse [guesthouse inside]
+<<print "旅舍 · 公共休息室" {heading: 1}>>
+林澈蹲在一台旧收音机旁，把螺丝按大小排成一行。<br>
+<<if $town.quest == "available">>
+“购物中心还有这种零件。你能帮我带一包回来吗？”<br>
+<<button [[接下委托|Guesthouse]]>><<run townAct("accept")>><</button>><br>
+<<elseif $town.quest == "accepted" && $town.parcels == 0>>
+零件售价 £8；带回来后林澈会付你 £15。<br>
+<<elseif $town.quest == "accepted">>
+你把纸袋放到桌上，林澈眼睛一亮。<br>
+<<button [[交付零件|DeliveryDone]]>><<run townAct("deliver")>><</button>><br>
+<<else>>
+收音机传出断断续续的音乐。“今天多亏了你。”<br>
+<</if>>
+<<link [[走出大门|ResidentialStreet]]>><</link>><br>
+<<link [[回卧室|Bedroom]]>><</link>><br>
+<<set $town_return to "Guesthouse">>
+<<include "TownMenu">>
+
+:: DeliveryDone [guesthouse inside]
+<<print "一件小事，也值得记下来" {heading: 1}>>
+<<print $town.notice>><br>
+<<townWait>><br>
+<<link [[继续这一天|Guesthouse]]>><</link>><br>
+<<set $town_return to "DeliveryDone">>
+<<include "TownMenu">>
+
+:: DeliveryNotice
+日记新增：我和林澈修好了一台收音机。<br>
+
+:: ResidentialStreet [residential_street outside]
+<<print "住宅街" {heading: 1}>>
+一排相似的小屋沿道路展开。有人在照顾门前的花园，赶路的人撑起雨伞。<br>
+<<link [[穿过街口，去商业区|MarketStreet]]>><</link>><br>
+<<link [[走向森林入口|ForestEdge]]>><</link>><br>
+<<link [[进入旅舍|Guesthouse]]>><</link>><br>
+<<set $town_return to "ResidentialStreet">>
+<<include "TownMenu">>
+
+:: MarketStreet [market_street outside]
+<<print "商业街" {heading: 1}>>
+购物中心的橱窗倒映着行人。巷口飘来咖啡香，医院的指示牌就在街道另一端。<br>
+<<if !townOpen()>>
+<<print "店铺已经打烊。可以去医院休息，或回家睡到明早。" 24>><br>
+<</if>>
+<<link [[购物中心|ShoppingCentre]]>><</link>><br>
+<<link [[钟楼咖啡馆|ClockCafe]]>><</link>><br>
+<<link [[医院|TownHospital]]>><</link>><br>
+<<link [[公园|TownPark]]>><</link>><br>
+<<link [[回住宅街|ResidentialStreet]]>><</link>><br>
+<<set $town_return to "MarketStreet">>
+<<include "TownMenu">>
+
+:: ClockCafe [clock_cafe inside]
+<<print "钟楼咖啡馆" {heading: 1}>>
+你透过窗边高座看向街道，闻到现磨咖啡的香气。<br>
+<<print $town.notice 3>><br>
+<<if townOpen()>>
+<<if $town.energy >= 25 && $town.shifts < 2>>
+<<button [[帮工两小时 · +£18 / -25 体力|ClockCafe]]>><<run townAct("work")>><</button>><br>
+<<else>>
+今天先歇一歇吧；工作需要 25 体力，每天最多两班。<br>
+<</if>>
+<<if $town.money >= 4>>
+<<button [[窗边喝拿铁 · £4 / 20 分钟|ClockCafe]]>><<run townAct("coffee")>><</button>><br>
+<</if>>
+<<else>>
+椅子已经收起，明天八点再来吧。<br>
+<</if>>
+<<link [[走回商业街|MarketStreet]]>><</link>><br>
+<<set $town_return to "ClockCafe">>
+<<include "TownMenu">>
+
+:: ShoppingCentre [shopping_centre inside]
+<<print "购物中心" {heading: 1}>>
+服装柜台和杂货铺共用一间明亮的大厅。<br>
+<<print $town.notice 3>><br>
+<<if townOpen()>>
+<<if $town.quest == "accepted" && $town.parcels == 0 && $town.money >= 8>>
+<<button [[购买收音机零件 · £8|ShoppingCentre]]>><<run townAct("parcel")>><</button>><br>
+<</if>>
+<<if !$town.coat && $town.money >= 12>>
+<<button [[购买雨衣 · £12|ShoppingCentre]]>><<run townAct("coat")>><</button>><br>
+<</if>>
+<<if $town.coat>>
+雨衣已经装进你的背包。<br>
+<</if>>
+<<else>>
+店员已经拉下了卷帘门。<br>
+<</if>>
+<<link [[离开购物中心|MarketStreet]]>><</link>><br>
+<<set $town_return to "ShoppingCentre">>
+<<include "TownMenu">>
+
+:: TownHospital [town_hospital inside]
+<<print "医院 · 接待处" {heading: 1}>>
+走廊里很安静。值班人员指了指饮水机和休息区。<br>
+<<print $town.notice 3>><br>
+<<if $town.money >= 5>>
+<<button [[补给与休息 · £5 / 30 分钟|TownHospital]]>><<run townAct("clinic")>><</button>><br>
+<</if>>
+<<button [[走到窗边等候区|TownHospital]]>><<run locationMoveTo(-60, 65)>><</button>><br>
+<<link [[走到院外|HospitalOutside]]>><</link>><br>
+<<set $town_return to "TownHospital">>
+<<include "TownMenu">>
+
+:: HospitalOutside [town_hospital outside]
+你站在医院门口，同一个地点从 inside 切换为 outside。<br>
+<<locationCurrent>><br>
+<<link [[返回接待处|TownHospital]]>><</link>><br>
+<<link [[回商业街|MarketStreet]]>><</link>>
+
+:: TownPark [town_park outside]
+<<crossFileCard "留一点时间给自己。">><br>
+<<print "公园" {heading: 1}>>
+河岸的郁金香随风晃动。你在长椅上展开地图，暂时离开街道的喧闹。<br>
+<<link [[回商业街|MarketStreet]]>><</link>><br>
+<<set $town_return to "TownPark">>
+<<include "TownMenu">>
+
+:: ForestEdge [forest_edge outside forest]
+<<print "森林入口" {heading: 1}>>
+房屋逐渐稀疏，泥土小径伸入树荫。木牌提醒你天黑前返回。<br>
+<<link [[沿路标深入|ForestTrail]]>><</link>><br>
+<<link [[回住宅街|ResidentialStreet]]>><</link>><br>
+<<set $town_return to "ForestEdge">>
+<<include "TownMenu">>
+
+:: ForestTrail [forest_trail outside forest]
+<<print "林间小径" {heading: 1}>>
+枝叶在头顶交错。每一次探索耗时半小时，沿途会遇见不同的小事。<br>
+<<print $town.notice>><br>
+<<if $town.energy >= 15 || ($town.coat && $town.energy >= 10)>>
+<<button [[探索半小时|ForestTrail]]>><<run townAct("explore")>><</button>><br>
+<<else>>
+你已经很累了。先返回镇上恢复体力吧。<br>
+<</if>>
+<<link [[沿原路返回|ForestEdge]]>><</link>><br>
+<<set $town_return to "ForestTrail">>
+<<include "TownMenu">>
+
+:: ForestClosed [forest_edge outside forest]
+天色已经暗下来。你在路标前停步，决定明天再来。<br>
+<<link [[返回住宅街|ResidentialStreet]]>><</link>>
+
+:: TownMenu
+<br>
+<<link "人物与日记">>
+<<dialog "人物">>
+<<page "人物">>
+<<print $town.name {heading: 2}>><br>
+<<meter "体力" $town.energy 0 100>>
+<<meter "压力" $town.stress 0 100>>
+金钱：£<<print $town.money>><br>
+<<page "背包">>
+<<print ($town.coat ? "雨衣：探索消耗 10 体力。" : "日常便服：探索消耗 15 体力。")>><br>
+零件包：<<print $town.parcels>><br>
+<<page "日记">>
+<<print $town.notice>><br>
+委托状态：<<print $town.quest>><br>
+<<page "地图">>
+住宅街 → 商业街 → 商场 / 咖啡馆 / 医院 / 公园<br>
+住宅街 → 森林入口 → 林间小径<br>
+<</dialog>>
+<</link>>
+ · <<button [[地图与坐标|TownMap]]>><</button>> ·
+<<button [[存档与设置|TownSettings]]>><</button>>
+
+:: TownMap
+<<print "小镇导览" {heading: 1}>>
+<<locationCurrent>><br>
+坐标采用同一个平面，西侧使用负值。地点不是地图图片上的像素。<br>
+住宅街 [-300, 0] → 商业街 [-110, 0]<br>
+旅舍 [-310, 10]；商场 [-95, 15]；咖啡馆 [-160, -10]；医院 [-70, 60]<br>
+森林入口 [-460, 0] → 林间小径 [-550, 0]<br>
+<<link [[收起地图|TownReturn]]>><</link>>
+
+:: TownReturn
+<<goto $town_return>>
+
+:: TownSettings
+<<print "日记夹页 · 存档与设置" {heading: 1}>>
+保存的是这段旅程的状态、地点、随机序列和 Reaction 次数。<br>
+<<button [[保存小镇进度|TownSettings]]>><<run exportSave("town-day")>><</button>><br>
+<<button [[读取小镇进度|TownSettings]]>><<run importSave("town-day")>><</button>><br>
+提示：<<checkbox "$town_hints" false true>><br>
+<<button [[English · 翻译示例|TownSettings]]>><<run selectLanguage("en")>><</button>> ·
+<<button [[简体中文|TownSettings]]>><<run selectLanguage("zh-CN")>><</button>><br>
+英文包展示本页与部分手册条目的翻译；完整剧情目前使用中文。<br>
+<<link [[继续旅程|TownReturn]]>><</link>><br>
+<<link [[作者手册|Hall]]>><</link>><br>
+<<link [[回到开始菜单|Start]]>><</link>>

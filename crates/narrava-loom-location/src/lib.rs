@@ -1,13 +1,13 @@
 //! 宿主无关的地点、多边形边界与可存档玩家位置。
 
 mod geometry;
-mod world;
+mod location;
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-pub use world::World;
+pub use location::Location;
 
 /// 共享世界整数坐标，允许负数，与显示像素无关。
 pub type Point = [i64; 2];
@@ -40,7 +40,7 @@ pub enum Environment {
 /// 随游戏状态保存的权威玩家位置。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorldPosition {
+pub struct LocationPosition {
     pub place: String,
     pub point: Point,
     #[serde(default)]
@@ -50,18 +50,18 @@ pub struct WorldPosition {
 /// 可变世界状态，与地点定义分开保存。
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorldState {
-    pub position: Option<WorldPosition>,
+pub struct LocationState {
+    pub position: Option<LocationPosition>,
 }
 
 /// 世界数据校验错误，包含稳定错误码与具体原因。
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorldError {
+pub struct LocationError {
     code: &'static str,
     message: String,
 }
 
-impl WorldError {
+impl LocationError {
     fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
@@ -74,13 +74,13 @@ impl WorldError {
     }
 }
 
-impl fmt::Display for WorldError {
+impl fmt::Display for LocationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.message)
     }
 }
 
-impl std::error::Error for WorldError {}
+impl std::error::Error for LocationError {}
 
 #[cfg(test)]
 mod tests;

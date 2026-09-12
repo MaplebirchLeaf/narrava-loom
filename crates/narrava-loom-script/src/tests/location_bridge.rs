@@ -1,10 +1,10 @@
-//! World 作者 API 经真实 Boa、活动 State 与 RuntimeSession 的边界测试。
+//! Location 作者 API 经真实 Boa、活动 State 与 RuntimeSession 的边界测试。
 
 use super::support::{navigate, ready, text, with_runtime};
 use narrava_loom_protocol::{HostUpdateDto, RuntimeCommand};
 
 const TOWN: &str = r#"
-World.add({id:'town',name:'新手镇',bounds:[[0,0],[10,0],[10,10],[0,10]],entry:[2,3]});
+Location.add({id:'town',name:'新手镇',bounds:[[0,0],[10,0],[10,10],[0,10]],entry:[2,3]});
 "#;
 
 fn probe(script: &str, entered: bool) -> serde_json::Value {
@@ -27,19 +27,19 @@ fn probe(script: &str, entered: bool) -> serde_json::Value {
 }
 
 #[test]
-fn world_bridge_accepts_optional_names_and_forward_parent_registration() {
+fn location_bridge_accepts_optional_names_and_forward_parent_registration() {
     let result: serde_json::Value = probe(
         r#"
-World.add({id:'clinic',name:'诊所',parent:'town',bounds:[[2,2],[4,2],[4,4],[2,4]]});
-World.add({id:'town',bounds:[[0,0],[10,0],[10,10],[0,10]]});
+Location.add({id:'clinic',name:'诊所',parent:'town',bounds:[[2,2],[4,2],[4,4],[2,4]]});
+Location.add({id:'town',bounds:[[0,0],[10,0],[10,10],[0,10]]});
 Macro.add('probe', {handler: () => JSON.stringify({
-    name: World.get('clinic').name,
-    parent: World.get('clinic').parent,
-    unnamed: World.get('town').name === undefined,
-    missing: World.get('missing') === undefined,
-    located: World.locate([3,3]).map(place => place.id),
-    places: World.places().map(place => place.id),
-    current: World.current(),
+    name: Location.get('clinic').name,
+    parent: Location.get('clinic').parent,
+    unnamed: Location.get('town').name === undefined,
+    missing: Location.get('missing') === undefined,
+    located: Location.locate([3,3]).map(place => place.id),
+    places: Location.places().map(place => place.id),
+    current: Location.current(),
 })});
 "#,
         false,
@@ -54,27 +54,27 @@ Macro.add('probe', {handler: () => JSON.stringify({
 }
 
 #[test]
-fn world_bridge_returns_detached_place_and_position_snapshots() {
+fn location_bridge_returns_detached_place_and_position_snapshots() {
     let script: String = format!(
         r#"{TOWN}
 Macro.add('probe', {{handler: () => {{
-    const place = World.get('town');
+    const place = Location.get('town');
     place.bounds[0][0] = 99;
     place.entry[0] = 99;
     place.name = 'changed';
-    const places = World.places();
+    const places = Location.places();
     places[0].bounds[1][0] = 99;
     places.length = 0;
-    const located = World.locate([2,3]);
+    const located = Location.locate([2,3]);
     located[0].id = 'changed';
-    const current = World.current();
+    const current = Location.current();
     current.point[0] = 99;
     current.place = 'changed';
     current.environment = 'inside';
-    const before = World.current();
-    const moved = World.move([4,5]);
+    const before = Location.current();
+    const moved = Location.move([4,5]);
     moved.point[0] = 99;
-    return JSON.stringify({{place: World.get('town'), before, after: World.current()}});
+    return JSON.stringify({{place: Location.get('town'), before, after: Location.current()}});
 }}}});
 "#
     );
@@ -91,14 +91,14 @@ Macro.add('probe', {{handler: () => {{
 }
 
 #[test]
-fn world_bridge_preserves_safe_integer_coordinates_larger_than_i32() {
+fn location_bridge_preserves_safe_integer_coordinates_larger_than_i32() {
     let result: serde_json::Value = probe(
         r#"
-World.add({id:'town',bounds:[[3000000000,0],[3000000010,0],[3000000010,10],[3000000000,10]],entry:[3000000001,1]});
+Location.add({id:'town',bounds:[[3000000000,0],[3000000010,0],[3000000010,10],[3000000000,10]],entry:[3000000001,1]});
 Macro.add('probe', {handler: () => JSON.stringify({
-    entry: World.current().point,
-    moved: World.move([3000000002,3]).point,
-    located: World.locate([3000000002,3]).map(place => place.id),
+    entry: Location.current().point,
+    moved: Location.move([3000000002,3]).point,
+    located: Location.locate([3000000002,3]).map(place => place.id),
 })});
 "#,
         true,
@@ -109,7 +109,7 @@ Macro.add('probe', {handler: () => JSON.stringify({
 }
 
 #[test]
-fn world_bridge_rejects_invalid_coordinates_and_unknown_definition_fields() {
+fn location_bridge_rejects_invalid_coordinates_and_unknown_definition_fields() {
     let script: String = format!(
         r#"{TOWN}
 const rejected = [];
@@ -119,15 +119,15 @@ function reject(operation) {{
     catch (error) {{ rejected.push(error instanceof TypeError); }}
 }}
 for (const [index, point] of points.entries()) {{
-    reject(() => World.add({{id:`bad-entry-${{index}}`,bounds:[[0,0],[10,0],[10,10],[0,10]],entry:point}}));
-    reject(() => World.add({{id:`bad-bound-${{index}}`,bounds:[[0,0],[10,0],point,[0,10]]}}));
-    reject(() => World.locate(point));
+    reject(() => Location.add({{id:`bad-entry-${{index}}`,bounds:[[0,0],[10,0],[10,10],[0,10]],entry:point}}));
+    reject(() => Location.add({{id:`bad-bound-${{index}}`,bounds:[[0,0],[10,0],point,[0,10]]}}));
+    reject(() => Location.locate(point));
 }}
-reject(() => World.add({{id:'unknown-field',bounds:[[0,0],[10,0],[10,10],[0,10]],unknown:true}}));
+reject(() => Location.add({{id:'unknown-field',bounds:[[0,0],[10,0],[10,10],[0,10]],unknown:true}}));
 Macro.add('probe', {{handler: () => {{
-    const before = World.current();
-    for (const point of points) reject(() => World.move(point));
-    return JSON.stringify({{rejected, count: World.places().length, before, after: World.current()}});
+    const before = Location.current();
+    for (const point of points) reject(() => Location.move(point));
+    return JSON.stringify({{rejected, count: Location.places().length, before, after: Location.current()}});
 }}}});
 "#
     );
@@ -138,14 +138,14 @@ Macro.add('probe', {{handler: () => {{
 }
 
 #[test]
-fn world_bridge_seals_registration_after_initial_scripts() {
+fn location_bridge_seals_registration_after_initial_scripts() {
     let script: String = format!(
         r#"{TOWN}
 Macro.add('probe', {{handler: () => {{
     let rejected = false;
-    try {{ World.add({{id:'late',bounds:[[0,0],[10,0],[10,10],[0,10]]}}); }}
+    try {{ Location.add({{id:'late',bounds:[[0,0],[10,0],[10,10],[0,10]]}}); }}
     catch (error) {{ rejected = error instanceof TypeError; }}
-    return JSON.stringify({{rejected, count: World.places().length, missing: World.get('late') === undefined}});
+    return JSON.stringify({{rejected, count: Location.places().length, missing: Location.get('late') === undefined}});
 }}}});
 "#
     );
@@ -157,15 +157,15 @@ Macro.add('probe', {{handler: () => {{
 }
 
 #[test]
-fn world_bridge_failed_movement_preserves_absent_and_existing_positions() {
+fn location_bridge_failed_movement_preserves_absent_and_existing_positions() {
     let script: String = format!(
         r#"{TOWN}
 Macro.add('probe', {{handler: () => {{
-    const before = World.current();
+    const before = Location.current();
     let error = '';
-    try {{ World.move(before === null ? [2,3] : [20,30]); }}
+    try {{ Location.move(before === null ? [2,3] : [20,30]); }}
     catch (failure) {{ error = failure.message; }}
-    return JSON.stringify({{before, after: World.current(), error}});
+    return JSON.stringify({{before, after: Location.current(), error}});
 }}}});
 "#
     );
@@ -176,7 +176,7 @@ Macro.add('probe', {{handler: () => {{
         absent["error"]
             .as_str()
             .unwrap()
-            .contains("world.no_position")
+            .contains("location.no_position")
     );
     let entered: serde_json::Value = probe(&script, true);
     assert_eq!(entered["before"], entered["after"]);
@@ -185,6 +185,6 @@ Macro.add('probe', {{handler: () => {{
         entered["error"]
             .as_str()
             .unwrap()
-            .contains("world.invalid_position")
+            .contains("location.invalid_position")
     );
 }

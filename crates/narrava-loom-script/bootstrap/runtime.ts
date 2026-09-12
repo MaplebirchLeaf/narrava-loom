@@ -2,8 +2,8 @@ import { takeAudio, beginAudio, rollbackAudio, audioPassage, audioScope, audioMa
 import { drainAuthorEvents, publishBuiltin, publishReaction } from "./event"
 import { claimHostOperation, completeHostOperation } from "./host"
 import {
+  hostOperationQueue,
   eventRecords,
-  logRecords,
   macroDefinitions,
   runtimeConfiguration,
   scriptFunctions,
@@ -11,6 +11,7 @@ import {
   type BootstrapContract,
 } from "./internal"
 import { finishSave } from "./save"
+import { inspectConsoleResult, completeConsole } from "./console"
 
 interface NativeBridge extends Record<string, unknown> {
   engine: unknown
@@ -33,7 +34,6 @@ export default function runtime(contract: BootstrapContract): void {
     engine: null,
     save: null,
     events: eventRecords,
-    logs: logRecords,
     macros: macroDefinitions,
     configure(value) {
       Object.assign(runtimeConfiguration, value)
@@ -42,6 +42,20 @@ export default function runtime(contract: BootstrapContract): void {
     emitReaction: publishReaction,
     takeAuthorEvents: drainAuthorEvents,
     completeSave: finishSave,
+    inspectConsoleResult,
+    discardConsoleRequests() {
+      drainAuthorEvents()
+      hostOperationQueue.clear()
+      this.engine = null
+      this.save = null
+      this.language = null
+    },
+    takeEngine() {
+      const request = this.engine
+      this.engine = null
+      return request
+    },
+    completeConsole,
     takeAudio,
     beginAudio,
     rollbackAudio,

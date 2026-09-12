@@ -22,7 +22,7 @@ use narrava_loom_protocol::{
 };
 use narrava_loom_script::{EcmaBinding, RuntimeData, RuntimeSession, protocol_adapter::diagnostic};
 
-use crate::{TuiFrame, TuiRenderer, platform, write_frame};
+use crate::{TuiFrame, TuiRenderer, platform, screen::ScreenUpdate, write_frame};
 
 /// 装载游戏并进入渲染/输入主循环；`game_path` 是开发目录或含 `game.nar` 的发行目录。
 pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
@@ -72,7 +72,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
         &config.game.default_locale,
         &mut state,
     )
-    .map_err(|error| HostErrorDto::new("tui_host.script", error.to_string()))?;
+    .map_err(|error| error.into_host_error())?;
     let identity = config
         .identity()
         .map_err(|error| HostErrorDto::new("tui_host.game_identity", error.to_string()))?;
@@ -139,7 +139,7 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
             crate::TuiOperation::Quit => break,
             crate::TuiOperation::Dismiss => continue,
             operation => {
-                let _frame = apply_operation(
+                let feedback: Option<ScreenUpdate> = apply_operation(
                     &mut runtime,
                     &mut audio,
                     &mut renderer,
@@ -148,6 +148,15 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
                     (&languages, &mut language_index),
                     operation,
                 )?;
+                if let Some(ScreenUpdate::Inspect(snapshot)) = feedback {
+                    use io::Write;
+                    let mut stdout: io::StdoutLock<'_> = io::stdout().lock();
+                    for line in crate::debug::snapshot_lines(&snapshot) {
+                        writeln!(stdout, "{line}").map_err(|error| {
+                            HostErrorDto::new("tui_host.write", error.to_string())
+                        })?;
+                    }
+                }
             }
         }
     }
@@ -162,7 +171,7 @@ fn apply_operation(
     game_path: &Path,
     language: (&[String], &mut usize),
     operation: crate::TuiOperation,
-) -> Result<Option<TuiFrame>, HostErrorDto> {
+) -> Result<Option<ScreenUpdate>, HostErrorDto> {
     let (languages, language_index) = language;
     let previous_language_index: usize = *language_index;
     let command: Option<RuntimeCommand> = match operation {
@@ -192,7 +201,14 @@ fn apply_operation(
         }
         crate::TuiOperation::ToggleSidebar => {
             renderer.toggle_sidebar();
-            return Ok(Some(renderer.render_update(update)));
+            return Ok(Some(ScreenUpdate::Frame(Box::new(
+                renderer.render_update(update),
+            ))));
+        }
+        crate::TuiOperation::Inspect => {
+            return runtime
+                .debug_snapshot()
+                .map(|snapshot| Some(ScreenUpdate::Inspect(Box::new(snapshot))));
         }
         crate::TuiOperation::Dismiss | crate::TuiOperation::Help | crate::TuiOperation::Redraw => {
             return Ok(None);
@@ -222,10 +238,12 @@ fn apply_operation(
                     target: String::from("autosave"),
                 };
                 if let Err(error) = execute_blocking(runtime, audio, game_path, autosave) {
-                    eprintln!("! {}：{}", error.code, error.message);
+                    eprintln!("! {error}");
                 }
             }
-            Ok(Some(renderer.render_update(update)))
+            Ok(Some(ScreenUpdate::Frame(Box::new(
+                renderer.render_update(update),
+            ))))
         }
         RuntimeUpdate::Applied => Ok(None),
         RuntimeUpdate::Pending { .. } | RuntimeUpdate::Audio { .. } => {
@@ -257,7 +275,8 @@ fn execute_blocking(
     loop {
         let (update, errors) = audio.consume(runtime.execute(command)?);
         for error in errors {
-            eprintln!("! {}：{}", error.code, error.message);
+            runtime.record_host_error(&error);
+            eprintln!("! {error}");
         }
         match update {
             RuntimeUpdate::Pending {
@@ -295,7 +314,7 @@ fn execute_blocking(
             }
             update => {
                 for notice in runtime.take_notices() {
-                    eprintln!("! {}：{}", notice.code, notice.message);
+                    eprintln!("! {notice}");
                 }
                 return Ok(update);
             }
@@ -369,6 +388,6 @@ fn json_from_surface(value: &SemanticValue) -> serde_json::Value {
 fn write_help_prompt(writer: &mut impl io::Write) -> io::Result<()> {
     writeln!(
         writer,
-        "输入编号选择动作；b/f 历史、s 侧栏、save/load 快速存读档、language 切换语言、q 退出"
+        "输入编号选择动作；b/f 历史、s 侧栏、save/load 快速存读档、language 切换语言、:inspect 只读检查、q 退出"
     )
 }

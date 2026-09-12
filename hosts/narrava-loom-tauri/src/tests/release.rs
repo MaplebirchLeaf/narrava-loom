@@ -9,7 +9,7 @@ use narrava_loom_core::{
 use crate::save_io::save_file_name;
 use crate::{HostNodeDto, HostUpdateDto, TauriHost};
 
-fn block_on<F: Future>(future: F) -> F::Output {
+pub(super) fn block_on<F: Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -17,7 +17,7 @@ fn block_on<F: Future>(future: F) -> F::Output {
         .block_on(future)
 }
 
-fn copy_tree(source: &Path, target: &Path) {
+pub(super) fn copy_tree(source: &Path, target: &Path) {
     fs::create_dir_all(target).unwrap();
     for entry in fs::read_dir(source).unwrap() {
         let entry = entry.unwrap();
@@ -110,7 +110,7 @@ fn host_delay_keeps_worker_queries_responsive() {
     .unwrap();
     fs::write(
         root_path.join("contents/scripts/main.js"),
-        "Macro.add('delayed', { body: 'inline', arguments: 'raw', execution: 'async', handler: async () => { await Host.delay(500); return 'ready' } })",
+        "Logger.info('test', 'worker ready'); Macro.add('delayed', { body: 'inline', arguments: 'raw', execution: 'async', handler: async () => { await Host.delay(500); return 'ready' } })",
     ).unwrap();
 
     let host = Arc::new(TauriHost::spawn(&root).unwrap());
@@ -118,7 +118,10 @@ fn host_delay_keeps_worker_queries_responsive() {
     let start = thread::spawn(move || block_on(start_host.start()));
     thread::sleep(Duration::from_millis(30));
     let logs = block_on(host.logs()).expect("Delay 期间日志查询仍应响应");
-    assert!(!logs.is_empty());
+    assert!(
+        logs.iter()
+            .any(|record| record.target == "test" && record.message == "worker ready")
+    );
     assert!(!start.is_finished(), "日志查询不应等待 Delay 完成");
     assert_eq!(start.join().unwrap().unwrap().current, "Start");
 
@@ -539,7 +542,7 @@ fn example_author_tools_and_text_gallery_reach_tauri_dtos() {
     )));
     assert_eq!(
         &fs::read(root_path.join("save/manual-1.nsave")).expect("示例应实际导出存档")[..8],
-        b"NRSAVE\0\x03"
+        b"NRSAVE\0\x04"
     );
     let language_buttons: Vec<String> = author_tools
         .nodes

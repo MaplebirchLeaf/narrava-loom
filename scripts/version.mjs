@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 process.chdir(fileURLToPath(new URL("../", import.meta.url)))
 const cargoFiles = [
   "Cargo.toml",
-  "crates/narrava-loom-world/Cargo.toml",
+  "crates/narrava-loom-location/Cargo.toml",
   "crates/narrava-loom-protocol/Cargo.toml",
   "crates/narrava-loom-script/Cargo.toml",
   "hosts/narrava-loom-tauri/Cargo.toml",

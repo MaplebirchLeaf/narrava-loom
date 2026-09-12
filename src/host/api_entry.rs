@@ -10,7 +10,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,
@@ -72,7 +72,14 @@ impl HostApi {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn history_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn history_mir<
+        'hir,
+        'source,
+        Pending,
+        DispatchError: HostDispatchError,
+        Lifecycle,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -116,7 +123,15 @@ impl HostApi {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn start_mir<'hir, 'source, Pending, DispatchError, Initialize, Lifecycle, Dispatch>(
+    pub fn start_mir<
+        'hir,
+        'source,
+        Pending,
+        DispatchError: HostDispatchError,
+        Initialize,
+        Lifecycle,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -162,7 +177,14 @@ impl HostApi {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn render_special_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn render_special_mir<
+        'hir,
+        'source,
+        Pending,
+        DispatchError: HostDispatchError,
+        Lifecycle,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -201,7 +223,14 @@ impl HostApi {
         )
     }
 
-    pub fn advance_mir<'hir, 'source, Pending, DispatchError, Lifecycle, Dispatch>(
+    pub fn advance_mir<
+        'hir,
+        'source,
+        Pending,
+        DispatchError: HostDispatchError,
+        Lifecycle,
+        Dispatch,
+    >(
         pending: &mut HostPendingExecutions<EngineMirContinuation<'hir, 'source, Pending>>,
         state: &mut State,
         story: &mut Story<'hir, 'source>,
@@ -243,7 +272,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Dispatch,
         ExecuteAction,
@@ -300,7 +329,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,
@@ -449,7 +478,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Initialize,
         Lifecycle,
         Reaction,
@@ -540,7 +569,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,
@@ -616,7 +645,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,
@@ -711,7 +740,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,
@@ -876,7 +905,7 @@ impl HostApi {
         'hir,
         'source,
         Pending,
-        DispatchError,
+        DispatchError: HostDispatchError,
         Lifecycle,
         Reaction,
         Dispatch,

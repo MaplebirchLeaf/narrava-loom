@@ -1,5 +1,5 @@
 // parent 可以前向引用；所有坐标都在同一世界平面中。
-World.add({
+Location.add({
   id: "hospital",
   name: "医院",
   parent: "town",
@@ -11,7 +11,7 @@ World.add({
   ],
   entry: [30, 30],
 })
-World.add({
+Location.add({
   id: "shop",
   name: "商店",
   parent: "town",
@@ -22,7 +22,7 @@ World.add({
     [60, 40],
   ],
 })
-World.add({
+Location.add({
   id: "town",
   name: "小镇",
   bounds: [
@@ -34,15 +34,15 @@ World.add({
   entry: [10, 10],
 })
 
-Macro.add("worldCurrent", {
+Macro.add("locationCurrent", {
   body: "inline",
   arguments: "raw",
   execution: "sync",
   handler: () => {
-    const current = World.current()
+    const current = Location.current()
     if (current === null) return "当前位置：尚未进入地点。"
-    const place = World.get(current.place)
-    const containing = World.locate(current.point).map(
+    const place = Location.get(current.place)
+    const containing = Location.locate(current.point).map(
       (item) => `${item.name ?? item.id} (${item.id})`,
     )
     return Surface.fragment(
@@ -52,13 +52,13 @@ Macro.add("worldCurrent", {
       Surface.hardBreak(),
       Surface.text(`所在范围：${containing.join(" → ")}`),
       Surface.hardBreak(),
-      Surface.text(`已注册 ${World.places().length} 个地点。`),
+      Surface.text(`已注册 ${Location.places().length} 个地点。`),
     )
   },
 })
 
-function worldMoveTo(x: number, y: number): void {
-  World.move([x, y])
+function locationMoveTo(x: number, y: number): void {
+  Location.move([x, y])
 }
 
-State.global.extend({ worldMoveTo })
+State.global.extend({ locationMoveTo })

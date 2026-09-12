@@ -42,7 +42,7 @@ pub enum MirStep {
 }
 
 /// LIR 单步执行不能继续的稳定原因。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MirExecutionError {
     /// 单条执行链消耗的 Bytecode 指令超过显式预算。
     InstructionLimitExceeded {

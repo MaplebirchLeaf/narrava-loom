@@ -16,7 +16,7 @@ fn main() -> ExitCode {
     match narrava_loom_tui::host::run(&game_path) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("TUI Host 错误：{}: {}", error.code, error.message);
+            eprintln!("TUI Host 错误：{error}");
             ExitCode::FAILURE
         }
     }

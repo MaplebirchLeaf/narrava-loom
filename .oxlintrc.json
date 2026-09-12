@@ -20,6 +20,7 @@
           "__TAURI__",
           "__narrava",
           "__narravaCallable",
+          "__narravaConsoleIsProxy",
           "__narravaReactionAdd",
           "__narravaReactionDisable",
           "__narravaReactionEnable",
@@ -36,12 +37,19 @@
           "__narravaStateReplace",
           "__narravaStateSet",
           "__narravaStateSnapshot",
-          "__narravaWorldAdd",
-          "__narravaWorldGet",
-          "__narravaWorldPlaces",
-          "__narravaWorldLocate",
-          "__narravaWorldCurrent",
-          "__narravaWorldMove"
+          "__narravaLocationAdd",
+          "__narravaLocationGet",
+          "__narravaLocationPlaces",
+          "__narravaLocationLocate",
+          "__narravaLocationCurrent",
+          "__narravaLocationMove",
+          "__narravaRandomNext",
+          "__narravaRandomSeed",
+          "__narravaRandomCurrent",
+          "__narravaLoggerLog",
+          "__narravaLoggerSubscribe",
+          "__narravaLoggerTake",
+          "__narravaLoggerUnsubscribe"
         ]
       }
     ],

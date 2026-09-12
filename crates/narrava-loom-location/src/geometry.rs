@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::{MAX_COORDINATE, Point, WorldError};
+use crate::{LocationError, MAX_COORDINATE, Point};
 
 type WidePoint = [i128; 2];
 
@@ -53,8 +53,8 @@ fn edges(bounds: &[Point]) -> impl Iterator<Item = (Point, Point)> + '_ {
         .zip(bounds.iter().copied().cycle().skip(1))
 }
 
-pub(crate) fn validate_polygon(bounds: &[Point]) -> Result<(), WorldError> {
-    let invalid = |reason: &str| WorldError::new("world.invalid_bounds", reason);
+pub(crate) fn validate_polygon(bounds: &[Point]) -> Result<(), LocationError> {
+    let invalid = |reason: &str| LocationError::new("location.invalid_bounds", reason);
     if bounds.len() < 3 {
         return Err(invalid(
             "place bounds require at least three distinct vertices",

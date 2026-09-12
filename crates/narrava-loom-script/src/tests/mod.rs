@@ -947,9 +947,18 @@ state-notice<br>"#,
     std::fs::remove_dir_all(root).unwrap();
 }
 
+mod location;
+mod location_bridge;
+mod location_refresh;
 mod reaction_bridge;
 mod runtime_session;
 mod support;
-mod world;
-mod world_bridge;
-mod world_refresh;
+mod widgets;
+
+mod diagnostics;
+mod input_transaction;
+mod logger;
+mod random;
+mod refresh_state;
+
+mod inspect;

@@ -37,10 +37,12 @@ const typeName = (name) =>
   name === "SaveOperation" ? "NarravaRuntimeSaveOperation" : `Narrava${name}`
 const tsType = (rustType) => {
   if (rustType === "String" || rustType === "RuntimeSessionId") return "string"
-  if (rustType === "f64") return "number"
+  if (rustType === "f64" || rustType === "usize") return "number"
   if (rustType === "bool") return "boolean"
   if (/^u(8|16|32|64)$/.test(rustType)) return "number"
   if (rustType === "serde_json::Value") return "unknown"
+  const boxed = /^Box<(.+)>$/.exec(rustType)
+  if (boxed) return tsType(boxed[1])
   const vector = /^Vec<(.+)>$/.exec(rustType)
   if (vector) return `readonly ${tsType(vector[1])}[]`
   const optional = /^Option<(.+)>$/.exec(rustType)
