@@ -2695,7 +2695,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "narrava-loom-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "narrava-loom-location",
  "postcard",
@@ -2710,14 +2710,14 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-location"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "narrava-loom-protocol"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2725,7 +2725,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-script"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "boa_engine",
  "boa_gc",
@@ -2738,7 +2738,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-tauri"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "narrava-loom-core",
  "narrava-loom-protocol",
@@ -2754,7 +2754,7 @@ dependencies = [
 
 [[package]]
 name = "narrava-loom-tui"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "crossterm",
  "narrava-loom-core",
