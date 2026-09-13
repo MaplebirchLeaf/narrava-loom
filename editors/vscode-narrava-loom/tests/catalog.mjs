@@ -117,4 +117,39 @@ assert.equal(
   "Hall",
 )
 
-console.log("Narrava Twee cross-file Macro and Passage catalog verified")
+// Pair highlights follow nesting, not repeated names or text inside arguments.
+const { macroTagPairs } = require("../src/catalog")
+const pairSource = `:: Start
+<<if $ready>>
+<<print "<<if false>>">>
+<<if $inner>>inner<</if>>
+<<else>>outer
+<</if>>
+`
+const paired = macroTagPairs(pairSource, macroKinds([]))
+assert.deepEqual(
+  paired.map(({ opening, closing }) => [
+    pairSource.slice(opening.start, opening.end),
+    pairSource.slice(closing.start, closing.end),
+  ]),
+  [
+    ["<<if $inner>>", "<</if>>"],
+    ["<<if $ready>>", "<</if>>"],
+  ],
+)
+assert.deepEqual(macroTagPairs("<<if true>>\n:: Next\n<</if>>", macroKinds([])), [])
+assert.deepEqual(macroTagPairs("<<if true>><<while true>><</if>><</while>>", macroKinds([])), [])
+assert.deepEqual(macroTagPairs("/% <<if true>><</if>>", macroKinds([])), [])
+assert.deepEqual(macroTagPairs("<<if true>>", macroKinds([])), [])
+const quoted = `<<link "a >> \\" <<if nope>>">>text<</link>>`
+assert.equal(macroTagPairs(quoted, macroKinds([])).length, 1)
+assert.equal(macroTagPairs("<<if (8 >> 1) > 0>>yes<</if>>", macroKinds([])).length, 1)
+assert.equal(
+  macroTagPairs("<<dialog 'a'>><<page 'a'>>a<<page 'b'>>b<</dialog>>", macroKinds([])).length,
+  1,
+)
+const customKinds = macroKinds([{ name: "card", bodyKind: "container" }])
+assert.equal(macroTagPairs("<<card>>x<</card>>", customKinds).length, 1)
+assert.equal(macroTagPairs("<<widget 'card'>>x<</widget>><<card>>", macroKinds([])).length, 1)
+
+console.log("Narrava Twee cross-file catalog and container macro pairing verified")

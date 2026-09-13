@@ -1,4 +1,4 @@
-# Audio：背景音与环境音
+# 背景音与环境音
 
 Audio 声明当前 Passage 需要的音频，不产生可见节点。TUI 与 Tauri 都由本地音频后端播放。
 
@@ -42,16 +42,20 @@ Header、Footer、Bar、BarStowed、正文；同一作用域后执行且匹配�
 
 ## Script 控制复杂配置
 
+在启动脚本顶层登记全局规则，每次进入页面按 tag 重新匹配：
+
 ```typescript
-// scripts 顶层配置：每次进入页面按 tag 重新匹配。
 Audio.play("forest.ogg", {
   channel: "ambience",
   tags: ["forest", "woods"],
   loop: true,
   volume: 0.5,
 })
+```
 
-// 在宏/事件回调执行期间：控制当前作用域。
+需要在动作中停止当前 channel 时，在相应 Macro 或作者函数内调用：
+
+```typescript
 Audio.stop("ambience")
 ```
 

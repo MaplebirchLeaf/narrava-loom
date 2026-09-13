@@ -90,7 +90,7 @@ TUI 用方向键和 Enter 选择，`b` / `f` 回溯和前进，`s` 切换展开�
 `State`、`Save`、`Engine` 显示可展开成员和双语帮助；输入 `Save.` 浏览成员，Tab 补全，
 `Save.export("debug")` 保存，`Engine.goto("TownMap")` 导航。无候选时上下键回顾命令。
 F12 开关 WebView DevTools；TUI 的 F10 或 `:inspect` 保留只读检查。发行时关闭开发配置。
-执行与刷新边界见[脚本控制台](../docs/author/random-and-debugging.md)。
+执行与刷新边界见[脚本控制台](../docs/author/debugging.md)。
 `demo.action`、`demo.explore` 日志用于追踪行动与抽样，正文不承担调试控制台的职责。
 
 ## 宿主边界
@@ -106,4 +106,4 @@ Widget 范本使用 Core 纯逻辑节点（基本 print、条件、循环、incl
 Twee 的普通源码换行用于排版，游戏换行使用 `<br>`；多行结构闭合标签独占一行。
 编辑器的非运行语法覆盖样例已移到 `editors/vscode-narrava-loom/tests/fixtures/`。
 
-继续制作可参考[作者手册](../docs/author/guide.md)与[API 速查](../docs/reference/api-and-syntax.md)。
+继续制作可参考[作者手册](../docs/author/README.md)与[API 速查](../docs/reference/README.md)。

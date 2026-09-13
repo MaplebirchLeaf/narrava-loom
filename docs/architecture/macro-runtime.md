@@ -1,13 +1,14 @@
 # Macro 执行与所有权
 
 Macro 负责 Twee 中的叙事动作、控制流和作者扩展。Twee Parser 保留语法事实，HIR/MIR
-保留可执行语义，Runtime 所有 Definition、局部域、事务和 suspension。可用 Macro 及参数
-作者使用见 [Macro](../author/macro.md)，完整契约见 [API 与语法速查](../reference/api-and-syntax.md)。
+保留可执行语义，Runtime 持有 Definition、局部域、事务和 suspension。可用 Macro 及参数
+作者用法见[编写 Twee](../author/writing-twee.md)，精确语法见[Macro 参考](../reference/macros.md)。
 
 ## 定义与语法形状
 
-`MacroDefinition` 由 `name`、`syntax_kind`、`handler` 和 hooks 组成。名称使用小写 ASCII 字母
-开头，只允许小写字母、数字、`_` 和 `-`。Runtime 拒绝重复注册和不合法名称。
+`MacroDefinition` 保存 body_kind、argument_kind、execution_kind 和 Handler，
+定义表用名称索引，Hook 使用独立订阅表。名称区分大小写；静态 Widget 重名在编译期拒绝，
+脚本 `Macro.add` 可替换同名定义，`update` 要求定义已经存在。编译器保留的控制流名称不能动态覆盖。
 
 `Inline` 不接收正文：
 
@@ -18,7 +19,9 @@ Macro 负责 Twee 中的叙事动作、控制流和作者扩展。Twee Parser �
 `Container` 接收正文并需要闭合标签：
 
 ```twee
-<<if $score > 0>>...<</if>>
+<<if $score > 0>>
+正文
+<</if>>
 ```
 
 AST 和 HIR 显式保留形状，因此 Inline 与空正文 Container 不会混淆。结构化子句
@@ -54,7 +57,7 @@ Interaction Target 只保留 `label` 和 `target`。Parser 校验外壳和非空
 Handler 分为：
 
 - Native：Rust 实现，返回 Value、Surface 输出、控制信号或 suspension；
-- Widget：执行已编译的 HIR 正文；
+- Widget：由定义中的 HIR 正文建立可执行 Macro Body；
 - Script：通过 `narrava-loom-script` 执行作者函数。
 
 hooks 按注册顺序执行：
@@ -98,7 +101,7 @@ Native 或 Script Handler 可返回 `Pending`。Runtime 将本次调用的 Defin
 - Error/Cancel：释放当前帧，由 Engine 恢复 State/Story 检查点。
 
 Runtime 在 continuation 中验证执行链身份和 VM 位置。Host 不得伪造 frame、检查点或平台
-句柄。完整驱动边界见 [Runtime Session](runtime-session.md)。
+句柄。完整驱动边界见 [Runtime Session](runtime.md)。
 
 ## 事务与预算
 

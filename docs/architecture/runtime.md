@@ -1,139 +1,117 @@
-# Narrava Runtime
+# 运行时与事务
 
-Runtime 组合 Engine、State、Story、Macro、Script、Event、Reaction、I18n、Resource 和 Save。
-Core 保留游戏语义与事务真相；Host 只处理平台 IO 和呈现。Surface 边界见
-[Host Surface](protocol.md)，对外驱动协议见 [Runtime Session](runtime-session.md)。
+`RuntimeSession` 是一局游戏的所有权根。Tauri Worker 和 TUI 直接调用 `execute`，
+传入拥有型 RuntimeCommand，取得 RuntimeUpdate 或 PendingOperation。
+
+```text
+Host command → RuntimeSession → Core HostApi → Engine → VM / Macro / Script
+                      ↓
+             SemanticOutput → Protocol DTO → Host Renderer
+```
 
 ## 所有权
 
-| 领域 | 职责 |
-|---|---|
-| Engine | 根种子与随机序列、生命周期、连续导航、跨领域事务与回滚 |
-| State | `global`、`setup`、`variables`、`temporary` 四个命名空间 |
-| Story | Passage 索引、当前位置、history 和导航请求 |
-| Macro | Definition、Widget、调用帧、`@args` 与 `@` 局部值 |
-| Script | ECMAScript 函数、Promise 和 Core API 适配 |
-| Event / Reaction | 结构化事实、订阅与声明式触发规则 |
-| I18n | 稳定文本身份、译文校验、字典与 fallback |
-| Resource | 逻辑路径、媒体类型、字节与完整性 |
-| Save | 可持久领域状态、版本与游戏兼容校验 |
+| 对象 | 拥有的内容 |
+| --- | --- |
+| Engine | 根种子、随机进度、生命周期、导航执行链与 Core 事务 |
+| State | global/setup/variables/temporary、地点定义与位置、注入的 Engine 句柄 |
+| Story | Passage 索引、历史、当前游标与待确认导航 |
+| RuntimeSession | State/Story、Reaction 运行状态、交互表、上一帧、continuation 与命令事务 |
+| EcmaBinding | Boa realm、函数与 Promise、脚本桥接、有界日志 |
+| RuntimeData | 游戏身份、I18n 目录与已验证语言包 |
 
-Renderer、输入设备、窗口、文件选择器和平台对象不属于 Core。Binding 不得保存第二份
-State、Story、Macro 或 Reaction 真相。
+`@` 局部域属于 Macro 调用帧。I18n 选择属于运行上下文，不写入 State。
+官方 Host 没有独立 Native Session registry；Session ID 和 envelope 是 Protocol 数据，
+不代表另一个 Handle/Driver 对象。Core 通过 ScriptCallDispatcher 回调脚本，避免依赖 Script crate。
 
-## Engine 事务
+## 启动与导航
 
-Host 在脚本装载前用配置根种子或新生成种子构造 `Engine`，通过 `State::with_engine` 注入执行上下文。
-State 的表达式与脚本桥接只向该 Engine 取样；`State::fork_view` 复制执行快照，避免共享随机游标。
-低层 `State::new()` 使用零种子的默认 Engine；生产 Host 显式提供 Engine。
-
-
-Engine 在执行前捕获 State 与 Story 检查点；RuntimeSession 的命令事务额外持有
-Reaction、交互和呈现状态。执行错误、取消或预算耗尽恢复对应事务；
-命令边界与快照生命周期见 [Runtime Session](runtime-session.md)。
-
-`goto` 先建立已验证但未提交的 Story 请求。只有当前 Passage 以 `StopPassage`
-结束时 Engine 才确认目标并继续导航链。`include` 在源码位置压入 VM frame，不创建
-history。未消费的 include/goto 请求不得静默提交。
-
-`EngineExecutionLimits` 限制单条执行链的 Passage 与 include 数量。预算沿同一 continuation
-保留，不在 Widget、include 或异步恢复时暗中重置。
-
-## 启动、新游戏与生命周期
-
-启动顺序为：
+Host 在脚本装载前按配置或熵建立 Engine，并通过 `State::with_engine` 注入。
+脚本登记地点和领域定义后关闭地点注册，Session 保存启动基线。
 
 ```text
-注册 Widget → StoryInit → Start.Init → Start.Start → Reaction → 正文 → Render → Display
+注册 Widget → StoryInit → Start.Init → Start.Start → Reaction → Body → Render → Display
+普通 Passage：Init → Start → Reaction → Body → Render → Display → End
 ```
 
-`StoryInit` 只执行逻辑初始化，不创建 history 或可见输出。`new_game` 先结束旧 Passage，
-再重置 State/Story/Reaction，重新执行 StoryInit 与 Start；任一步失败都恢复调用前状态。
+StoryInit 只做逻辑初始化，不建立历史或可见输出。Core `new_game` 重置游戏状态和原根种子序列；
+Session restart 先恢复本次脚本启动基线，再重新开始。任何一步失败恢复调用前的事务。
 
-普通 Passage 生命周期为：
+`request_goto` 先验证目标，Engine 在 StopPassage 后确认并延续导航链。
+`include` 在原位置压入 VM frame，不建立独立历史或生命周期。
+入口 params 只属于本次导航；exit-tag Passage 跳过 Render/Display，不成为 SafeReturn 目标。
+未消费的导航请求和泄漏的控制信号不能静默提交。
+
+## 命令事务
 
 ```text
-Init → Start → Reaction → Body → Render → Display → End
+校验 command → checkpoint → execute → pending / commit / rollback
 ```
 
-入口 `params` 只属于本次导航，不自动写入 State。include 与特殊 Passage 不创建独立
-Reaction lifecycle。`[exit]` Passage 执行逻辑但跳过 Render/Display，也不作为 SafeReturn
-目标。
+RuntimeTransaction 捕获 State、Story、Reaction 次数、交互表、上一帧、变化比较基线及未完成输出。
+Pending 和后续 Reaction 导航延续同一事务，成功结算后释放；错误或取消恢复整份检查点。
+无效命令或错误 operation ID 在执行前拒绝，不破坏当前挂起操作。
 
-## State 与 Story
+Core 检查点覆盖单条 Engine 执行链；Session 事务还覆盖链完成后的 Reaction、公共区域和呈现。
+两者生命周期不同，不能用一个短期检查点替代命令事务。
 
-| Twee | State 命名空间 | 生命周期 |
-|---|---|---|
-| 普通名称 | `global` | Host 或 scripts 显式登记 |
-| `setup` | `setup` | 启动配置与共享值 |
-| `$name` | `variables` | 游戏进度，进入 Save/history |
-| `_name` | `temporary` | 当前导航过程 |
+| 快照 | 范围与用途 |
+| --- | --- |
+| StateCheckpoint | 全部命名空间、地点定义/位置、Engine 正文与临时重绘进度；短期回滚 |
+| StateSnapshot | 持久变量、LocationState、EngineSnapshot；历史和存档 |
+| Story 快照 | 时间线及游标；恢复不回退历史 ID 分配高水位 |
 
-`@name` 与 `@args` 属于 Macro 帧，不属于 State。`StateCheckpoint` 用于短期 Engine
-事务；Save 使用独立的可持久快照。
+State 的脚本代理直接访问活动 Rust State，不维护 JS 镜像。`fork_view` 复制执行快照并建立
+独立 Engine 游标，使公共区域执行不消耗正文状态。地点定义共享，位置和变量按快照隔离。
 
-Story 的 Passage 名和 Tag 区分大小写。`request_goto()` 只验证目标，`confirm_navigation()`
-才修改 history。`back`/`forward` 移动游标并恢复对应 `$variables` 快照；从旧位置导航
-会截断原前进分支。history ID 不复用。
+## 随机、历史与重绘
 
-## Macro、Script 与 Expression
+Engine 拥有唯一 SplitMix64 序列，Twee 与 Math.random 使用同一取样入口。
+EngineSnapshot 用两个 u64 保留根种子和序列状态；脚本种子查询使用字符串避免精度丢失。
+事务和存档附带 EngineSnapshot，不在 State 另建种子控制接口。
 
-Macro 持有 Definition、Widget 正文和调用帧。嵌套 Widget 使用独立 `@args` 和局部域；
-`exit`、循环控制和 `goto` 只由各自最近的语义边界消费。普通字符串不会自动二次
-解析为 Twee；动态 Fragment 必须经过显式 Parser 入口。完整契约见 [Macro](macro-runtime.md) 与
-[Expression](expression.md)。
+历史 back/forward 恢复目标页的入页状态再执行正文。从旧位置发起新导航会截断前进分支。
+`RefreshCurrent` 用于语言切换和 Import 重绘：按入页状态重建呈现与交互，保留操作后已提交的
+State 与随机进度。随机使用临时序列，Location 只读视图跨 Pending 保留。
+新导航开始时解除刷新视图，包括同名导航。
 
-`.ts/.js` 形成有序 `ScriptBundle`，由 `narrava-loom-script` 使用 Boa 执行，Oxc 移除
-TypeScript 类型语法。脚本必须经 State API 显式导出全局值；ECMAScript `import/export`
-不会自动进入 Twee。
+重绘仍会执行作者脚本，不是任意脚本的纯渲染器；JS realm 声明、注册和日志不承诺随 State 回滚。
+输入呈现从权威 State 同步，普通文本不会因任意赋值自动重绘。
 
-`ScriptCallable` 只保留身份和调试名，真实函数由 Binding Registry 持有，不进入 IR、
-Save 或可序列化 Value 图。普通 Script 函数是同步 Expression 能力；Promise Macro 必须通过
-Pending/Resume/Cancel 链运行，不得伪装成普通值。作者契约在
-`bindings/typescript/narrava.d.ts` 维护。
+## 挂起与恢复
 
-## Surface
+continuation 保留 VM frame、Macro 局部域、调用链和脚本挂起凭据；pending 表示唯一的 Host 等待。
+Host 只接收 operation ID 与类型化请求，完成后发送 Resume 或 Cancel，不接触执行栈。
 
-Runtime 以 `BodyExecution` 同时返回控制信号和有序 Surface。节点包含 Text、HardBreak、
-StyledText、Image、Dialog、Region、Container、Replace、Component、Input、Navigation 与
-SafeReturn。
+Tauri facade 用异步 timer 和 blocking pool 处理等待及存档，Runtime Worker 可继续接收控制命令；
+TUI 命令循环完成相同平台操作。恢复继续原帧、include 栈、迭代状态、语言和执行预算。
+预算沿整条链保留，不因异步恢复而重置。脚本 Promise 只能立即结算或等待受管 Host 操作。
 
-Twee 普通正文整体是字面文本；`$name` 和 `${expression}` 不自动求值。`print` 显式
-生成动态文本。include 和 Widget 在源码位置执行；Reaction 的输出按触发安全点追加。
-`silently` 保留状态副作用和控制信号，丢弃本块 Surface。
+输入触发的存档请求保留原命令事务，跨 Reaction 与 IO 完成后才提交。
+编码、导入、IO 或 Save.after 失败时从相应恢复点结算，不能提前丢失输入前检查点。
+持久化步骤见[Save 格式](save-format.md)。
 
-Navigation 与 SafeReturn 携带 `InteractionId`。Host 只能激活上一份 Surface 中存在的
-动作，不能自行构造 Passage 目标。当普通 Passage 没有作者导航时，Engine 可指向最近
-安全 history 项在 Main 末尾追加 SafeReturn；Header、Footer、Bar、BarStowed 与 Dialog 等
-特殊区域既不触发也不承载这个紧急兜底。文字与控件形态由 Host 决定。
+## Event 与 Reaction
 
-## Event、Reaction、I18n、Resource 与 Save
+Event 以单调序号记录结构化事实，再投递给已存在的匹配订阅。订阅通过 take 拉取，
+不持有作者回调；事件句柄和队列不进入存档。
+Reaction 在命令安全点处理 Event 和持久 State 变化，lifecycle 规则在 Start 与正文之间执行。
+候选解析、派生事件、内容和导航属于原事务，失败回滚次数与输出；细节见[事件与 Reaction](../author/events.md)。
 
-Event 先以单调序号记录结构化事实，再投递给当时存在的匹配订阅。`take` 消费待处理
-队列；`clear` 清空历史和队列但不重置序号。ScriptCallable 等平台函数不得作为
-事件载荷。Reaction 在同一 Engine 事务内消费 Event、State 变化或 lifecycle 事实。
+## 诊断与调试
 
-I18n 选择是 Runtime 上下文，不写入 State。目标语言与 fallback 链随 Engine progress 跨暂停和导航
-保留；语言切换后 Host 刷新所有依赖语言的可见区域。
+Diagnostic 保存稳定代码、严重级别、消息与可选源码位置，不替代错误返回。
+DiagnosticLocator 将局部 UTF-8 Span 映射到省略 contents 前缀的相对路径和从 1 开始的行列，
+列号按 Unicode 字符计算。Logger 记录历史与订阅队列，默认各有 1024 条容量，清空不重置序号。
+脚本、Runtime 失败和 Host 提示写入同一 Logger，宿主预览不消费作者订阅。
 
-Resource 逻辑路径使用 `/`，拒绝绝对路径、空段、`.`、`..`、反斜杠和重复路径。
-Core 可延迟读取并缓存成功结果；URL、Blob、解码与 DOM 对象属于 Host。
+`debug_snapshot` 在无 Pending 时返回有界只读结果，不求值作者表达式。
+`DebugScript` 复用输入事务与安全点，控制台 Promise 通过独立队列和 Pending::Console 恢复或取消。
+成员补全只读属性路径，不执行表达式、getter 或未知 Proxy trap；帮助来自作者类型声明。
+Host 的 developer 开关同时控制界面与 Rust 入口。操作和显示限制见[调试指南](../author/debugging.md)。
 
-Save 捕获当前及历史 `$variables`、Story 时间线、Reaction 状态和游戏身份，编码为版本化
-二进制文档并原子恢复。格式与校验见 [Save](save-format.md)，翻译契约见 [I18n](i18n.md)。
-模组组合尚未实现，不属于当前 Runtime API。
+## 源码位置
 
-## VM 与 continuation
-
-VM 只接收可序列化的拥有型 Bytecode，并在 `Halt`、`NavigationPending` 或
-`MacroPending` 停下。State、Story、Macro Definitions、资源缓存和 Renderer 状态由各自领域
-持有。
-
-`HostApi::drive_stable()` 驱动 Macro、导航和 Halted 提交，只在得到可呈现的
-`HostUpdate` 或异步 operation 时返回。`resume_and_drive()` 将 Handler 恢复纳入同一
-事务。Host 令牌只携带执行身份；VM frame、State/Story 检查点、局部域、
-待确认请求和平台句柄由 continuation 所有。
-
-恢复链验证执行身份和指令位置，然后继续同一帧。迭代器、include 栈、语言选择和
-输出抑制随 frame 或 Engine progress 保留，不在异步恢复时重置。执行失败会返还完整
-所有权供 Engine 回滚，不丢弃 frame、检查点或 suspension handle。
+[Engine](../../src/engine)、[State](../../src/state.rs)、[Story](../../src/story)、
+[RuntimeSession](../../crates/narrava-loom-script/src/session)、
+[Refresh](../../crates/narrava-loom-script/src/refresh.rs)。

@@ -1,6 +1,9 @@
-# TypeScript/JavaScript、Macro 与 Resource
+# 游戏脚本
 
-## TypeScript/JavaScript：什么时候才需要
+脚本在 Rust 中的 ECMAScript 环境运行；Twee Expression 是另一种受控语言。
+全局对象和签名见[脚本 API](../reference/script-api.md)。
+
+## 导出函数给 Twee
 
 简单故事不需要脚本。遇到重复计算、复杂数据处理、自定义 Macro 或资源读取时再使用。
 
@@ -20,7 +23,7 @@ State.global.set("greeting", greeting)
 <<print greeting("Author")>>
 ```
 
-重要规则：
+执行规则：
 
 - 脚本内声明的函数不会自动进入 Twee；必须用 `State.global.set/extend` 显式导入；
 - `.ts` 不需要作者预编译；
@@ -28,7 +31,7 @@ State.global.set("greeting", greeting)
 - 当前执行环境是 Rust Worker，不提供浏览器或 Tauri API；
 - 可保存数据只能是 Narrava 数据，函数句柄不能进入存档变量图。
 
-### 编辑器类型配置
+## 编辑器类型配置
 
 游戏根目录的 [`tsconfig.json`](../../examples/tsconfig.json) 统一加载 Narrava 声明，覆盖
 `contents/` 下的 TS/JS 脚本。在仓库内复制 `examples/` 时保留该文件，仓库根目录运行
@@ -46,25 +49,6 @@ Project Configuration”检查当前脚本所属的配置。
 2. 将 `compilerOptions.types` 改为 `[]`，并在 `include` 中增加 `"types/**/*.d.ts"`。
 
 `tsconfig.json` 只服务编辑器和类型检查，不参与 Host 的脚本加载或执行。
-
-### 为什么游戏脚本直接使用顶层单例
-
-游戏脚本在 Rust 内的 ECMAScript Runtime 中执行。
-
-Script Binding 直接提供职责明确的顶层单例，不再套一层 `narrava` 命名空间：
-
-```ts
-V.coins = 10
-Logger.info("game", "脚本已加载")
-Event.emit("game:ready", { coins: 10 })
-```
-
-`Engine`、`State`、`V`、`T`、`setup`、`Macro`、`Story`、`Logger`、`Event`、`Host`、
-`Save`、`Resource`、`I18n` 和 `Surface` 是彼此独立的公开契约。Worker 中不存在
-`narrava.Save` 或聚合对象
-`globalThis.narrava`。
-
-WebView DevTools（F12）只属于开发模式调试桥，不是游戏脚本 API，发布模式不会注入。
 
 ## State 脚本 API
 
@@ -130,7 +114,7 @@ Macro.add("delayedAnswer", {
 ```
 
 `Host.delay(milliseconds)` 不是浏览器 `setTimeout`。它会暂停当前 Engine 事务，把 continuation
-留在 Rust Core；时间到后 Tauri Host 恢复同一个执行 Token、VM 位置和 Macro 局部域。允许范围
+留在 Rust Core；时间到后 Host 恢复同一个执行 Token、VM 位置和 Macro 局部域。允许范围
 是 0 到 86400000 毫秒。一个 Macro 同时只能等待一个 Host 操作，但恢复后可以继续等待下一次。
 
 不要自己构造永不完成的 Promise；没有受管 Host 操作的未决 Promise 会得到
@@ -186,69 +170,3 @@ Surface.component("meter", 1, { label: "体力", value: 42, min: 0, max: 100 }, 
 Tauri 将 `meter@1` 显示为图形状态条，TUI 显示字符状态条。未知能力或版本显示 fallback。`properties` 只能包含有限纯数据，
 不能放函数、DOM、Tauri 对象或循环引用。稳定 `key` 应描述同一逻辑节点；同一输出内重复 key
 会报错。完整可运行示例见 `examples` 的 `SurfaceGallery` Passage。
-
-## Resource 资源
-
-所有资源放进 `resources/`。例如：
-
-```text
-my-game/resources/data/guide.txt
-my-game/resources/images/forest.png
-```
-
-脚本中使用的逻辑路径不带 `resources/`：
-
-```ts
-Resource.has("data/guide.txt")
-Resource.paths()
-Resource.info("images/forest.png")
-Resource.read("images/forest.png")
-Resource.text("data/guide.txt")
-Resource.pick(["data/guide.zh-CN.txt", "data/guide.txt"])
-```
-
-- `paths()` 返回稳定排序的全部路径；
-- `info()` 返回路径、媒体类型和字节大小；
-- `read()` 返回 `Uint8Array`；
-- `text()` 只适合 UTF-8 文本；
-- 开发目录只在首次 `read()`/`text()` 时读取对应文件，成功内容会缓存；读取失败或文本不是
-  UTF-8 时会抛出错误，不会伪装成 `undefined`；
-- `pick()` 返回候选列表中第一个存在的路径；
-- 未知扩展名仍可作为二进制资源；
-- 路径拒绝绝对路径、空段、`.`、`..` 和反斜杠。
-
-## CSS 和 `resource("path")`
-
-CSS 完全可选。没有 `styles/` 时，Tauri Host 使用内置的完整默认样式。
-
-要覆盖外观，创建 `styles/game.css`：
-
-```css
-nv-story {
-  --narrava-background: #16130f;
-  --narrava-text: #f2e8d5;
-  --narrava-accent: #d6a85f;
-  --narrava-accent-hover: #f0c878;
-}
-
-nv-passage {
-  max-width: 48em;
-}
-```
-
-使用游戏资源作为背景：
-
-```css
-nv-story {
-  background-image: resource("images/forest.png");
-  background-size: cover;
-}
-```
-
-Host 会把 `resource("...")` 转为受 CSP 允许的 `narrava-resource://localhost/...` URL，按需
-读取对应资源。这里的 `localhost` 只是 Tauri 自定义协议的虚拟 host：不会连接网络、没有端口，
-也不是仅开发模式有效；正式安装包使用同一机制。推荐只依赖 `nv-story`、
-`nv-passage`、`.passage-header`、`.passage-main`、`.passage-footer`、`nv-ui-bar`、`#nv-dialog`
-和 `--narrava-*` 变量；更深的内部节点不保证长期兼容。
-
-CSS 只能改变外观，不能执行游戏脚本、访问 Rust 或替换 Renderer。

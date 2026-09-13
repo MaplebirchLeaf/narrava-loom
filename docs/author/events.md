@@ -1,8 +1,68 @@
-# Reaction
+# 事件与 Reaction
 
-`Reaction` 用声明式规则描述“事实发生后，叙事如何响应”。scripts 只负责注册规则和条件；Runtime 负责候选索引、执行顺序、事务、次数、Save 与循环保护。Host 只呈现最终 Surface、转交输入并完成平台 IO。
+`Event` 发布已经发生的事实，`Reaction` 根据事件、持久变量变化或入页生命周期产生叙事效果。
+需要跨命令和存档保留的事实写入 `V`；仅供排查的记录使用 [Logger](debugging.md#日志)。
 
-## 最小示例
+## 发出作者事件
+
+```ts
+const sequence = Event.emit("quest:completed", {
+  quest: "old_mine",
+  reward: 500,
+})
+```
+
+- 名称区分大小写，不能为空或包含空白。
+- 建议使用 `领域:动作`，例如 `quest:accepted`、`inventory:changed`。
+- payload 只能是 `NarravaData`：空值、布尔值、数值、字符串及由它们组成的数组和普通对象。
+- `emit` 返回本局 Runtime 内单调递增的事件序号。
+- `passage:*` 是 Engine 保留名称，作者不能通过 `Event.emit` 伪造。
+
+## 拉取订阅
+
+```ts
+const quests = Event.subscribe({ name: "quest:completed" })
+
+Event.emit("quest:completed", { quest: "old_mine" })
+
+for (const event of Event.take(quests) ?? []) {
+  Logger.info("quest", `收到 ${event.name} #${event.sequence}`)
+}
+
+Event.unsubscribe(quests)
+```
+
+`subscribe({ name })` 只接收订阅之后发生且名称完全相等的事件；省略过滤器会接收之后发生的所有作者与 Engine 事件。订阅不是回调：`take(id)` 在脚本下一次获得执行机会时取出并清空积压，有效订阅没有新事件时返回 `[]`，未知或已取消的 ID 返回 `undefined`。`unsubscribe(id)` 返回是否实际取消了订阅。
+
+```ts
+interface NarravaEventRecord {
+  readonly sequence: number
+  readonly name: string
+  readonly payload: NarravaData
+}
+```
+
+订阅句柄和待取队列只属于当前 Runtime，不进入 Save。需要持久化的游戏事实应写入 `V`。
+
+## Engine Passage 事件
+
+Engine 自动发布五个只读生命周期事件，payload 均为 `{ passage: string, tags: readonly string[] }`：
+
+| 事件名 | 时机 |
+| --- | --- |
+| `passage:init` | 确认进入 Passage |
+| `passage:start` | 正文即将执行 |
+| `passage:render` | Core 已形成 Surface |
+| `passage:display` | 输出进入 Host 显示阶段 |
+| `passage:end` | 真正离开当前 Passage |
+
+```ts
+const passage_start = Event.subscribe({ name: "passage:start" })
+```
+
+这些事件用于观察生命周期，不进入作者 `Event.emit` 队列；需要在进入正文前执行规则时，应使用 Lifecycle Reaction。`include` fragment 不创建独立 Passage 生命周期。
+
+## 注册 Reaction
 
 ```ts
 Reaction.add({
@@ -47,7 +107,7 @@ Event.emit("quest:completed", { quest: "old_mine" })
 cond: (payload) => payload.quest === "old_mine" && V.quest_open === true
 ```
 
-`Event.emit` 只把事实加入队列，不会从 setter 或脚本调用栈中重入 Engine。事件名称、订阅与 Engine 保留事件见 [Event](event.md)。
+`Event.emit` 只把事实加入队列，不会从 setter 或脚本调用栈中重入 Engine。事件订阅与 Engine 保留事件见上文。
 
 ### State
 

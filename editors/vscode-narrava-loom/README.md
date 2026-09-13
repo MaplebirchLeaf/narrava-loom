@@ -5,6 +5,10 @@
 关键字、Macro 结构和诊断只依据 Narrava Core 当前已实现契约；TextMate scope 使用通用命名，
 以适配常见 VS Code 主题。
 
+光标进入容器宏的标签或正文时，最近一层容器的起始标签名与闭合标签会加粗并显示下划线，
+参数保持原有颜色。支持嵌套容器、多光标及脚本注册的 Container 宏；不会跨 Passage 配对。
+此效果默认开启，可通过 `narravaTwee.macroTagMatching` 关闭。
+
 原生宏（包括 `print`、`image`、`slot` 等）支持悬停查看语法与用途，宏名补全同步展示说明；说明使用中文在前、英文在后的双语。
 Expression 原生函数和方法也支持悬停查看签名与用途。按住 `Ctrl`
 并左键单击（macOS 为 `Cmd+单击`）会跳到扩展随附的

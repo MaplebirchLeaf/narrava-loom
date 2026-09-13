@@ -31,12 +31,13 @@
 
 | 命令 | 作用 |
 |---|---|
-| `bun run check` | 依次检查版本、契约生成物、Bootstrap、TypeScript、Oxlint、Oxfmt 和前端/编辑器测试 |
+| `bun run check` | 依次检查文档、版本、契约生成物、Bootstrap、TypeScript、Oxlint、Oxfmt 和前端/编辑器测试 |
 | `bun run bootstrap:build` | 将 Script Runtime 的内部 TypeScript bootstrap 打包为 Rust 编译期嵌入的单文件 JS |
 | `bun run bootstrap:check` | 检查 bootstrap 生成物同步并严格检查内部 bridge 类型；不改文件 |
 | `bun run vsix` | 测试并打包 Twee 扩展到 `dist/vscode-narrava-loom/`；可追加 `--install` |
 | `bun run contract:generate` | 从 Protocol Rust DTO 与 `bindings/script-contract.json` 更新 Rust/TypeScript 生成文件 |
 | `bun run contract:check` | 检查生成文件与两处契约来源同步，不写文件 |
+| `bun run docs:check` | 检查本地 Markdown 链接、标题锚点及 docs 页面可达性 |
 | `bun run typecheck` | 只检查 TypeScript 声明与示例脚本 |
 | `bun run lint` | 只运行 Oxlint |
 | `bun run format:check` | 检查 JS、TS、JSON 格式 |
@@ -47,17 +48,10 @@
 
 不要再使用 `npx tsc` 作为本仓库标准命令；根脚本已经固定 workspace、配置和 Bun 工具链。
 
-## 发行与编辑器包
+## 构建与版本
 
-```bash
-cargo build --release --locked -p narrava-loom-tauri
-cargo run --release --locked -p narrava-loom-core -- \
-  build examples dist/NarravaGame target/release/narrava-loom-tauri
-bun run vsix
-```
+[打包游戏](../author/publishing.md)维护可移动目录的完整命令；
+[版本与发布](release.md)维护统一版本、依赖与流水线规则。
+`bun run vsix` 输出编辑器安装包到 `dist/vscode-narrava-loom/`。
 
-第一条构建桌面 Host，第二条生成可移动桌面游戏目录，第三条输出 VSIX。构建器不会覆盖已经
-存在的 `dist/NarravaGame`。当前仓库没有 Android/iOS 工程或移动打包脚本；移动构建要先用
-Tauri 2 工具初始化目标平台，再补齐签名、权限、资源和真机验证，不能用上述桌面命令代替。
-
-Linux 编译两个 Host 的音频后端需要 ALSA 开发文件（Debian/Ubuntu：`libasound2-dev`）。CI 已包含该依赖。
+Linux Host 的系统依赖与首次运行见[快速入门](../author/quick-start.md#准备环境)。

@@ -10,7 +10,13 @@ const grammar = JSON.parse(
   await readFile(new URL("syntaxes/narrava-twee.tmLanguage.json", root), "utf8"),
 )
 const language = JSON.parse(await readFile(new URL("language-configuration.json", root), "utf8"))
-const reference = await readFile(new URL("docs/reference/api-and-syntax.md", repository), "utf8")
+const reference = (
+  await Promise.all(
+    ["macros.md", "expressions.md"].map((name) =>
+      readFile(new URL(`docs/reference/${name}`, repository), "utf8"),
+    ),
+  )
+).join("\n")
 const hooks = await readFile(new URL("src/macro_runtime/hooks.rs", repository), "utf8")
 const evaluator = await readFile(new URL("src/expression/evaluator/chain.rs", repository), "utf8")
 const expressionDts = await readFile(new URL("references/narrava-expression.d.ts", root), "utf8")

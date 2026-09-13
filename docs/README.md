@@ -1,34 +1,25 @@
-# Narrava Loom 文档
+# 文档目录
 
-按读者选择入口；每个主题的行为、内部设计与完成度分别维护。
+第一次制作游戏从[快速入门](author/quick-start.md)开始。已有项目按问题查找，无需顺序读完所有文档。
 
-## 我是游戏作者
+| 阅读路径 | 内容 |
+| --- | --- |
+| [作者手册](author/README.md) | 创建项目、编写故事、脚本、资源、存档、多语言与打包 |
+| [契约参考](reference/README.md) | 配置字段、Macro、Expression 与脚本 API |
+| [架构](architecture/README.md) | 编译、执行事务、持久化、语言包与宿主边界 |
+| [开发指南](development/README.md) | 源码位置、生成物、检查命令、验收与版本管理 |
 
-- [游戏作者手册](author/guide.md)：从安装、写故事到打包的分册教程。
-- [API 与语法速查](reference/api-and-syntax.md)：宏、内置函数、运算符和脚本 API 索引。
+## 常用任务
 
-## 我在开发 Host 或 Core
+- 改故事或增加选项：[Twee](author/writing-twee.md)。
+- 控制开局、随机与存档：[游戏流程](author/flow.md)。
+- 增加自动剧情响应：[事件与规则](author/events.md)。
+- 做弹窗或播放背景音：[弹窗](author/dialog.md)、[音频](author/audio.md)。
+- 排查运行错误：[调试](author/debugging.md)。
+- 交付游戏：[打包](author/publishing.md)；发布引擎：[版本与发布](development/release.md)。
 
-- [总体架构](architecture/overview.md)：三个宿主目标、领域所有权与编译管线。
-- [运行时](architecture/runtime.md)：Engine、State、Macro、Story、Surface、scripts 与 Resource/Event 契约。
-- [Runtime Session](architecture/runtime-session.md)：Host-neutral 命令、更新与挂起操作边界。
-- [Macro 执行](architecture/macro-runtime.md)、[Expression](architecture/expression.md)、[Twee 编译器](architecture/twee.md)、[I18n](architecture/i18n.md)、[Save 格式](architecture/save-format.md) 设计说明。
-- [弹窗执行](architecture/dialog.md)、[音频生命周期](architecture/audio.md)。
-- [Tauri Host](architecture/tauri-host.md)、[Host Surface](architecture/protocol.md)。
-- [仓库布局](development/repository-layout.md)、[源码规范](development/code-style.md)、[诊断与日志](development/diagnostics-and-logger.md)、[公开 API 和依赖锁定](development/public-api-and-dependencies.md)。
-- [仓库命令](development/commands.md)：游戏检查、桌面 Host、质量门禁、Bun 与发行命令。
-- [TUI 开发测试](development/testing-tui.md)、[Tauri 开发测试](development/testing-tauri.md)、[项目状态](development/status.md)。
+## 示例与状态
 
-## 规划与文档规则
-
-[项目状态](development/status.md)是当前完成度与实际缺口的唯一入口，未实现能力不得写成当前 API。
-
-| 目录         | 读者与内容                         | 不应放入              |
-| ------------ | ---------------------------------- | --------------------- |
-| author       | 游戏作者的操作、行为规则与示例     | Rust 所有权和编码细节 |
-| reference    | 当前可用语法与 API 索引            | 待实现方案和迭代日志  |
-| architecture | Core/Host 的边界、数据流、取舍     | 重复作者教程          |
-| development  | 仓库命令、规范、验收和有状态的规划 | 冒充已完成的未来能力  |
-
-同一主题的作者手册与内部设计各自维护对应职责，并互相链接；速查页链接详细行为，不重复维护。
-完整命令集中在[仓库命令](development/commands.md)，变更历史集中在根目录 CHANGELOG。
+[小镇示例](../examples/README.md)用于运行和对照代码；
+[编辑器扩展](../editors/vscode-narrava-loom/README.md)说明安装与使用。
+当前缺口集中在[项目状态](development/status.md)，历史变化保留在 [CHANGELOG](../CHANGELOG.md)。

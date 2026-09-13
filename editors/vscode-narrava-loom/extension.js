@@ -5,6 +5,7 @@
 
 const vscode = require("vscode")
 const { MacroWorkspace } = require("./src/workspace")
+const { registerMacroHighlights } = require("./src/macro-highlights")
 const {
   completionProvider,
   definitionProvider,
@@ -44,6 +45,7 @@ async function activate(context) {
     vscode.workspace.onDidDeleteFiles(scheduleRefresh),
     vscode.workspace.onDidRenameFiles(scheduleRefresh),
   )
+  registerMacroHighlights(context, workspace)
   await workspace.refresh()
 }
 

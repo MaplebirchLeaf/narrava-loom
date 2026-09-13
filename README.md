@@ -1,44 +1,32 @@
 # Narrava Loom
 
-Narrava Loom 是以 Rust 实现、与宿主平台无关的叙事编译与运行核心。Core 负责 Twee 编译、
-表达式、状态、历史与事务；官方 Tauri 和 TUI Host 负责画面、输入、音频与平台 IO。
-游戏作者编写 Twee 和 TypeScript/JavaScript，交付可移动的 `NarravaGame/` 目录，无需维护 Rust 源码。
+用 Twee 与 TypeScript/JavaScript 编写互动叙事，在桌面窗口或终端中运行。
+Rust 核心管理故事、状态、随机序列与存档；Tauri 和 TUI 负责显示、输入、音频与文件读写。
 
-项目处于开发阶段，尚不承诺长期 API 兼容性。版本与变更见 [CHANGELOG](CHANGELOG.md)，
-完成度和待验收范围见[项目状态](docs/development/status.md)。
+## 运行示例
 
-## 快速开始
-
-安装支持 Rust 2024 Edition 的稳定 Rust 工具链，然后检查示例：
+在仓库根目录执行：
 
 ```bash
 cargo run --locked -p narrava-loom-core -- examples
-```
-
-该命令完成 Source → Twee → HIR → MIR → LIR → Bytecode 编译。启动游戏使用：
-
-```bash
 cargo run --locked -p narrava-loom-tauri -- examples
-# 或终端 Host
-cargo run --locked -p narrava-loom-tui -- examples
 ```
 
-系统依赖和安装步骤见[第一次运行](docs/author/getting-started.md)，
-全部检查、构建与发行命令见[仓库命令](docs/development/commands.md)。
+第一条检查并编译示例，第二条打开桌面游戏。终端版将第二条的包名换成
+`narrava-loom-tui`。首次运行需要 Rust 和系统依赖，见[快速入门](docs/author/quick-start.md)。
 
-## 文档入口
+## 文档
 
-- [游戏作者手册](docs/author/guide.md)：从写故事到打包。
-- [API 与语法速查](docs/reference/api-and-syntax.md)：当前作者契约。
-- [小镇示例](examples/README.md)：可游玩的日常循环与完整能力手册。
-- [Twee 编辑器扩展](editors/vscode-narrava-loom/README.md)：高亮、导航与诊断。
-- [总体架构](docs/architecture/overview.md)：Core、Protocol、Script 与 Host 的边界。
-- [仓库布局](docs/development/repository-layout.md)与[源码规范](docs/development/code-style.md)：源码、测试和文档归属。
-- [文档总入口](docs/README.md)：各领域教程、设计与开发指南。
+| 我要做什么 | 入口 |
+| --- | --- |
+| 从零制作游戏 | [作者手册](docs/author/README.md) |
+| 查语法、参数和配置 | [契约参考](docs/reference/README.md) |
+| 理解引擎与宿主边界 | [架构](docs/architecture/README.md) |
+| 修改、测试和发布仓库 | [开发指南](docs/development/README.md) |
 
-## 修改与验证
+[小镇示例](examples/README.md)包含可玩游戏和能力手册；
+[Twee 编辑器扩展](editors/vscode-narrava-loom/README.md)提供高亮、导航和诊断。
+全部主题见[文档目录](docs/README.md)。
 
-Core 不依赖 Tauri、DOM、CSS 或具体 Renderer。重构保持公开行为、错误与事务边界；
-保留工作区中已有的未提交成果。完成前运行 Rust 全工作区门禁、`bun run check` 和示例编译，
-具体命令见[仓库命令](docs/development/commands.md)。Host 验收见
-[TUI 开发测试](docs/development/testing-tui.md)与[Tauri 开发测试](docs/development/testing-tauri.md)。
+项目处于开发阶段，API 尚未承诺长期兼容。[项目状态](docs/development/status.md)
+记录已实现范围与待验收项，[CHANGELOG](CHANGELOG.md)记录历史版本变化。

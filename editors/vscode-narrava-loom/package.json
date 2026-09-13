@@ -22,13 +22,24 @@
   ],
   "main": "./extension.js",
   "scripts": {
-    "test": "node tests/catalog.mjs && node tests/verify.mjs && node tests/providers.mjs"
+    "test": "node tests/catalog.mjs && node tests/verify.mjs && node tests/providers.mjs && node tests/macro-highlights.mjs"
   },
   "devDependencies": {
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   },
   "contributes": {
+    "configuration": {
+      "title": "Narrava Loom Twee",
+      "properties": {
+        "narravaTwee.macroTagMatching": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "加粗并下划线标记光标所在容器宏的首尾标签。"
+        }
+      }
+    },
     "languages": [
       {
         "id": "narrava-twee",

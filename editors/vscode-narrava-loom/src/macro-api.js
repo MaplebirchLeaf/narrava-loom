@@ -1,6 +1,6 @@
 "use strict"
 
-// 原生宏的形态、语法与说明共用一份目录；依据 docs/reference/api-and-syntax.md。
+// 原生宏的形态、语法与说明共用一份目录；依据 docs/reference/macros.md。
 const MACRO_APIS = Object.freeze({
   dialog: {
     kind: "container",

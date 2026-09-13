@@ -1,31 +1,4 @@
-# 随机数与脚本控制台
-
-## Engine 根种子与随机结果
-
-根种子交给 Engine，脚本 `Math.random()` 与 Twee `random()`、`either(...)` 共用同一序列。
-在 `config.toml` 中指定可复现的开局：
-
-```toml
-[engine]
-seed = 42
-```
-
-省略时，两个 Host 在装载作者脚本前生成根种子。配置接受非负 TOML 整数；
-脚本可读取 `Engine.seed`，它是保留完整 u64 精度的十进制字符串，运行中不能重新设种。
-相同种子、内容和调用顺序得到相同抽样；更换脚本或分支会改变后续调用顺序。
-
-```ts
-const rootSeed = Engine.seed
-V.reward = Math.random() < 0.5 ? "coin" : "herb"
-```
-
-失败或取消恢复随机进度；历史回放从入页进度执行。读档恢复根种子及进度，
-语言和当前页重绘使用临时序列，Header/Footer/Bar 的抽样也不消费正文进度。
-`Engine.restart()` 恢复本次启动脚本完成后的状态与序列。
-需要保留的行动结果仍应写入游戏变量，避免把行动逻辑放进每次都会执行的呈现正文。
-
-旧 `Random.next()` 改为 `Math.random()`，`Random.seed()` 改为开局配置；不再提供 `Random` 全局。
-存档格式与兼容边界见 [Save 格式](../architecture/save-format.md)。
+# 调试与故障排查
 
 ## 游戏内脚本控制台
 
@@ -79,7 +52,7 @@ TUI 仍使用 F10 或 `:inspect` 查看只读 State / Location / 日志快照。
 查询不执行作者表达式、不消费日志订阅；Pending 期间拒绝读取半完成状态。
 Tauri 关闭 developer 后，Rust 同时拒绝快照和脚本执行，不只是隐藏入口。
 
-## 统一日志与错误来源
+## 日志
 
 ```ts
 const subscription = Logger.subscribe({ minimumLevel: "warn", target: "quest" })
@@ -92,3 +65,26 @@ Logger.unsubscribe(subscription)
 错误优先显示来源文件、行列和稳定错误码。TypeScript 解析错误使用原始位置；运行时能取得的
 转译后位置明确标为「Generated」，不会冒充原始 TypeScript 行号。暂未提供 TS source map、
 断点或源码自动跳转。
+
+## 排查顺序
+
+先运行 `cargo run --locked -p narrava-loom-core -- my-game`，修正配置和编译错误；
+再启动 Host，复现具体操作并查看错误码、来源和消息。运行失败会回滚相应故事事务，
+应修复触发失败的内容，而不是忽略错误继续操作。
+
+| 现象 | 检查 |
+| --- | --- |
+| 缺少 WebKit/GTK 或 ALSA | 按[快速入门](quick-start.md#准备环境)安装系统依赖 |
+| 找不到配置或拒绝游戏路径 | 从仓库根目录传入 `my-game`，确认 `config.toml` 存在 |
+| 找不到 Start 或导航目标 | Passage 名区分大小写且全局唯一 |
+| `$name` 原样显示 | 用 `<<print $name>>` 显式求值 |
+| 结构 Macro 被当成文字 | 条件、循环和分支标签必须顶格且独占一行 |
+| Twee 找不到脚本函数 | 用 `State.global.set/extend` 显式导出 |
+| 脚本找不到 window 或 document | 游戏脚本不在 WebView 中执行 |
+| 图片或 CSS 资源缺失 | 对照[资源路径表](resources.md)，不要混淆 `img/` 与资源根目录 |
+| Promise 无法结算 | 返回或 await `Host.delay`；不支持未受管的后台任务 |
+| 存档失败 | 在 `Save.after` 读取结果，检查 target、目录权限和游戏版本 |
+| 译文未显示 | 检查 locale、游戏兼容范围、文本 ID 与 placeholder |
+| 变量改了但正文没变 | 赋值只同步状态和输入；用 Reaction 或导航更新正文 |
+
+更改后重新验证触发错误的操作；只读查询和编译通过都不能代替交互验收。

@@ -1,25 +1,12 @@
 # Save 格式与恢复事务
 
-本文面向 Core 与 Host 开发者；作者用法见 [Save](../author/save.md)。
+本文面向 Core 与 Host 开发者；作者用法见 [Save](../author/flow.md)。
 
 ## 边界
 
-Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当前执行栈：
-
-| 保存                                     | 不保存                                   |
-| ---------------------------------------- | ---------------------------------------- |
-| `State.variables`（`$name`）             | `State.global`                           |
-| 当前地点 ID、坐标与环境                  | Location 地点定义、多边形、父子索引      |
-| Story 完整导航时间线                     | `State.setup`                            |
-| Story 当前游标                           | `State.temporary`（`_name`）             |
-| 各历史项进入前的 `$variables` 与世界位置 | `State.global`／`State.setup` 的历史版本 |
-| 每次 Passage 是否产生作者导航            | Macro `@locals`、`@args`                 |
-| Reaction 启用、次数与销毁状态            | Reaction Definition 与 `cond` 函数       |
-| Engine 根种子及当前/历史随机进度 | 临时重绘序列 |
-| 精确游戏 ID 与版本                       | Function、Macro Handler、Promise         |
-| Narrava Array/Object 引用图              | VM frame、Pending、Host/Renderer 对象    |
-
-`global` 与 `setup` 属于启动环境，由配置、StoryInit 和 scripts 重新建立。`temporary` 与 Macro Local 只服务当前执行范围，加载后清空。
+Save 序列化持久变量、地点与 Engine 当前/历史进度、Story 时间线和 Reaction 运行状态。
+完整保存范围见[作者流程](../author/flow.md#保存游戏)。执行栈、平台对象和脚本定义不进入文档。
+`global`、`setup` 和地点定义保持本次启动环境；导入清空 temporary，不重新运行作者注册脚本。
 
 ## 二进制文档结构
 
@@ -46,8 +33,8 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 
 ## Story 与恢复事务
 
-时间线按顺序保存 PassageName、导航标记、当前游标，以及每项进入前的 `$variables` 图与世界
-位置；不保存进程内 `StoryHistoryId`。加载时使用当前 HIR 重建时间线，PassageName 区分大小写，
+时间线按顺序保存 PassageName、导航标记、当前游标，以及每项进入前的 `$variables` 图、位置
+与 EngineSnapshot；不保存进程内 `StoryHistoryId`。加载时使用当前 HIR 重建时间线，PassageName 区分大小写，
 `StoryInit` 不得进入历史。Back/Forward 恢复目标项的进入前状态，再重放 Passage。
 
 恢复顺序固定为：
@@ -66,7 +53,7 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 等错误都以 `save.invalid_location` 原子拒绝，不留下部分恢复的状态。
 
 Core `restore()` 只恢复稳定领域状态；官方 RuntimeSession 随后通过 `RefreshCurrent` 重绘当前
-Passage。刷新所有权见 [Runtime Session](runtime-session.md#pending-与-host)，
+Passage。刷新所有权见 [Runtime Session](runtime.md#挂起与恢复)，
 作者可见的位置行为见 [Location](../author/location.md#刷新历史与存档)。
 
 ## 请求与平台 IO
@@ -83,8 +70,8 @@ Script Export/Import 的执行链为：
 4. Session 完成恢复或导出结算，再通过 `complete_save()` 通知 after Hook。
 
 Hook 身份和队列只在当前进程有效，不进入存档。after 不能修改已导出的文档；
-失败与取消的命令事务见 [Runtime Session](runtime-session.md)。脚本用法及临时
-`Save.capture/restore` 与正式存档的区别见[作者 Save 指南](../author/save.md)。
+失败与取消的命令事务见 [Runtime Session](runtime.md)。脚本用法及临时
+`Save.capture/restore` 与正式存档的区别见[作者 Save 指南](../author/flow.md)。
 
 Tauri 与 TUI 通过共享的 `hosts/save_io.rs` 读写命名槽位 `save/<target>.nsave`，
 统一校验目标名、限制导入大小为 16 MiB，并以临时文件完成覆盖写入；错误码保留 Host 来源。成功进入另一 Passage 后写入 `autosave`；

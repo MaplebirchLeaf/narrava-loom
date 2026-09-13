@@ -1,4 +1,7 @@
-# Twee、选择、变量、条件和循环
+# 编写 Twee
+
+Macro 参数用空白分隔，不使用顶层逗号。`if`、`switch`、`for`、`while` 及其分支、
+闭合标签必须顶格并独占一行；完整写法见[Macro 参考](../reference/macros.md)。
 
 ## Passage、标签和文件拆分
 
@@ -42,8 +45,6 @@
 - 两边区分明确，不要把顺序写反；
 - 目标必须存在且大小写一致。
 
-当前 Tauri Renderer 会按 Core 输出顺序把导航显示成行内选择。
-
 游戏内需要换行时显式写 `<br>`：
 
 ```twee
@@ -62,7 +63,7 @@
 | `$name` | 一局游戏 | 是 | 角色名、金币、剧情选择 |
 | `_name` | 临时执行 | 否 | 中间计算、当前 Passage 临时值 |
 | `@name` | 当前 Macro/Widget 调用 | 否 | 局部变量 |
-| `setup.name` | 启动配置 | 通常作为初始化数据 | 难度表、固定规则 |
+| `setup.name` | 启动配置 | 否 | 难度表、固定规则 |
 
 赋值与显示：
 
@@ -116,7 +117,7 @@
 
 常用值：字符串写成 `"文字"`，布尔值为 `true`/`false`，空值为 `null`，未定义值为
 `undefined`。不要用正文猜测表达式语法，完整运算符以
-[/docs/architecture/expression.md](/docs/architecture/expression.md)为准。
+[Expression 参考](../reference/expressions.md)为准。
 
 ## 循环、包含和直接跳转
 
@@ -146,9 +147,9 @@
 
 可用控制包括 `for`、`while`、`break`、`continue`、`switch`、`include`、`goto`、`run`、
 `silently`、`exit`、Widget 和 `capture`。精确参数与作用域见
-[Macro 执行与所有权](/docs/architecture/macro-runtime.md)。
+[Macro 参考](../reference/macros.md)。
 
-## `silently` 到底做什么
+## 隐藏输出
 
 ```twee
 <<silently>>
@@ -188,10 +189,32 @@
 
 第三参数只接受 `stack`／`row`；不提供尺寸、间距或任意布局参数。
 
-Semantic/Protocol 的 Container 可以承载现有文本、Component、按钮和输入节点；`panel` 只表达
-内容分组边界。TUI 可以画字符方框，Tauri 可以显示 card，其他 Host 可采用自己的原生容器；
-Twee 不指定边框字符、颜色、圆角、尺寸或排列方式。
+`panel` 表示独立内容组；边框、间距和窄屏换行由 Host 决定。
+当前 Twee `slot` / `replace` 正文只支持静态文本和 Core 逻辑节点，动态 `print`、输入、
+按钮或脚本 Macro 会报错。需要动态替换时参考[事件与 Reaction](events.md)。
 
-当前 Twee `slot`／`replace` 正文只接通静态文本和 Core 逻辑节点；嵌套动态 `print`、输入、按钮
-或脚本 Macro 尚未接通时会报错，不会静默丢失。该限制属于当前 Twee 执行入口，不是
-Container 或 Protocol 的内容模型限制。
+## 点击正文与复用
+
+`link` 正文在点击时执行，显示选项时不执行。带目标的 link 执行正文后导航；
+字符串形式 `<<link "查看角色">>` 只执行动作，适合[打开弹窗](dialog.md)。
+
+```twee
+<<link [[进入森林|Forest]]>>
+<<set $visitedForest to true>>
+<</link>>
+```
+
+可复用的小片段放在带 `[widget]` 标签的 Passage 中：
+
+```twee
+:: Widgets [widget]
+<<widget "greeting">>
+你好，<<print @args[0]>>。
+<</widget>>
+
+:: Start
+<<greeting "旅人">>
+```
+
+Widget 调用不写闭合标签，实参通过 `@args` 读取，局部变量属于本次调用。
+需要复杂计算时再定义[脚本 Macro](scripting.md#自定义-macro)。

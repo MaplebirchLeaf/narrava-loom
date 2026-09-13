@@ -21,7 +21,7 @@ const SPECIAL_PASSAGES = Object.freeze([
 ])
 
 // 块注释（/% ... %/）；扫描前先剔除，避免把注释里的内容当成代码。
-const COMMENT = /\/%[\s\S]*?%\//g
+const COMMENT = /\/%[\s\S]*?(?:%\/|$)/g
 // 宏调用 <<name 与闭合 <</name>>。
 const TWEE_MACRO = /<<(\/)?([A-Za-z_][A-Za-z0-9_-]*)/g
 // widget 定义：widget 名可以作为宏调用。
@@ -43,7 +43,7 @@ const EXPRESSION_CALL = /\b([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]
 
 /** 用等长空白替换块注释，保持其余文本的行列位置不变。 */
 function withoutComments(text) {
-  return text.replace(COMMENT, (match) => " ".repeat(match.length))
+  return text.replace(COMMENT, (match) => match.replace(/[^\r\n]/g, " "))
 }
 
 /** 扫描 Twee 源码，返回宏定义、宏调用、Passage、链接与函数调用的位置清单。 */
@@ -102,6 +102,60 @@ function scanTwee(text) {
     functionCalls.push({ name, start: match.index, length: name.length })
   }
   return { definitions, calls, passages, links, functionCalls }
+}
+
+/** 只配对同一 Passage 内的容器；结果按闭合顺序排列，内层先于外层。 */
+function macroTagPairs(text, kinds) {
+  const source = withoutComments(text)
+  const { calls, passages } = scanTwee(source)
+  const pairs = []
+  const stack = []
+  let passageIndex = 0
+  let consumed = 0
+  for (const call of calls) {
+    if (call.start < consumed) continue
+    while (passageIndex < passages.length && passages[passageIndex].start < call.start) {
+      stack.length = 0
+      passageIndex += 1
+    }
+    const start = call.start - (call.closing ? 3 : 2)
+    const end = macroHeaderEnd(source, call.start + call.length)
+    if (end === undefined) continue
+    consumed = end
+    if (kinds.get(call.name) !== "container") continue
+    const tag = { start, end, nameEnd: call.start + call.length }
+    if (!call.closing) {
+      stack.push({ ...tag, name: call.name })
+    } else if (stack.at(-1)?.name === call.name) {
+      pairs.push({ opening: stack.pop(), closing: tag })
+    } else {
+      // 错配时不把剩余标签跨过错误正文拼成另一对。
+      stack.length = 0
+    }
+  }
+  return pairs
+}
+
+/** 宏头中的字符串和分组可能含有 >>，只有顶层分隔符结束标签。 */
+function macroHeaderEnd(source, start) {
+  let quote
+  let depth = 0
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index]
+    if (quote) {
+      if (character === "\\") index += 1
+      else if (character === quote) quote = undefined
+    } else if ("\"'`".includes(character)) {
+      quote = character
+    } else if ("([{".includes(character)) {
+      depth += 1
+    } else if (")]}".includes(character)) {
+      depth = Math.max(0, depth - 1)
+    } else if (character === ">" && source[index + 1] === ">" && depth === 0) {
+      return index + 2
+    }
+  }
+  return undefined
 }
 
 /** 扫描脚本源码，收集 Macro.add/update 定义的宏（含 body 形态）。 */
@@ -166,6 +220,7 @@ module.exports = {
   SPECIAL_PASSAGES,
   knownNames,
   macroKinds,
+  macroTagPairs,
   missingPassageLinks,
   scanScript,
   scanScriptFunctions,
