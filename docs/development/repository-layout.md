@@ -9,7 +9,7 @@
 Narrava Loom/
 ├── src/                            narrava-loom-core 源码与单元测试
 ├── hosts/
-│   ├── audio.rs                   两个 Host 共用的本地音频输出
+│   ├── audio.rs / save_io.rs      共享本地音频输出与存档 IO
 │   ├── tests/                     共享 Host 回归用例
 │   ├── narrava-loom-tauri/         官方 Tauri Host；桌面可运行，移动共享层待平台工程
 │   └── narrava-loom-tui/           Host-neutral 终端 Renderer 与输入前端
@@ -42,19 +42,24 @@ Narrava Loom/
 - `dist/` 只保存可分发结果，例如 `NarravaGame/` 和 `.vsix`；`target/` 只保存 Cargo 中间产物。
 - `node_modules/`、Tauri `gen/`、本机配置和临时日志不得进入版本库。
 
-## Rust 依赖方向
+## 源码入口
 
-```mermaid
-flowchart LR
-  Location[narrava-loom-location] --> Core[narrava-loom-core]
-  Core --> Script[narrava-loom-script]
-  Protocol[narrava-loom-protocol] --> Script
-  Script --> Host
-  Protocol --> Host
-```
+同一行的简写路径相对该行首个模块的父目录。
 
-Core 不得依赖 Host 或具体 Renderer。Host 通过 Script Runtime 和 Protocol 驱动 Core。
-Location 只依赖序列化库，不依赖 Core、脚本或平台；三个宿主目标见[总体架构](../architecture/overview.md#宿主目标)。
+| 位置 | 职责与设计说明 |
+| --- | --- |
+| `src/config.rs`、`src/source.rs` | 项目配置与内容发现；[总体架构](../architecture/overview.md) |
+| `src/twee/`、`hir/`、`mir/`、`lir.rs`、`bytecode/`、`vm/` | [Twee 编译与执行](../architecture/twee.md) |
+| `src/expression/`、`macro_runtime/`、`runtime/` | [表达式](../architecture/expression.md)与 [Macro 执行](../architecture/macro-runtime.md) |
+| `src/engine/`、`state.rs`、`story/`、`semantic.rs`、`host/` | [运行时所有权与事务](../architecture/runtime.md)、[Host 输出](../architecture/protocol.md) |
+| `src/events.rs`、`reaction/`、`i18n/`、`save/` | 事件与 Reaction、[I18n](../architecture/i18n.md)、[Save](../architecture/save-format.md) |
+| `src/inspect.rs`、`diagnostic.rs`、`logger.rs` | 状态检查、[诊断与日志](diagnostics-and-logger.md) |
+| `src/resource/`、`nar.rs`、`release.rs`、`script/` | 资源、发布容器、交付目录与 Script Bundle |
+| `crates/narrava-loom-script/src/session.rs`、`session/` | [RuntimeSession](../architecture/runtime-session.md) 命令、事务、交互与 IO |
+| 同 crate 的 `ecma.rs`、`binding/`、`*_adapter.rs`、`protocol_adapter/` | ECMAScript 运行、领域桥接与 Core/Protocol 转换；`refresh.rs` 隔离当前页重绘 |
+| `hosts/narrava-loom-tauri/frontend/`、`hosts/narrava-loom-tui/src/renderer/` | WebView 与终端呈现；TUI 帧缓冲位于 `renderer.rs` |
+
+Crate 依赖与领域所有权统一见[总体架构](../architecture/overview.md#crate-边界)。
 
 ## 构建输出
 

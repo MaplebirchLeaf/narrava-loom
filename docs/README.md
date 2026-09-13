@@ -6,14 +6,6 @@
 
 - [游戏作者手册](author/guide.md)：从安装、写故事到打包的分册教程。
 - [API 与语法速查](reference/api-and-syntax.md)：宏、内置函数、运算符和脚本 API 索引。
-- [Macro](author/macro.md)：原生宏、参数、点击正文与内容复用。
-- [弹窗与页面](author/dialog.md)：打开、切页与关闭弹窗。
-- [Audio](author/audio.md)：背景音声明、tag 匹配与连续播放。
-- [Location](author/location.md)：地点注册、二维范围、Passage Tag 与位置移动。
-- [随机数与只读调试](author/random-and-debugging.md)：可回放随机序列与 State / Location / 日志检查。
-- [Save](author/save.md)：保存范围、存读档和完成结果。
-- [Event](author/event.md)：作者事件、拉取订阅、Engine Passage 事件与 Reaction 事件链。
-- [Reaction](author/reaction.md)：三种触发源、结构化效果、事务与 Save 行为。
 
 ## 我在开发 Host 或 Core
 
@@ -22,7 +14,7 @@
 - [Runtime Session](architecture/runtime-session.md)：Host-neutral 命令、更新与挂起操作边界。
 - [Macro 执行](architecture/macro-runtime.md)、[Expression](architecture/expression.md)、[Twee 编译器](architecture/twee.md)、[I18n](architecture/i18n.md)、[Save 格式](architecture/save-format.md) 设计说明。
 - [弹窗执行](architecture/dialog.md)、[音频生命周期](architecture/audio.md)。
-- [Tauri Host](architecture/tauri-host.md)、[Host Surface](architecture/protocol.md)、[源码记录](architecture/source-record.md)。
+- [Tauri Host](architecture/tauri-host.md)、[Host Surface](architecture/protocol.md)。
 - [仓库布局](development/repository-layout.md)、[源码规范](development/code-style.md)、[诊断与日志](development/diagnostics-and-logger.md)、[公开 API 和依赖锁定](development/public-api-and-dependencies.md)。
 - [仓库命令](development/commands.md)：游戏检查、桌面 Host、质量门禁、Bun 与发行命令。
 - [TUI 开发测试](development/testing-tui.md)、[Tauri 开发测试](development/testing-tauri.md)、[项目状态](development/status.md)。

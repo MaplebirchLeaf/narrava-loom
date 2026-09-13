@@ -300,7 +300,9 @@ fn execute_blocking(
                         target,
                         document,
                         ..
-                    } => match platform::process_save(game_path, direction, &target, document) {
+                    } => match crate::save_io::process_save_io(
+                        game_path, direction, &target, document, "tui_host",
+                    ) {
                         Ok(document) => PendingResult::Save { document },
                         Err(error) => PendingResult::Failed { error },
                     },

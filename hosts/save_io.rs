@@ -6,9 +6,7 @@ use std::{
     path::Path,
 };
 
-use narrava_loom_protocol::SaveOperation;
-
-use crate::HostErrorDto;
+use narrava_loom_protocol::{HostErrorDto, SaveOperation};
 
 const MAX_SAVE_BYTES: u64 = 16 << 20;
 
@@ -18,28 +16,25 @@ pub(crate) fn process_save_io(
     operation: SaveOperation,
     target: &str,
     document: Option<Vec<u8>>,
+    host: &str,
 ) -> Result<Option<Vec<u8>>, HostErrorDto> {
-    let file_name = save_file_name(target)?;
+    let file_name: String = save_file_name(target)
+        .map_err(|message| HostErrorDto::new(&format!("{host}.save_target"), message))?;
     let save_directory = game_path.join("save");
     let path = save_directory.join(file_name);
-    (|| -> Result<(), String> {
-        match operation {
-            SaveOperation::Export => {
-                fs::create_dir_all(&save_directory).map_err(|error| error.to_string())?;
-                let document: &[u8] = document
-                    .as_deref()
-                    .ok_or_else(|| String::from("Save export 缺少存档内容"))?;
-                write_atomically(&path, document).map_err(|error| error.to_string())
-            }
-            SaveOperation::Import => Ok(()),
-        }
-    })()
-    .map_err(|message| HostErrorDto::new("tauri_host.save", message))?;
+    let save_error = |message: String| HostErrorDto::new(&format!("{host}.save"), message);
     match operation {
-        SaveOperation::Export => Ok(None),
+        SaveOperation::Export => {
+            fs::create_dir_all(&save_directory).map_err(|error| save_error(error.to_string()))?;
+            let bytes: &[u8] = document
+                .as_deref()
+                .ok_or_else(|| save_error(String::from("Save export 缺少存档内容")))?;
+            write_atomically(&path, bytes).map_err(|error| save_error(error.to_string()))?;
+            Ok(None)
+        }
         SaveOperation::Import => read_limited(&path)
             .map(Some)
-            .map_err(|error| HostErrorDto::new("tauri_host.save", error.to_string())),
+            .map_err(|error| save_error(error.to_string())),
     }
 }
 
@@ -100,17 +95,14 @@ fn read_limited(path: &Path) -> std::io::Result<Vec<u8>> {
 }
 
 /// 校验并规范化存档目标为 `<target>.nsave` 文件名（禁止路径逃逸）。
-pub(crate) fn save_file_name(target: &str) -> Result<String, HostErrorDto> {
+pub(crate) fn save_file_name(target: &str) -> Result<String, &'static str> {
     if target.is_empty()
         || target.len() > 80
         || !target
             .chars()
             .all(|value| value.is_ascii_alphanumeric() || matches!(value, '-' | '_'))
     {
-        return Err(HostErrorDto::new(
-            "tauri_host.save_target",
-            "Save target 只允许 1 至 80 个 ASCII 字母、数字、连字符或下划线",
-        ));
+        return Err("Save target 只允许 1 至 80 个 ASCII 字母、数字、连字符或下划线");
     }
     Ok(format!("{target}.nsave"))
 }

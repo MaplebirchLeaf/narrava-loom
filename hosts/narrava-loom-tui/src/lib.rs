@@ -8,6 +8,8 @@ mod command;
 mod debug;
 mod platform;
 mod renderer;
+#[path = "../../save_io.rs"]
+mod save_io;
 mod screen;
 mod terminal;
 

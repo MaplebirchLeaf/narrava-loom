@@ -7,3 +7,6 @@ mod render;
 
 #[path = "../../../tests/audio.rs"]
 mod audio;
+
+#[path = "../../../tests/save_io.rs"]
+mod save_io;

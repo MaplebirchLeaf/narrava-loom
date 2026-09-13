@@ -36,8 +36,9 @@ Script Macro 的受管等待为 `Host.delay`；Session 另用 Pending 处理 Sav
 根 `Cargo.toml` 的 package.version 是项目版本来源。各 Rust crate、根 package.json、
 作者 TypeScript 包、VS Code 扩展与 Tauri 配置保持相同版本；`bun run check` 会检查一致性。
 
-每次提交前按变更性质递增语义化版本：修复用 patch，新增兼容能力用 minor；
-0.x 阶段的破坏性 API 变化也递增 minor，1.x 起使用 major。不要分别修改包版本。
+从 `0.10.0` 起按发布周期统一管理版本，开发提交不单独递增版本。准备下一次发布时，
+根据累计变更选择版本：仅修复用 patch，新增兼容能力用 minor；0.x 阶段的破坏性 API
+变化也递增 minor，1.x 起使用 major。不要分别修改包版本。
 
 ```bash
 bun run version:bump patch
@@ -45,5 +46,7 @@ bun run version:bump patch
 ```
 
 命令会同步所有项目包版本并刷新 Cargo/Bun 锁文件。仅修正已有版本漂移使用
-`bun run version:sync`，它不替代提交前的版本递增。
+`bun run version:sync`；发布前完成版本同步、变更记录与全工作区检查。
+Git 提交和既有标签保留历史事实。存档 schema、Bytecode、Protocol 与 NAR 格式版本
+独立标识数据兼容性，不随项目版本重排或归零。
 示例游戏版本与语言包兼容范围属于游戏内容身份，不随引擎包自动升级；修改它们时需配套验证存档与语言包。

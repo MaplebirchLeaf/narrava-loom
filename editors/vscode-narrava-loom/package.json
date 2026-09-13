@@ -1,7 +1,7 @@
 {
   "name": "narrava-loom-twee",
   "displayName": "Narrava Loom Twee",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Narrava Loom .twee language highlighting and editing support",
   "categories": [
     "Programming Languages"

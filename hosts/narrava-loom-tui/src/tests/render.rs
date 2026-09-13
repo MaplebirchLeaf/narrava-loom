@@ -216,28 +216,31 @@ fn tui_platform_save_round_trips_and_rejects_path_escape() {
     let _cleanup_before = std::fs::remove_dir_all(&root);
     let bytes: Vec<u8> = vec![1, 2, 3, 4];
 
-    crate::platform::process_save(
+    crate::save_io::process_save_io(
         &root,
         narrava_loom_protocol::SaveOperation::Export,
         "quick",
         Some(bytes.clone()),
+        "tui_host",
     )
     .unwrap();
-    let restored = crate::platform::process_save(
+    let restored = crate::save_io::process_save_io(
         &root,
         narrava_loom_protocol::SaveOperation::Import,
         "quick",
         None,
+        "tui_host",
     )
     .unwrap();
 
     assert_eq!(restored, Some(bytes));
     assert!(
-        crate::platform::process_save(
+        crate::save_io::process_save_io(
             &root,
             narrava_loom_protocol::SaveOperation::Import,
             "../escape",
             None,
+            "tui_host",
         )
         .is_err()
     );

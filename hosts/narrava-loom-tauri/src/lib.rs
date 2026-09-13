@@ -11,6 +11,7 @@ mod config;
 mod debug;
 mod package;
 mod resource_protocol;
+#[path = "../../save_io.rs"]
 mod save_io;
 
 use std::{
@@ -305,7 +306,7 @@ impl TauriHost {
             } => {
                 let game_path: Arc<PathBuf> = Arc::clone(&self.game_path);
                 let completed = tokio::task::spawn_blocking(move || {
-                    process_save_io(&game_path, direction, &target, document)
+                    process_save_io(&game_path, direction, &target, document, "tauri_host")
                 })
                 .await;
                 Some(match completed {

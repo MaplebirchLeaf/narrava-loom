@@ -16,7 +16,7 @@ TUI command loop ───────┘         ↕                        ↕
 
 Session 持有 State、Story、交互、上一帧、continuation 和命令事务。`RuntimeData` 只保存游戏
 身份、I18n 目录和已验证语言包。Protocol 定义 owned、serializable 数据；Adapter 负责转换
-Core 与 Script、Host 的类型。实现入口统一见[源码索引](source-record.md#script-runtime)。
+Core 与 Script、Host 的类型。实现入口统一见[仓库布局](../development/repository-layout.md#源码入口)。
 
 官方 Host 没有 Native Session registry。`RuntimeSessionId`、request/response envelope 是
 Protocol 数据契约，不对应独立的 Handle/Driver 执行对象。`EcmaBinding` 直接持有实际

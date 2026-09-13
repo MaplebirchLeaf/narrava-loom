@@ -49,7 +49,7 @@ Twee 的 Parser、IR 与 VM 边界见 [Twee 编译器](twee.md)；Expression 与
 
 `SourceList` 递归扫描 `contents/`，按平台无关的相对路径排序，并识别 `.twee`、`.ts`
 和 `.js`。`SourcePath` 使用不含 `contents/` 前缀的相对路径与 `/`，拒绝绝对路径、`..` 和
-反斜杠。`.css` 由具体 Host 管理。模块位置见[源码记录](source-record.md)。
+反斜杠。`.css` 由具体 Host 管理。模块位置见[仓库布局](../development/repository-layout.md#源码入口)。
 
 ## 发布边界
 

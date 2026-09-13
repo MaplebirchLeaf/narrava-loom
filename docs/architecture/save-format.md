@@ -87,5 +87,6 @@ Hook 身份和队列只在当前进程有效，不进入存档。after 不能修
 失败与取消的命令事务见 [Runtime Session](runtime-session.md)。脚本用法及临时
 `Save.capture/restore` 与正式存档的区别见[作者 Save 指南](../author/save.md)。
 
-Tauri 与 TUI 使用命名槽位 `save/<target>.nsave`。成功进入另一 Passage 后写入 `autosave`；
+Tauri 与 TUI 通过共享的 `hosts/save_io.rs` 读写命名槽位 `save/<target>.nsave`，
+统一校验目标名、限制导入大小为 16 MiB，并以临时文件完成覆盖写入；错误码保留 Host 来源。成功进入另一 Passage 后写入 `autosave`；
 语言刷新、历史回溯和侧栏切换不触发自动保存。文件选择、云同步与存档迁移尚未实现。

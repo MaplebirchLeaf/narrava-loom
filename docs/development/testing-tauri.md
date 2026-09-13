@@ -79,11 +79,7 @@ cargo run --locked -p narrava-loom-tauri -- examples
 
 开发目录成功不代表 `game.nar` 成功。发布前还要用真实 Host 二进制构建可移动目录：
 
-```bash
-cargo build --release --locked -p narrava-loom-tauri
-cargo run --release --locked -p narrava-loom-core -- \
-  build examples dist/NarravaGame target/release/narrava-loom-tauri
-```
+按[发行命令](commands.md#发行与编辑器包)构建桌面目录。
 
 在新的终端中从发行目录启动 `dist/NarravaGame/narrava`，重复 Resource、CSS、语言与存档检查。
 构建器不会覆盖已有的 `dist/NarravaGame`；需要重建时先把旧目录移动到备份位置或选择新输出目录。
