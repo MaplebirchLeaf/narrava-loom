@@ -190,6 +190,11 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         Self::create(hir, bytecode, script, state, Some(data))
     }
 
+    /// 当前游戏的 Engine 执行上下文。
+    pub fn engine(&self) -> &narrava_loom_core::engine::Engine {
+        self.state.engine()
+    }
+
     /// 执行一条平台无关命令；Pending 必须以返回的 operation ID 恢复或取消。
     pub fn execute(&mut self, command: RuntimeCommand) -> Result<RuntimeUpdate, HostErrorDto> {
         let previous_notices: usize = self.notices.len();
@@ -218,7 +223,7 @@ impl<'hir, 'source> RuntimeSession<'hir, 'source> {
         let result = self.execute_inner(command);
         if !matches!(result, Ok(RuntimeUpdate::Pending { .. })) {
             self.script.set_refresh(None);
-            self.state.end_random_replay();
+            self.state.engine().end_replay();
         }
         if result.is_err() {
             self.script.cancel_console();

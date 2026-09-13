@@ -3,7 +3,6 @@
 use narrava_loom_core::{
     inspect::{StateInspection, inspect_state},
     location::Place,
-    random::RandomState,
 };
 use narrava_loom_protocol::{HostDebugSnapshotDto, HostErrorDto, HostLogRecordDto};
 use serde_json::{Value, json};
@@ -47,7 +46,6 @@ impl RuntimeSession<'_, '_> {
                 })
             })
             .collect();
-        let random: RandomState = self.state.random_state();
         let current: Option<String> = self
             .story
             .current()
@@ -80,7 +78,6 @@ impl RuntimeSession<'_, '_> {
             current,
             state: inspection.data,
             location: json!({"current": position, "places": places, "count": count}),
-            random: json!({"seed": random.seed().to_string(), "state": random.state().to_string()}),
             truncated,
             logs,
         })

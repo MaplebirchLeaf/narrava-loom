@@ -7,6 +7,11 @@ import {
 } from "./internal"
 
 export default function host(): void {
+  Object.defineProperty(Math, "random", {
+    value: (): number => __narravaEngineRandom(),
+    writable: false,
+    configurable: false,
+  })
   scriptGlobals.Host = Object.freeze({
     delay: (milliseconds: number) => {
       if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 86_400_000) {
@@ -25,6 +30,9 @@ export default function host(): void {
     },
   })
   scriptGlobals.Engine = Object.seal({
+    get seed(): string {
+      return __narravaEngineSeed()
+    },
     started: false,
     goto: (target: unknown) => requestEngineCommand({ kind: "goto", target }),
     back: () => requestEngineCommand({ kind: "back" }),

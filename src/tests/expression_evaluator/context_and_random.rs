@@ -148,9 +148,8 @@ fn evaluates_random_and_either_with_injected_source() {
 }
 
 #[test]
-fn injected_random_source_takes_priority_without_consuming_state() {
+fn injected_random_source_takes_priority_over_default_sampling() {
     let state: crate::state::State = crate::state::State::new();
-    let before: crate::random::RandomState = state.random_state();
     let mut random: FixedRandomSource = FixedRandomSource {
         values: vec![0.25].into_iter(),
     };
@@ -159,7 +158,6 @@ fn injected_random_source_takes_priority_without_consuming_state() {
         evaluate_with_random(&expression, &state, &mut random).unwrap(),
         Value::Number(0.25)
     );
-    assert_eq!(state.random_state(), before);
 }
 
 #[test]

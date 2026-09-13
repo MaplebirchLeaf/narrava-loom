@@ -19,11 +19,10 @@ fn input_navigation_save_failure_restores_history_interactions_and_reactions() {
             let script: String = format!(
                 r#"
 State.variables.set('name', 'before');
-Random.seed(42);
 Reaction.add({{id:'navigate', state:'$name', cond:({{after}}) => after === 'changed', goto:'Next', once:true}});
 Macro.add('legacy', {{handler: () => 'old interaction works'}});
 Macro.add('prepare', {{async handler() {{
-    Random.next();
+    Math.random();
     if ({asynchronous}) await Host.delay(1);
     if ({encoding_fails}) State.variables.set('unsupported', () => {{}});
     Save.export('quick');
@@ -88,7 +87,7 @@ Macro.add('prepare', {{async handler() {{
                 assert_eq!(
                     export_save(runtime),
                     before,
-                    "State、随机序列、历史和Reaction计数都应回滚"
+                    "State、历史和Reaction计数都应回滚"
                 );
                 let old_frame: HostUpdateDto = ready(
                     runtime

@@ -25,8 +25,6 @@
 <<set $demo_screen to "menu">>
 <<print "你将怎样度过今天？" {heading: 1}>>
 姓名：<<textbox "$town_name" "Alex">><br>
-世界种子：<<textbox "$town_seed" "town-morning">><br>
-相同种子与相同行动会得到相同的探索结果。<br>
 <<set $town_hints to $town_hints ?? true>>
 <<set $town_route to $town_route ?? "work">>
 显示行动提示：<<checkbox "$town_hints" false true>><br>
@@ -233,7 +231,7 @@
 
 :: TownSettings
 <<print "日记夹页 · 存档与设置" {heading: 1}>>
-保存的是这段旅程的状态、地点、随机序列和 Reaction 次数。<br>
+保存的是这段旅程的状态、地点和 Reaction 次数。<br>
 <<button [[保存小镇进度|TownSettings]]>><<run exportSave("town-day")>><</button>><br>
 <<button [[读取小镇进度|TownSettings]]>><<run importSave("town-day")>><</button>><br>
 提示：<<checkbox "$town_hints" false true>><br>

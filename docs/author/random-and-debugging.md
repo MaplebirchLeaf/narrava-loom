@@ -1,25 +1,31 @@
 # 随机数与脚本控制台
 
-## 一条可保存的随机序列
+## Engine 根种子与随机结果
 
-Twee 的 `random()`、`either(...)` 与脚本的 `Random.next()`、`Math.random()` 共用当前
-State 的随机序列，不需要作者传入随机源。默认种子为 `0`；需要不同开局时，在初始化脚本中
-指定一个非负安全整数：
+根种子交给 Engine，脚本 `Math.random()` 与 Twee `random()`、`either(...)` 共用同一序列。
+在 `config.toml` 中指定可复现的开局：
 
-```ts
-Random.seed(20260912)
-const chance = Random.next() // [0, 1)
-Logger.info("generation", `抽样：${chance}`)
+```toml
+[engine]
+seed = 42
 ```
 
-相同种子、相同操作顺序会得到相同结果。失败或取消的命令回滚随机状态；历史重放恢复该页
-进入前的序列。正式存档同时记录种子和当前位置，加载后继续抽样。语言切换与读档重绘使用
-临时序列，不额外消耗已提交的随机状态。
+省略时，两个 Host 在装载作者脚本前生成根种子。配置接受非负 TOML 整数；
+脚本可读取 `Engine.seed`，它是保留完整 u64 精度的十进制字符串，运行中不能重新设种。
+相同种子、内容和调用顺序得到相同抽样；更换脚本或分支会改变后续调用顺序。
 
-`Random.current()` 返回 `{ seed, state }`，两个字段都是十进制字符串，避免 64 位内部值
-经过 JavaScript number 时丢失精度。它是只读诊断信息，不是世界地图生成器，也不保证不同
-版本游戏、不同事件顺序仍有相同结果。`Save.capture/restore` 仅是脚本临时变量快照，完整
-随机状态使用正式 `Save.export/import` 保存。
+```ts
+const rootSeed = Engine.seed
+V.reward = Math.random() < 0.5 ? "coin" : "herb"
+```
+
+失败或取消恢复随机进度；历史回放从入页进度执行。读档恢复根种子及进度，
+语言和当前页重绘使用临时序列，Header/Footer/Bar 的抽样也不消费正文进度。
+`Engine.restart()` 恢复本次启动脚本完成后的状态与序列。
+需要保留的行动结果仍应写入游戏变量，避免把行动逻辑放进每次都会执行的呈现正文。
+
+旧 `Random.next()` 改为 `Math.random()`，`Random.seed()` 改为开局配置；不再提供 `Random` 全局。
+存档格式与兼容边界见 [Save 格式](../architecture/save-format.md)。
 
 ## 游戏内脚本控制台
 
@@ -32,14 +38,13 @@ V.town                         // 查看游戏数据 / Inspect game data
 V.town.money += 10              // 修改余额 / Change balance
 Location.current()             // 当前地点 / Current location
 Location.places()              // 注册地点 / Registered places
-Random.current()               // 随机序列位置 / Random cursor
 townAct("rest")                // 调用示例的作者函数 / Call an author function
 Save.export("debug")            // 保存到独立槽位 / Save to a separate slot
 ```
 
 命令与游戏输入共用串行队列，成功修改会参与 Reaction 检查并同步输入控件。
 普通 `print` 正文不会因任意变量赋值自动重绘；需要通过 Reaction 或下一次正常导航更新。
-查询不会新增历史或自动存档。State、地点、随机序列与 Reaction 次数在失败时回滚；
+查询不会新增历史或自动存档。State、地点、Engine 随机进度与 Reaction 次数在失败时回滚；
 日志和 JavaScript realm 中的声明、注册与外部副作用不属于 State 事务。
 
 输入 `State`、`Save`、`Engine` 等对象名，结果会按属性树展示；展开成员可查看类型、
@@ -70,7 +75,7 @@ Promise 会在同一事务内结算；受管等待可用“停止 / Stop”取�
 500 行和 100 条命令历史；清屏不删除 Runtime 日志。控制台不提供 TypeScript 现场转译、
 断点或浏览器 DOM API；已加载的作者 TypeScript 函数可以直接调用。
 
-TUI 仍使用 F10 或 `:inspect` 查看只读 State / Location / Random / 日志快照。
+TUI 仍使用 F10 或 `:inspect` 查看只读 State / Location / 日志快照。
 查询不执行作者表达式、不消费日志订阅；Pending 期间拒绝读取半完成状态。
 Tauri 关闭 developer 后，Rust 同时拒绝快照和脚本执行，不只是隐藏入口。
 

@@ -8,19 +8,6 @@ import type {} from "./narrava-contract.generated"
 export {}
 
 declare global {
-  /** 可保存、可回放的共享随机序列。 Shared, saved and replayable random sequence. */
-  const Random: {
-    /** 生成 [0, 1) 的随机数，与 Math.random 和 Twee random/either 共用序列。
-     * Draw from [0, 1), sharing the sequence with Math.random and Twee random/either. */
-    next(): number
-    /** 以非负安全整数重置序列；默认种子为 0。
-     * Reset with a nonnegative safe integer; the default seed is 0. */
-    seed(seed: number): void
-    /** 只读序列快照；十进制字符串保留完整的 64 位状态。
-     * Read-only sequence snapshot; decimal strings preserve all 64 bits. */
-    current(): { readonly seed: string; readonly state: string }
-  }
-
   /**
    * 脚本层可往返的 JSON 兼容原始值。
    *
@@ -657,6 +644,10 @@ declare global {
    * Navigation requests: the host executes goto/back/forward/restart after the current transaction.
    */
   interface NarravaEngine {
+    /** 当前游戏的根种子，以十进制字符串保留完整 u64 精度。
+     * Root seed of the current game, represented as a lossless decimal u64 string.
+     * @example Engine.seed */
+    readonly seed: string
     /** 当前游戏是否已启动。 Whether the story has started. */
     readonly started: boolean
     /** 前往指定 Passage，保留当前变量。 Navigate to a passage, keeping current variables.

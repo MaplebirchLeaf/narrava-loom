@@ -69,8 +69,6 @@ impl EcmaRuntime {
         crate::binding::diagnostics::install(&mut context, sources);
         crate::logger_adapter::install(&mut context)
             .map_err(|error| script_error("script.logger_bridge", error))?;
-        crate::random_adapter::install(&mut context)
-            .map_err(|error| script_error("script.random_bridge", error))?;
         crate::refresh::install(&mut context);
         state_adapter::install(&mut context)
             .map_err(|error| script_error("script.state_bridge", error))?;

@@ -10,74 +10,8 @@ use crate::{
         value::{ArrayValue, Value},
     },
     location::{Environment, LocationPosition, Place},
-    random::RandomState,
     state::{State, StateCheckpoint, StateReset, StateSnapshot},
 };
-
-#[test]
-fn random_sequence_follows_snapshots_checkpoints_and_reset() {
-    let mut state: State = State::new();
-    state.seed_random(42);
-    let first: f64 = state.random();
-    let snapshot: StateSnapshot = state.snapshot();
-    let checkpoint: StateCheckpoint = state.checkpoint();
-    let second: f64 = state.random();
-    state.seed_random(900);
-
-    state.restore_snapshot(&snapshot);
-    assert_eq!(state.random(), second);
-    state.restore(snapshot);
-    assert_eq!(state.random(), second);
-    state.restore_checkpoint(checkpoint);
-    assert_eq!(state.random(), second);
-
-    let _reset: StateReset = state.reset_game();
-    assert_eq!(state.random_state().seed(), 42);
-    assert_eq!(state.random(), first);
-}
-
-#[test]
-fn random_replay_keeps_authoritative_tail_and_follows_pending_checkpoints() {
-    let mut state: State = State::new();
-    state.seed_random(7);
-    let entry: RandomState = state.random_state();
-    let first: f64 = state.random();
-    let second: f64 = state.random();
-    let mut tail: RandomState = state.random_state();
-    let expected_next: f64 = tail.next_unit();
-
-    state.begin_random_replay(entry);
-    assert_eq!(state.random(), first);
-    let checkpoint: StateCheckpoint = state.checkpoint();
-    let view: State = state.fork_view();
-    assert_eq!(view.random(), second);
-    assert_eq!(state.random(), second);
-    state.end_random_replay();
-    state.restore_checkpoint(checkpoint);
-    assert_eq!(state.random(), second);
-    assert_eq!(state.snapshot().random_state(), state.random_state());
-    state.seed_random(99);
-    let mut reseeded: RandomState = RandomState::new(99);
-    assert_eq!(state.random(), reseeded.next_unit());
-    state.end_random_replay();
-    assert_eq!(state.random_state().seed(), 7);
-    assert_eq!(state.random(), expected_next);
-}
-
-#[test]
-fn random_forks_and_persistent_restores_do_not_share_replay_cursors() {
-    let mut state: State = State::new();
-    state.seed_random(u64::MAX);
-    let view: State = state.fork_view();
-    assert_eq!(view.random(), state.random());
-    let _discarded: f64 = view.random();
-    let mut expected: RandomState = state.random_state();
-    let snapshot: StateSnapshot = state.snapshot();
-    state.begin_random_replay(RandomState::new(11));
-    let _discarded: f64 = state.random();
-    state.restore(snapshot);
-    assert_eq!(state.random(), expected.next_unit());
-}
 
 fn state_location_place(id: &str) -> Place {
     Place {

@@ -203,7 +203,7 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 
 ### `Engine` 与 `Story`
 
-- `Engine.started`
+- `Engine.seed`（只读根种子字符串）、`Engine.started`
 - `Engine.goto(target)`、`back()`、`forward()`、`restart()`
 - `Story.has(name)`、`current()`、`get(name)`、`visits(name)`
 
@@ -213,7 +213,7 @@ State，不保留 JavaScript 镜像。需要旧值或批量导入时使用完整
 - 读取订阅：`subscribe(filter?)`、`take(subscription)`、`unsubscribe(subscription)`
 
 脚本与宿主共用有界 Core Logger，订阅按过滤条件接收后续记录。控制台与用法见
-[随机数与只读调试](../author/random-and-debugging.md)。
+[随机数与脚本控制台](../author/random-and-debugging.md)。
 
 ### `Event`
 
@@ -345,8 +345,8 @@ Tag、Macro、Expression 函数、变量、注释、链接和插值，并提供�
 语言服务会从内置表、跨文件 Widget 和脚本 `Macro.add/update()` 的 `body` 字段区分 Inline 与
 Container：Inline 出现闭合标签、Container 缺少或错配闭合标签都会产生诊断。
 
-## 可回放随机与调试
+## Engine 随机与调试
 
-`Random.seed(seed)` 使用非负安全整数重置序列；`Random.next()` 和 `Math.random()` 与
-Twee `random/either` 共用 State 的随机源。`Random.current()` 返回只读 `{seed, state}`
-字符串快照。正式存档保存完整序列；参见[随机数与只读调试](../author/random-and-debugging.md)。
+脚本 `Math.random()` 与 Twee `random()` / `either(...)` 共用 Engine 根种子驱动的序列；
+`Engine.seed` 只读，根种子通过开局配置提供。
+需要保留的抽样结果写入普通游戏变量。用法与刷新边界见[随机数与脚本控制台](../author/random-and-debugging.md)。

@@ -223,6 +223,9 @@ impl Engine {
             }
         }
 
+        state
+            .engine()
+            .restore(super::EngineSnapshot::new(state.engine().seed()));
         let state_reset: StateReset = state.reset_game();
         let history_removed: usize = story.reset();
         let start: EngineStart<'hir, 'source> = match Self::start_with_lifecycle(

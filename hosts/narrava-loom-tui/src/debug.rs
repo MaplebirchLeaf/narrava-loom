@@ -10,11 +10,7 @@ pub(crate) fn snapshot_lines(snapshot: &HostDebugSnapshotDto) -> Vec<String> {
     if snapshot.truncated {
         lines.push(String::from("状态过大，部分内容已截断。"));
     }
-    for (title, value) in [
-        ("State", &snapshot.state),
-        ("Location", &snapshot.location),
-        ("Random", &snapshot.random),
-    ] {
+    for (title, value) in [("State", &snapshot.state), ("Location", &snapshot.location)] {
         lines.push(String::new());
         lines.push(title.to_owned());
         let json: String = serde_json::to_string_pretty(value).expect("JSON Value 必须可序列化");

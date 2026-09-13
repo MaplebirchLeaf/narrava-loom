@@ -19,6 +19,8 @@ default_locale = "zh-CN"
 - `version`：语义化版本，例如 `0.1.0`、`1.0.0`、`1.2.3-beta.1`。
 - `default_locale`：原文语言，使用合法语言标签，如 `zh-CN`、`en`、`ja`。
 
+根种子可通过可选的 `[engine].seed` 指定，省略时由 Host 生成；见[随机数](random-and-debugging.md#engine-根种子与随机结果)。
+
 桌面窗口可选配置：
 
 ```toml

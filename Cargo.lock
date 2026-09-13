@@ -2697,6 +2697,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 name = "narrava-loom-core"
 version = "0.10.0"
 dependencies = [
+ "fastrand",
  "narrava-loom-location",
  "postcard",
  "regex",

@@ -36,7 +36,7 @@ command → checkpoint → execute → pending / commit / rollback
 Reaction 导航延续它，结算完成后一次释放。执行错误或取消恢复整个事务。
 
 State 的两种快照有不同内容：`StateCheckpoint` 覆盖全部命名空间、Location 定义与位置，用于
-短期回滚；两种快照均保存随机状态。`StateSnapshot` 保存持久变量与 `LocationState`，用于历史、Save 和 Reaction 变化比较。
+短期回滚。`StateSnapshot` 保存持久变量与 `LocationState`，用于历史、Save 和 Reaction 变化比较。
 地点定义在脚本装载结束后固定，不复制进持久快照。
 Story 快照恢复时间线，但不回退身份分配高水位。
 
@@ -83,7 +83,7 @@ Surface builder 名称与协议版本。`contract:generate` 从这两处生成 T
 Bootstrap 的 TypeScript 源码位于 `crates/narrava-loom-script/bootstrap/`，由 Bun 在开发期
 打包为嵌入 Rust 的 ECMAScript。运行游戏时由 Boa 执行，不依赖 Bun。
 
-## 开发命令、只读检查与随机状态
+## 开发命令与只读检查
 
 `debug_snapshot()` 是独立查询，返回 `HostDebugSnapshotDto`，不进入 `RuntimeCommand`，
 也不求值作者表达式。Pending 时拒绝查询；State 值图的循环、深度、集合数量和节点数都有
@@ -99,7 +99,7 @@ Engine 导航复用正常 Passage 流程，Save 复用存档事务。错误的 o
 `bindings/typescript/narrava.d.ts` 生成，由 `console:check` 检查漂移。
 临时 realm 声明与注册不承诺事务回滚，控制台也不强制重放有副作用的 Passage。
 
-SplitMix64 状态由 Core State 持有；脚本 Random/Math.random 与表达式抽样共用这一源。
-RefreshCurrent 使用临时随机游标重放正文并重建交互，保留已提交 State；公共区域在隔离视图
-中执行。刷新不是任意脚本的纯渲染器：正文输出仍按重放生成，带副作用的作者脚本仍会执行。
+RefreshCurrent 重放正文并重建交互，保留已提交 State；公共区域在隔离视图中执行。
+Engine 拥有根种子和随机进度；State 只保存执行句柄，事务及历史快照附带 EngineSnapshot。
+当前页重绘使用历史入页序列的临时副本，保留动作完成后的游戏进度。刷新不是任意脚本的纯渲染器：正文输出仍按重放生成，带副作用的作者脚本仍会执行。
 输入呈现从权威 State 同步。后续真实导航结束刷新视图，恢复正常提交。

@@ -15,7 +15,6 @@ mod ecma;
 mod location_adapter;
 mod logger_adapter;
 pub mod protocol_adapter;
-mod random_adapter;
 mod reaction_adapter;
 mod reaction_runtime;
 mod refresh;

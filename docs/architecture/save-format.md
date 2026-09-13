@@ -10,12 +10,12 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 | ---------------------------------------- | ---------------------------------------- |
 | `State.variables`（`$name`）             | `State.global`                           |
 | 当前地点 ID、坐标与环境                  | Location 地点定义、多边形、父子索引      |
-| 随机种子、当前位置及逐历史项的序列       | 地图生成算法、系统时钟                   |
 | Story 完整导航时间线                     | `State.setup`                            |
 | Story 当前游标                           | `State.temporary`（`_name`）             |
 | 各历史项进入前的 `$variables` 与世界位置 | `State.global`／`State.setup` 的历史版本 |
 | 每次 Passage 是否产生作者导航            | Macro `@locals`、`@args`                 |
 | Reaction 启用、次数与销毁状态            | Reaction Definition 与 `cond` 函数       |
+| Engine 根种子及当前/历史随机进度 | 临时重绘序列 |
 | 精确游戏 ID 与版本                       | Function、Macro Handler、Promise         |
 | Narrava Array/Object 引用图              | VM frame、Pending、Host/Renderer 对象    |
 
@@ -24,13 +24,12 @@ Save 记录能够恢复游戏进度的持久领域数据，不保存宿主或当
 ## 二进制文档结构
 
 `.nsave` 是正式二进制协议，不是 Rust 内存布局、JSON 或 ZIP。文件以 `NRSAVE\0` magic 和单字节
-schema version 开始，当前写入版本为 `4`；payload 使用 postcard 编码稳定字段、Value 图节点 ID
-和长度前缀数据。v4 为当前状态与每个历史项增加完整随机种子和序列位置；读取 v2/v3 时补为种子 0 的初始序列。v3 已增加地点位置；读取 v2 时将两处位置补为未定位，
-不根据当前 Passage 猜测旧位置。未知 magic/version 在解析 payload 前拒绝。
+schema version 开始，当前写入版本为 `5`；payload 使用 postcard 编码稳定字段、Value 图节点 ID
+和长度前缀数据。拒绝此前的实验格式 1–4；未知 magic/version 在解析 payload 前拒绝。
 
 Core 通过 `SaveDocument::to_bytes()`／`from_bytes()` 编解码，Host 只读写 `Vec<u8>`。
 
-游戏身份仍要求精确 `id + version`；v2/v3 格式兼容不放宽游戏版本匹配。通用游戏存档迁移尚未实现。
+游戏身份仍要求精确 `id + version`。通用游戏存档迁移尚未实现。
 
 ## Value 图
 
@@ -55,7 +54,7 @@ Array 与 Object 不递归嵌入 payload，而是使用单调节点 ID 建立图
 
 1. 校验精确游戏身份；
 2. 校验 Story history 与当前 HIR；
-3. 完整解码当前及逐历史项的 Value 图，并以本次启动定义校验所有地点 ID、坐标与环境；
+3. 完整解码当前及逐历史项的 Value 图与 EngineSnapshot，并以本次启动定义校验所有地点 ID、坐标与环境；
 4. 在临时所有权中建立新 `$variables`、世界位置、Story 时间线与历史快照；
 5. 校验全部通过后一次性提交 State 与 Story，并清空 `_temporary`；
 6. RuntimeSession 根据当前启动脚本已注册的 ID 恢复 Reaction 状态；

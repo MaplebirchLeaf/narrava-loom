@@ -64,7 +64,11 @@ pub fn run(game_path: &str) -> Result<(), HostErrorDto> {
     );
     languages.sort();
     languages.dedup();
-    let mut state: State = State::new();
+    let engine = config.engine.seed.map_or_else(
+        narrava_loom_core::engine::Engine::from_entropy,
+        narrava_loom_core::engine::Engine::new,
+    );
+    let mut state: State = State::with_engine(std::rc::Rc::new(engine));
     let script: std::rc::Rc<EcmaBinding> = EcmaBinding::load(
         sources,
         resources,

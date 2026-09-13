@@ -8,6 +8,7 @@ members = ["crates/narrava-loom-location", "crates/narrava-loom-protocol", "crat
 resolver = "3" # Rust 2024 的依赖解析器
 
 [dependencies]
+fastrand = "2" # 未指定 Engine 根种子时的初始熵
 narrava-loom-location = { path = "crates/narrava-loom-location" } # 宿主无关的世界坐标与地点
 semver = "1" # 语义化版本处理
 regex = "1" # Reaction Passage selector 的作者正则表达式

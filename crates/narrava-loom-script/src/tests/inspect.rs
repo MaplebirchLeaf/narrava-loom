@@ -2,7 +2,7 @@ use super::support::{pending, ready, with_runtime};
 use narrava_loom_protocol::{HostDebugSnapshotDto, RuntimeCommand};
 
 #[test]
-fn inspection_is_detached_and_does_not_advance_random_or_drain_logs() {
+fn inspection_is_detached_and_does_not_change_state_or_drain_logs() {
     with_runtime(
         ":: Start\n<<set $count to 7>>\n",
         "Logger.info('author', 'ready');",
@@ -85,7 +85,6 @@ fn inspection_limits_location_names_and_log_previews_without_truncating_author_d
 fn console_invalid_operation_preserves_pending_jobs_and_cancel_restores_state() {
     with_runtime(":: Start\n", "V.count = 1;", |runtime| {
         ready(runtime.execute(RuntimeCommand::Start).unwrap());
-        let before: HostDebugSnapshotDto = runtime.debug_snapshot().unwrap();
         let operation = pending(
             runtime
                 .execute(RuntimeCommand::DebugScript {
@@ -113,7 +112,7 @@ fn console_invalid_operation_preserves_pending_jobs_and_cancel_restores_state() 
         let operation = pending(
             runtime
                 .execute(RuntimeCommand::DebugScript {
-                    source: "V.count = 3; Random.next(); await Host.delay(1000); V.count = 4"
+                    source: "V.count = 3; Math.random(); await Host.delay(1000); V.count = 4"
                         .into(),
                 })
                 .unwrap(),
@@ -125,7 +124,6 @@ fn console_invalid_operation_preserves_pending_jobs_and_cancel_restores_state() 
             .unwrap();
         let after: HostDebugSnapshotDto = runtime.debug_snapshot().unwrap();
         assert_eq!(after.state["variables"]["count"].as_f64(), Some(2.0));
-        assert_eq!(after.random, before.random);
         runtime
             .execute(RuntimeCommand::DebugScript {
                 source: "V.count".into(),

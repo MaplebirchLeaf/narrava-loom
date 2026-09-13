@@ -136,3 +136,30 @@ fn assert_invalid_field(result: Result<ProjectConfig, ConfigError>, expected: &s
 
     assert_eq!(field, expected);
 }
+
+#[test]
+fn engine_config_accepts_root_seed_and_rejects_invalid_values() {
+    let base =
+        "[game]\nid = 'seed.test'\nname = 'Seed'\nversion = '1.0.0'\ndefault_locale = 'en'\n";
+    assert_eq!(
+        ProjectConfig::parse(Path::new("config.toml"), base)
+            .unwrap()
+            .engine
+            .seed,
+        None
+    );
+    for seed in ["0", "42", "9223372036854775807"] {
+        let content = format!("{base}\n[engine]\nseed = {seed}\n");
+        assert_eq!(
+            ProjectConfig::parse(Path::new("config.toml"), &content)
+                .unwrap()
+                .engine
+                .seed,
+            Some(seed.parse().unwrap())
+        );
+    }
+    for invalid in ["-1", "0.5", "'42'", "true"] {
+        let content = format!("{base}\n[engine]\nseed = {invalid}\n");
+        assert!(ProjectConfig::parse(Path::new("config.toml"), &content).is_err());
+    }
+}

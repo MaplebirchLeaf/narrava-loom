@@ -4,5 +4,8 @@ name = "Narrava · 小镇的一天 / A Day in Town"
 version = "0.1.0"
 default_locale = "zh-CN"
 
+[engine]
+seed = 42
+
 [host.tauri]
 developer = true

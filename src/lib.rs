@@ -21,7 +21,6 @@ pub mod macro_runtime;
 pub mod mir;
 pub mod nar;
 pub mod package_zip;
-pub mod random;
 pub mod reaction;
 pub mod release;
 pub mod resource;

@@ -69,7 +69,7 @@ cargo run --locked -p narrava-loom-tauri -- examples
 
 示例启用了开发者模式。按 F12 可开关 WebView DevTools，检查 Renderer 的 DOM、控制台与网络面板；
 它只是 Renderer 调试入口，不属于游戏脚本 API。F10 打开单行脚本控制台，验证 `V`、
-`Location.current()`、`Random.current()`、赋值后的 Reaction 与输入同步、错误回滚、命令历史
+`Location.current()`、赋值后的 Reaction 与输入同步、错误回滚、命令历史
 和清屏。还应验证 `State`、`Save`、`Engine` 的属性树，`Save.ex` 的 Tab 补全与参数帮助，
 `Save.export/import`、`Engine.goto/back` 和 `await Host.delay(10000)` 的停止回滚。
 关闭 developer 后前端入口隐藏，Rust 查询和执行同样拒绝。

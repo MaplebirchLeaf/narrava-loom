@@ -3,6 +3,9 @@
 //! 结果类型与事务辅助在本模块，导航事务在 `navigation`，启动与生命周期
 //! 事务在 `lifecycle`。
 
+mod random;
+pub use random::EngineSnapshot;
+
 mod continuation;
 mod lifecycle;
 mod navigation;
@@ -225,8 +228,12 @@ pub enum EngineNavigationError<ExecutionError> {
     },
 }
 
-/// 不持有领域状态的 Engine 协调入口。
-pub struct Engine;
+/// Engine 协调入口及一局游戏的根种子与随机执行上下文。
+#[derive(Clone, Debug)]
+pub struct Engine {
+    random: std::cell::Cell<EngineSnapshot>,
+    replay: std::cell::Cell<Option<EngineSnapshot>>,
+}
 
 impl Engine {
     /// 新游戏失败时恢复 State 检查点与 Story 快照，并包装回滚结果。

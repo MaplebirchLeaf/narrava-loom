@@ -13,6 +13,16 @@ use crate::i18n::is_language_tag_well_formed;
 #[derive(Deserialize)]
 pub struct ProjectConfig {
     pub game: GameConfig,
+    #[serde(default)]
+    pub engine: EngineConfig,
+}
+
+/// `[engine]` 中的新游戏运行配置。
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineConfig {
+    /// 根种子；省略时由 Host 在装载脚本前生成。
+    pub seed: Option<u64>,
 }
 
 /// `[game]` 中可直接展示和验证的游戏信息。

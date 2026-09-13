@@ -7,7 +7,6 @@ use crate::{
     expression::value::{ArrayValue, ScriptCallable, Value},
     hir::{HirPassage, HirStory},
     location::{Environment, LocationPosition, Place},
-    random::RandomState,
     reaction::ReactionRuntimeState,
     save::{
         SaveCompletion, SaveController, SaveDocument, SaveError, SaveLifecycleController,
@@ -40,131 +39,21 @@ fn save_document_binary_has_a_versioned_header_and_round_trips() {
         }])
         .to_bytes()
         .expect("存档应可编码");
-    assert_eq!(&encoded[..8], b"NRSAVE\0\x04");
+    assert_eq!(&encoded[..8], b"NRSAVE\0\x05");
     let decoded: SaveDocument = SaveDocument::from_bytes(&encoded).expect("存档应可解码");
     assert_eq!(decoded.reactions()[0].id, "quest.once");
     assert_eq!(decoded.to_bytes().expect("应可再次编码"), encoded);
 }
 
 #[test]
-fn save_version_two_restores_variables_and_history() {
-    // 已发布 v2 协议：score=true、一次 Start 导航、空的进入前变量图。
-    let bytes: &[u8] = b"NRSAVE\0\x02\x0cexample.save\x051.2.3\x01\x05score\x02\x01\0\x01\x05Start\x01\0\0\x01\0\0";
-    let source: Source = Source::load(
-        Path::new("src/tests/fixtures/game"),
-        Path::new("story/main.twee"),
-    )
-    .expect("测试 Source 应可读取");
-    let compiled: HirStory<'_> = test_story(&source);
-    let mut story: Story<'_, '_> = Story::new(&compiled);
-    let mut state: State = location_test_state();
-    state.seed_random(77);
-    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
-    let saved: SaveDocument = SaveDocument::from_bytes(bytes).expect("v2 存档仍应可解码");
-
-    saved.restore(&game, &mut state, &mut story).unwrap();
-
-    assert_eq!(state.variables_get("score"), Some(&Value::Boolean(true)));
-    assert_eq!(story.current().map(|passage| passage.name), Some("Start"));
-    assert_eq!(story.history().len(), 1);
-    assert!(state.location_state().position.is_none());
-    assert_eq!(state.random_state(), RandomState::default());
-    assert!(state.location().get("town").is_some());
-    let history_id: StoryHistoryId = story.current_entry().unwrap().id();
-    assert_eq!(story.state_snapshot(history_id).unwrap().variables_len(), 0);
-    assert!(
-        story
-            .state_snapshot(history_id)
-            .unwrap()
-            .location_state()
-            .position
-            .is_none()
-    );
-    assert_eq!(&saved.to_bytes().unwrap()[..8], b"NRSAVE\0\x04");
-}
-
-#[test]
-fn save_version_three_keeps_location_positions_and_defaults_random_state() {
-    // 固定 v3 线格式：score=true；历史地点 town[2,3] outside，当前位置 town[4,5]。
-    let bytes: &[u8] = b"NRSAVE\0\x03\x0cexample.save\x051.2.3\x01\x05score\x02\x01\0\x01\x05Start\x01\0\0\x01\x04town\x04\x06\x01\x01\x01\0\0\x01\x04town\x08\x0a\0";
-    let source: Source = Source::load(
-        Path::new("src/tests/fixtures/game"),
-        Path::new("story/main.twee"),
-    )
-    .unwrap();
-    let compiled: HirStory<'_> = test_story(&source);
-    let mut story: Story<'_, '_> = Story::new(&compiled);
-    let mut state: State = location_test_state();
-    state.seed_random(77);
-    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
-
-    let saved: SaveDocument = SaveDocument::from_bytes(bytes).unwrap();
-    saved.restore(&game, &mut state, &mut story).unwrap();
-
-    assert_eq!(state.variables_get("score"), Some(&Value::Boolean(true)));
-    assert_eq!(
-        state.location_state().position.as_ref().unwrap().point,
-        [4, 5]
-    );
-    assert_eq!(state.random_state(), RandomState::default());
-    let snapshot: &crate::state::StateSnapshot = story
-        .state_snapshot(story.current_entry().unwrap().id())
-        .unwrap();
-    assert_eq!(
-        snapshot.location_state().position.as_ref().unwrap().point,
-        [2, 3]
-    );
-    assert_eq!(
-        snapshot
-            .location_state()
-            .position
-            .as_ref()
-            .unwrap()
-            .environment,
-        Some(Environment::Outside)
-    );
-    assert_eq!(snapshot.random_state(), RandomState::default());
-}
-
-#[test]
-fn save_random_state_round_trips_current_history_and_full_width_seed() {
-    let source: Source = Source::load(
-        Path::new("src/tests/fixtures/game"),
-        Path::new("story/main.twee"),
-    )
-    .unwrap();
-    let compiled: HirStory<'_> = test_story(&source);
-    let mut story: Story<'_, '_> = Story::new(&compiled);
-    let mut state: State = State::new();
-    state.seed_random(u64::MAX);
-    let start_id: StoryHistoryId = story.goto("Start").unwrap().id();
-    story.record_state_snapshot(start_id, state.snapshot());
-    let first: f64 = state.random();
-    let map_id: StoryHistoryId = story.goto("Map").unwrap().id();
-    story.record_state_snapshot(map_id, state.snapshot());
-    let _second: f64 = state.random();
-    let tail: RandomState = state.random_state();
-    let game: GameIdentity = GameIdentity::new("example.save", "1.2.3").unwrap();
-    state.begin_random_replay(RandomState::new(123));
-    let _replayed: f64 = state.random();
-    let bytes: Vec<u8> = SaveDocument::capture(&game, &state, &story)
-        .and_then(|document: SaveDocument| document.to_bytes())
-        .unwrap();
-    state.end_random_replay();
-    let next: f64 = state.random();
-    state.seed_random(9);
-
-    SaveDocument::from_bytes(&bytes)
-        .unwrap()
-        .restore(&game, &mut state, &mut story)
-        .unwrap();
-
-    assert_eq!(state.random_state(), tail);
-    assert_eq!(state.random(), next);
-    let previous_id: StoryHistoryId = story.back().unwrap().id();
-    state.restore_snapshot(story.state_snapshot(previous_id).unwrap());
-    assert_eq!(state.random_state().seed(), u64::MAX);
-    assert_eq!(state.random(), first);
+fn save_rejects_experimental_schema_versions() {
+    for version in [0, 1, 2, 3, 4, 255] {
+        let mut bytes: Vec<u8> = b"NRSAVE\0".to_vec();
+        bytes.push(version);
+        let error: SaveError = SaveDocument::from_bytes(&bytes).unwrap_err();
+        assert!(matches!(error, SaveError::Decode { .. }));
+        assert!(error.to_string().contains("schema version"));
+    }
 }
 
 #[test]
@@ -619,7 +508,7 @@ fn save_rejects_a_damaged_binary_document_before_runtime_mutation() {
     let _items = state.variables_set("items", Value::array(vec![Value::Number(1.0)]));
     let _changed = state.variables_set("items", Value::string("active"));
     let error: SaveError =
-        SaveDocument::from_bytes(b"NRSAVE\0\x02\xff").expect_err("损坏 payload 不得解码");
+        SaveDocument::from_bytes(b"NRSAVE\0\x05\xff").expect_err("损坏 payload 不得解码");
 
     assert!(matches!(error, SaveError::Decode { .. }));
     assert_eq!(state.variables_get("items"), Some(&Value::string("active")));
@@ -653,4 +542,32 @@ fn record_missing_history_states(story: &mut Story<'_, '_>, state: &State) {
             story.record_state_snapshot(id, state.snapshot());
         }
     }
+}
+
+#[test]
+fn save_restores_engine_root_seed_and_next_draw_without_float_conversion() {
+    use crate::engine::Engine;
+    use std::rc::Rc;
+    let source = Source::load(
+        Path::new("src/tests/fixtures/game"),
+        Path::new("story/main.twee"),
+    )
+    .unwrap();
+    let compiled = test_story(&source);
+    let mut story = Story::new(&compiled);
+    let game = GameIdentity::new("engine.save", "1.0.0").unwrap();
+    let state = State::with_engine(Rc::new(Engine::new(u64::MAX)));
+    state.engine().next_random();
+    let document = SaveDocument::from_bytes(
+        &SaveDocument::capture(&game, &state, &story)
+            .unwrap()
+            .to_bytes()
+            .unwrap(),
+    )
+    .unwrap();
+    let expected = state.engine().next_random();
+    let mut restored = State::with_engine(Rc::new(Engine::new(1)));
+    document.restore(&game, &mut restored, &mut story).unwrap();
+    assert_eq!(restored.engine().seed(), u64::MAX);
+    assert_eq!(restored.engine().next_random(), expected);
 }

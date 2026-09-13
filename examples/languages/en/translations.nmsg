@@ -64,9 +64,9 @@ Wake at the guesthouse, earn your keep in town, or follow the forest trail.
 
 :: p12:TownSettings:body.1
 [source]
-保存的是这段旅程的状态、地点、随机序列和 Reaction 次数。
+保存的是这段旅程的状态、地点和 Reaction 次数。
 [translation]
-Your save keeps story state, location, the random sequence, and Reaction counts.
+Your save keeps story state, location, and Reaction counts.
 
 :: p12:TownSettings:body.9
 [source]

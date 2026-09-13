@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     GameIdentity,
     diagnostic::{Diagnostic, DiagnosticSeverity},
+    engine::EngineSnapshot,
     location::{Location, LocationError, LocationState},
-    random::RandomState,
     state::{State, StateSnapshot},
     story::{Story, StoryHistoryEntry},
 };
@@ -25,7 +25,7 @@ use crate::{
 use value::SaveValueGraph;
 
 const SAVE_MAGIC: &[u8; 7] = b"NRSAVE\0";
-const SAVE_VERSION: u8 = 4;
+const SAVE_VERSION: u8 = 5;
 
 /// 一份不包含平台对象、脚本函数或临时执行状态的存档。
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,10 +35,8 @@ pub struct SaveDocument {
     state: SaveValueGraph,
     story: SaveStory,
     reactions: Vec<crate::reaction::ReactionRuntimeState>,
-    #[serde(default)]
     location: LocationState,
-    #[serde(default)]
-    random: RandomState,
+    engine: EngineSnapshot,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -61,110 +59,8 @@ struct SaveStoryEntry {
     passage: String,
     had_navigation: bool,
     state: SaveValueGraph,
-    #[serde(default)]
     location: LocationState,
-    #[serde(default)]
-    random: RandomState,
-}
-
-/// v3 已含世界位置，但尚未保存随机序列。
-#[derive(Deserialize)]
-struct SaveDocumentV3 {
-    game: SaveGame,
-    state: SaveValueGraph,
-    story: SaveStoryV3,
-    reactions: Vec<crate::reaction::ReactionRuntimeState>,
-    location: LocationState,
-}
-
-#[derive(Deserialize)]
-struct SaveStoryV3 {
-    history: Vec<SaveStoryEntryV3>,
-    position: Option<usize>,
-}
-
-#[derive(Deserialize)]
-struct SaveStoryEntryV3 {
-    passage: String,
-    had_navigation: bool,
-    state: SaveValueGraph,
-    location: LocationState,
-}
-
-impl From<SaveDocumentV3> for SaveDocument {
-    fn from(document: SaveDocumentV3) -> Self {
-        Self {
-            game: document.game,
-            state: document.state,
-            story: SaveStory {
-                history: document
-                    .story
-                    .history
-                    .into_iter()
-                    .map(|entry: SaveStoryEntryV3| SaveStoryEntry {
-                        passage: entry.passage,
-                        had_navigation: entry.had_navigation,
-                        state: entry.state,
-                        location: entry.location,
-                        random: RandomState::default(),
-                    })
-                    .collect(),
-                position: document.story.position,
-            },
-            reactions: document.reactions,
-            location: document.location,
-            random: RandomState::default(),
-        }
-    }
-}
-
-/// v2 的固定线格式；postcard 不支持给缺失的尾字段补 serde default。
-#[derive(Deserialize)]
-struct SaveDocumentV2 {
-    game: SaveGame,
-    state: SaveValueGraph,
-    story: SaveStoryV2,
-    reactions: Vec<crate::reaction::ReactionRuntimeState>,
-}
-
-#[derive(Deserialize)]
-struct SaveStoryV2 {
-    history: Vec<SaveStoryEntryV2>,
-    position: Option<usize>,
-}
-
-#[derive(Deserialize)]
-struct SaveStoryEntryV2 {
-    passage: String,
-    had_navigation: bool,
-    state: SaveValueGraph,
-}
-
-impl From<SaveDocumentV2> for SaveDocument {
-    fn from(document: SaveDocumentV2) -> Self {
-        Self {
-            game: document.game,
-            state: document.state,
-            story: SaveStory {
-                history: document
-                    .story
-                    .history
-                    .into_iter()
-                    .map(|entry: SaveStoryEntryV2| SaveStoryEntry {
-                        passage: entry.passage,
-                        had_navigation: entry.had_navigation,
-                        state: entry.state,
-                        location: LocationState::default(),
-                        random: RandomState::default(),
-                    })
-                    .collect(),
-                position: document.story.position,
-            },
-            reactions: document.reactions,
-            location: LocationState::default(),
-            random: RandomState::default(),
-        }
-    }
+    engine: EngineSnapshot,
 }
 
 /// Save 捕获、编解码或恢复阶段的稳定失败原因。
@@ -182,7 +78,7 @@ pub enum SaveError {
 }
 
 impl SaveDocument {
-    /// 捕获持久变量、位置、随机序列与 Story 时间线；地点定义由启动流程重建。
+    /// 捕获持久变量、位置与 Story 时间线；地点定义由启动流程重建。
     pub fn capture(
         game: &GameIdentity,
         state: &State,
@@ -209,7 +105,7 @@ impl SaveDocument {
                     had_navigation: entry.had_navigation(),
                     state: SaveValueGraph::encode(snapshot.persistent_variables())?,
                     location: snapshot.location_state().clone(),
-                    random: snapshot.random_state(),
+                    engine: snapshot.engine_snapshot(),
                 })
             })
             .collect::<Result<Vec<SaveStoryEntry>, SaveError>>()?;
@@ -225,7 +121,7 @@ impl SaveDocument {
             },
             reactions: Vec::new(),
             location: state.location_state().clone(),
-            random: state.random_state(),
+            engine: state.engine().snapshot(),
         })
     }
 
@@ -235,7 +131,7 @@ impl SaveDocument {
         self
     }
 
-    /// 读取存档中的 Reaction 运行状态；旧存档默认返回空集合。
+    /// 读取存档中的 Reaction 运行状态。
     pub fn reactions(&self) -> &[crate::reaction::ReactionRuntimeState] {
         &self.reactions
     }
@@ -262,8 +158,6 @@ impl SaveDocument {
             })?;
         let document: Result<Self, postcard::Error> = match version {
             SAVE_VERSION => postcard::from_bytes(payload),
-            3 => postcard::from_bytes::<SaveDocumentV3>(payload).map(Self::from),
-            2 => postcard::from_bytes::<SaveDocumentV2>(payload).map(Self::from),
             _ => {
                 return Err(SaveError::Decode {
                     message: format!("存档 schema version 不受支持：{version}"),
@@ -297,7 +191,7 @@ impl SaveDocument {
                 Ok(StateSnapshot::from_parts(
                     variables,
                     entry.location.clone(),
-                    entry.random,
+                    entry.engine,
                 ))
             })
             .collect::<Result<Vec<StateSnapshot>, SaveError>>()?;
@@ -305,7 +199,7 @@ impl SaveDocument {
         state.restore(StateSnapshot::from_parts(
             variables,
             self.location.clone(),
-            self.random,
+            self.engine,
         ));
         Ok(())
     }

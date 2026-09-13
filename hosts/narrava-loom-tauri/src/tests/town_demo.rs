@@ -105,12 +105,18 @@ fn town_demo_inputs_work_delivery_dialog_and_rest() {
     let form: HostUpdateDto = block_on(demo.host.input(name_id, serde_json::json!("Morgan")))
         .unwrap()
         .unwrap_or(form);
+    assert_eq!(
+        form.nodes
+            .iter()
+            .filter(|node| matches!(node, HostNodeDto::Textbox { .. }))
+            .count(),
+        1,
+        "开局只保留姓名输入，不提供随机种子配置"
+    );
     let bedroom: HostUpdateDto = demo.go(&form, "Bedroom");
     assert_eq!(demo.inspect().state["variables"]["town"]["name"], "Morgan");
-    let initial_random: serde_json::Value = demo.inspect().random;
     let dialog: HostUpdateDto = demo.click(&bedroom, "人物与日记");
     assert!(format!("{dialog:?}").contains("背包"));
-    assert_eq!(demo.inspect().random, initial_random, "弹窗不抽样");
     let hall: HostUpdateDto = demo.go(&bedroom, "Guesthouse");
     let hall: HostUpdateDto = demo.click(&hall, "接下委托");
     let street: HostUpdateDto = demo.go(&hall, "ResidentialStreet");
@@ -159,7 +165,7 @@ fn town_demo_inputs_work_delivery_dialog_and_rest() {
 }
 
 #[test]
-fn town_demo_save_replays_random_and_map_preserves_negative_coordinates() {
+fn town_demo_save_restores_exploration_state_and_map_coordinates() {
     let demo: Demo = Demo::new("replay");
     let bedroom: HostUpdateDto = demo.begin();
     let hall: HostUpdateDto = demo.go(&bedroom, "Guesthouse");
@@ -171,13 +177,11 @@ fn town_demo_save_replays_random_and_map_preserves_negative_coordinates() {
     let location: String = format!("{map:?}");
     assert!(location.contains("-550"));
     assert!(location.contains("林间小径"));
-    assert_eq!(demo.inspect().random, before.random);
     let trail: HostUpdateDto = demo.click(&map, "收起地图");
     assert_eq!(demo.inspect().location, before.location);
     block_on(demo.host.save("export".into(), "town-day".into())).unwrap();
-    let explored: HostUpdateDto = demo.click(&trail, "探索半小时");
+    let _explored: HostUpdateDto = demo.click(&trail, "探索半小时");
     let after: HostDebugSnapshotDto = demo.inspect();
-    assert_ne!(before.random, after.random);
     assert_eq!(
         after.state["variables"]["town"]["energy"],
         serde_json::json!(85.0)
@@ -185,30 +189,12 @@ fn town_demo_save_replays_random_and_map_preserves_negative_coordinates() {
     let restored: HostUpdateDto = block_on(demo.host.save("import".into(), "town-day".into()))
         .unwrap()
         .unwrap();
-    assert_eq!(demo.inspect().random, before.random);
-    let replayed: HostUpdateDto = demo.click(&restored, "探索半小时");
+    assert_eq!(restored.current, "ForestTrail");
     assert_eq!(
         demo.inspect().state["variables"]["town"],
-        after.state["variables"]["town"]
+        before.state["variables"]["town"]
     );
-    assert_eq!(demo.inspect().random, after.random);
-    let narrative = |frame: &HostUpdateDto| -> Vec<String> {
-        frame
-            .nodes
-            .iter()
-            .filter_map(|node: &HostNodeDto| match node {
-                HostNodeDto::Text { text, .. } | HostNodeDto::StyledText { text, .. } => {
-                    Some(text.clone())
-                }
-                _ => None,
-            })
-            .collect()
-    };
-    assert_eq!(narrative(&explored), narrative(&replayed));
-    let _previous: HostUpdateDto = block_on(demo.host.history(true)).unwrap();
-    assert_eq!(demo.inspect().random, before.random);
-    let _next: HostUpdateDto = block_on(demo.host.history(false)).unwrap();
-    assert_eq!(demo.inspect().random, after.random);
+    assert_eq!(demo.inspect().location, before.location);
 }
 
 #[test]
@@ -252,7 +238,6 @@ fn town_demo_settings_save_language_and_hospital_environment() {
         demo.inspect().state["variables"]["town"],
         before.state["variables"]["town"]
     );
-    assert_eq!(demo.inspect().random, before.random);
     let settings: HostUpdateDto = demo.click(&english, "简体中文");
     let settings: HostUpdateDto = demo.click(&settings, "读取小镇进度");
     let bedroom: HostUpdateDto = demo.click(&settings, "继续旅程");

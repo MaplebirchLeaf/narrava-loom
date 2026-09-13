@@ -267,7 +267,7 @@ fn changed_input_synchronizes_related_controls_without_reactions() {
 }
 
 #[test]
-fn invalid_input_receivers_fail_without_callbacks_or_random_draws() {
+fn invalid_input_receivers_fail_without_callbacks_or_state_changes() {
     for (index, receiver) in [
         "$names[setup.pick()]",
         "$names[random(0, 1)]",
@@ -281,8 +281,7 @@ fn invalid_input_receivers_fail_without_callbacks_or_random_draws() {
         project.enable_developer();
         project.set_contents(
             &format!(":: Start\n<<textbox \"{receiver}\" \"before\">>\n"),
-            r#"V.names = ["before", "other"]; V.index = 0; Random.seed(17);
-setup.pick = () => { Logger.info("test", "receiver callback ran"); return Random.next(); };"#,
+            r#"V.names = ["before", "other"]; V.index = 0; setup.pick = () => { Logger.info("test", "receiver callback ran"); return Math.random(); };"#,
         );
         let host: TauriHost = project.host();
         let before: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
@@ -293,7 +292,6 @@ setup.pick = () => { Logger.info("test", "receiver callback ran"); return Random
         );
         let after: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
         assert_eq!(after.state, before.state);
-        assert_eq!(after.random, before.random);
         assert!(
             !after
                 .logs
@@ -388,7 +386,7 @@ fn developer_snapshot_is_read_only_and_shares_runtime_logs() {
     project.enable_developer();
     project.set_contents(
         ":: Start\n<<link [[小镇|Town]]>><</link>>\n:: Town [town outside]\n<<textbox \"$name\" \"before\">>\n",
-        "V.name = 'before'; Random.seed(42); Location.add({id:'town',name:'小镇',bounds:[[0,0],[4,0],[4,4],[0,4]]}); Logger.info('test', 'ready for inspection');",
+        "V.name = 'before'; Location.add({id:'town',name:'小镇',bounds:[[0,0],[4,0],[4,4],[0,4]]}); Logger.info('test', 'ready for inspection');",
     );
     let host: TauriHost = project.host();
     let initial: HostUpdateDto = block_on(host.start()).unwrap();
@@ -416,7 +414,6 @@ fn developer_snapshot_is_read_only_and_shares_runtime_logs() {
     let after: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
     assert_eq!(after.state, snapshot.state);
     assert_eq!(after.location, snapshot.location);
-    assert_eq!(after.random, snapshot.random);
     assert_eq!(after.logs, block_on(host.logs()).unwrap());
     assert!(
         after
@@ -495,7 +492,6 @@ fn developer_console_executes_in_author_realm_and_settles_reactions() {
     );
     let queried: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
     assert_eq!(queried.state, before.state);
-    assert_eq!(queried.random, before.random);
     assert_eq!(queried.evaluation.unwrap().value.preview, "\"before\"");
     let frame: HostUpdateDto = block_on(host.debug_execute("V.name = 'console edit'".into()))
         .unwrap()
@@ -524,8 +520,8 @@ fn developer_console_rolls_back_sync_and_async_failures_without_leaking_jobs() {
     block_on(host.start()).unwrap();
     let before: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
     for source in [
-        "V.name = 'bad'; Random.next(); throw new Error('rollback')",
-        "V.name = 'bad'; Random.next(); Promise.resolve().then(() => { throw new Error('rejected') })",
+        "V.name = 'bad'; Math.random(); throw new Error('rollback')",
+        "V.name = 'bad'; Math.random(); Promise.resolve().then(() => { throw new Error('rejected') })",
         "V.name = 'bad'; Host.delay(1); 3",
         "V.name = 'bad'; Engine.goto(123)",
         "V.name = 'bad'; while (true) {}",
@@ -536,7 +532,6 @@ fn developer_console_rolls_back_sync_and_async_failures_without_leaking_jobs() {
         assert!(error.code.starts_with("console."), "{error:?}");
         let after: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
         assert_eq!(after.state, before.state, "{source}");
-        assert_eq!(after.random, before.random, "{source}");
         assert_eq!(after.current, before.current, "{source}");
         block_on(host.debug_execute("V.name".into())).unwrap();
         assert_eq!(
@@ -562,7 +557,7 @@ fn developer_console_rolls_back_sync_and_async_failures_without_leaking_jobs() {
 }
 
 #[test]
-fn developer_console_bounds_results_and_persists_state_and_random() {
+fn developer_console_bounds_results_and_persists_state() {
     let project: Project = Project::new("console-save");
     project.enable_developer();
     let host: TauriHost = project.host();
@@ -582,15 +577,13 @@ fn developer_console_bounds_results_and_persists_state_and_random() {
             .iter()
             .any(|node| node.preview.contains("<img onerror=bad>"))
     );
-    block_on(host.debug_execute("V.name = 'saved'; Random.seed(73); Random.next()".into()))
-        .unwrap();
+    block_on(host.debug_execute("V.name = 'saved'; Math.random()".into())).unwrap();
     let saved: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
     block_on(host.debug_execute("Save.export('console')".into())).unwrap();
-    block_on(host.debug_execute("V.name = 'changed'; Random.next()".into())).unwrap();
+    block_on(host.debug_execute("V.name = 'changed'; Math.random()".into())).unwrap();
     block_on(host.save("import".into(), "console".into())).unwrap();
     let restored: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
     assert_eq!(restored.state["variables"], saved.state["variables"]);
-    assert_eq!(restored.random, saved.random);
     block_on(host.debug_execute("'x'.repeat(10000)".into())).unwrap();
     assert!(
         block_on(host.debug_snapshot())
@@ -637,7 +630,7 @@ fn developer_console_inspects_all_apis_and_completes_without_getters() {
             .is_empty()
     );
     assert!(
-        block_on(host.debug_complete("Random.next()".into()))
+        block_on(host.debug_complete("Math.random()".into()))
             .unwrap()
             .is_empty()
     );
@@ -701,7 +694,7 @@ fn developer_console_navigation_waits_and_queries_use_the_game_runtime() {
         "42"
     );
     let error = block_on(host.debug_execute(
-        "await Host.delay(1); V.name = 'bad'; Random.next(); throw new Error('after wait')".into(),
+        "await Host.delay(1); V.name = 'bad'; Math.random(); throw new Error('after wait')".into(),
     ))
     .unwrap_err();
     assert!(error.message.contains("after wait"));
@@ -742,7 +735,7 @@ fn developer_console_stop_cancels_wait_and_rolls_back() {
         let command =
             scope.spawn(|| {
                 block_on(host.debug_execute(
-            "V.name = 'pending'; Random.next(); await Host.delay(10000); V.name = 'leaked'".into(),
+            "V.name = 'pending'; Math.random(); await Host.delay(10000); V.name = 'leaked'".into(),
         ))
             });
         // 等到 Runtime 确认挂起，避免取消信号早于命令入口的重置。
@@ -768,7 +761,6 @@ fn developer_console_stop_cancels_wait_and_rolls_back() {
     });
     let after: HostDebugSnapshotDto = block_on(host.debug_snapshot()).unwrap();
     assert_eq!(after.state, before.state);
-    assert_eq!(after.random, before.random);
     block_on(host.debug_execute("V.name".into())).unwrap();
 }
 
@@ -797,4 +789,34 @@ fn developer_console_does_not_execute_proxy_traps_when_inspecting() {
         block_on(host.debug_snapshot()).unwrap().state["variables"]["name"],
         "before"
     );
+}
+
+#[test]
+fn engine_root_seed_reaches_scripts_before_worker_start() {
+    use narrava_loom_core::engine::Engine;
+    let project: Project = Project::new("engine-seed");
+    let config = fs::read_to_string(project.0.join("config.toml")).unwrap();
+    fs::write(
+        project.0.join("config.toml"),
+        format!("{config}\n[engine]\nseed = 42\n"),
+    )
+    .unwrap();
+    fs::write(
+        project.0.join("contents/scripts/main.js"),
+        "V.seed = Engine.seed; V.first = Math.random();",
+    )
+    .unwrap();
+    fs::write(
+        project.0.join("contents/story/main.twee"),
+        ":: Start\n<<set $second = random()>>\n",
+    )
+    .unwrap();
+    project.enable_developer();
+    let host: TauriHost = project.host();
+    block_on(host.start()).unwrap();
+    let values = block_on(host.debug_snapshot()).unwrap().state["variables"].clone();
+    let expected = Engine::new(42);
+    assert_eq!(values["seed"], "42");
+    assert_eq!(values["first"].as_f64(), Some(expected.next_random()));
+    assert_eq!(values["second"].as_f64(), Some(expected.next_random()));
 }

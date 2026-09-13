@@ -16,7 +16,6 @@ fn snapshot() -> HostDebugSnapshotDto {
         current: Some(String::from("Start")),
         state: serde_json::json!({"variables":{"coins":3}}),
         location: serde_json::json!({"current":null}),
-        random: serde_json::json!({"seed":"17"}),
         truncated: true,
         logs: vec![HostLogRecordDto {
             sequence: 7,
@@ -57,7 +56,7 @@ fn inspection_text_keeps_source_coordinates_and_truncation_visible() {
     let output: String = lines.join("\n");
     assert!(output.contains("coins"));
     assert!(output.contains("Location"));
-    assert!(output.contains("Random"));
+    assert!(!output.contains("Random"));
     assert!(output.contains("截断"));
     assert!(
         output.contains("scripts/quest.ts:4:9 (generated)"),

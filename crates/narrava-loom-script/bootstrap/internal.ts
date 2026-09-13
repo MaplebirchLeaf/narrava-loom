@@ -25,7 +25,6 @@ export interface ScriptGlobalRegistry {
   V?: unknown
   T?: unknown
   setup?: unknown
-  Random?: unknown
   Location?: unknown
   Reaction?: unknown
   Macro?: unknown

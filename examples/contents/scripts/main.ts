@@ -17,12 +17,8 @@ function townState(): TownState {
   return V.town as TownState
 }
 
-/** 字符串种子固定映射到 32 位整数；存档继续保存 Runtime 的完整随机状态。 */
+/** 初始化新一局的角色与行动状态。 */
 function townBegin(): void {
-  const seed = String(V.town_seed ?? "town-morning")
-  let hash = 2166136261
-  for (let i = 0; i < seed.length; i++) hash = Math.imul(hash ^ seed.charCodeAt(i), 16777619)
-  Random.seed(hash >>> 0)
   V.demo_screen = "game"
   V.town = {
     name:
@@ -42,7 +38,7 @@ function townBegin(): void {
   }
   // 新一局也重置声明式规则的触发次数；读档则由 Runtime 恢复这些次数。
   for (const id of ["town.delivery", "town.delivery.notice", "town.tired"]) Reaction.reset(id)
-  Logger.info("demo.start", `小镇新一局；seed=${Random.current().seed}`)
+  Logger.info("demo.start", "小镇新一局")
 }
 
 function townClock(): string {
@@ -109,7 +105,7 @@ function townAct(action: string): void {
       next.minutes += 30
       next.energy -= cost
       // 抽样只发生在探索行动里；打开地图、弹窗和侧栏不消耗随机数。
-      const roll = Random.next()
+      const roll = Math.random()
       if (roll < 0.45) {
         next.money += 6
         next.finds++
@@ -121,7 +117,7 @@ function townAct(action: string): void {
         next.stress = Math.min(100, next.stress + 6)
         next.notice = "一阵雨打湿了小径。你绕过积水，花了些时间辨认路标。"
       }
-      Logger.info("demo.explore", JSON.stringify({ roll, state: Random.current().state }))
+      Logger.info("demo.explore", JSON.stringify({ roll }))
       break
     }
     case "clinic":

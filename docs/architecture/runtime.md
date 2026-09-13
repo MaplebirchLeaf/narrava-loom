@@ -8,7 +8,7 @@ Core 保留游戏语义与事务真相；Host 只处理平台 IO 和呈现。Sur
 
 | 领域 | 职责 |
 |---|---|
-| Engine | 生命周期、连续导航、跨领域事务与回滚 |
+| Engine | 根种子与随机序列、生命周期、连续导航、跨领域事务与回滚 |
 | State | `global`、`setup`、`variables`、`temporary` 四个命名空间 |
 | Story | Passage 索引、当前位置、history 和导航请求 |
 | Macro | Definition、Widget、调用帧、`@args` 与 `@` 局部值 |
@@ -22,6 +22,11 @@ Renderer、输入设备、窗口、文件选择器和平台对象不属于 Core�
 State、Story、Macro 或 Reaction 真相。
 
 ## Engine 事务
+
+Host 在脚本装载前用配置根种子或新生成种子构造 `Engine`，通过 `State::with_engine` 注入执行上下文。
+State 的表达式与脚本桥接只向该 Engine 取样；`State::fork_view` 复制执行快照，避免共享随机游标。
+低层 `State::new()` 使用零种子的默认 Engine；生产 Host 显式提供 Engine。
+
 
 Engine 在执行前捕获 State 与 Story 检查点；RuntimeSession 的命令事务额外持有
 Reaction、交互和呈现状态。执行错误、取消或预算耗尽恢复对应事务；

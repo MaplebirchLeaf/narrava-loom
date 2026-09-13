@@ -144,7 +144,11 @@ pub(crate) fn run_worker(
     );
     available_languages.sort();
     available_languages.dedup();
-    let mut state: State = State::new();
+    let engine = config.engine.seed.map_or_else(
+        narrava_loom_core::engine::Engine::from_entropy,
+        narrava_loom_core::engine::Engine::new,
+    );
+    let mut state: State = State::with_engine(std::rc::Rc::new(engine));
     let script = match narrava_loom_script::EcmaBinding::load(
         sources,
         &resources,

@@ -153,7 +153,6 @@
       "V",
       "T",
       "setup",
-      "Random",
       "Location",
       "Reaction",
       "Macro",
@@ -237,6 +236,11 @@
 
   // crates/narrava-loom-script/bootstrap/host.ts
   function host() {
+    Object.defineProperty(Math, "random", {
+      value: () => __narravaEngineRandom(),
+      writable: false,
+      configurable: false
+    });
     scriptGlobals.Host = Object.freeze({
       delay: (milliseconds) => {
         if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 86400000) {
@@ -253,6 +257,9 @@
       }
     });
     scriptGlobals.Engine = Object.seal({
+      get seed() {
+        return __narravaEngineSeed();
+      },
       started: false,
       goto: (target) => requestEngineCommand({ kind: "goto", target }),
       back: () => requestEngineCommand({ kind: "back" }),
@@ -332,17 +339,6 @@
     const id = subscriptionId();
     macroHooks.set(id, { kind, name, hook });
     return id;
-  }
-
-  // crates/narrava-loom-script/bootstrap/random.ts
-  var next = () => __narravaRandomNext();
-  function random() {
-    scriptGlobals.Random = Object.freeze({
-      next,
-      seed: (seed) => __narravaRandomSeed(seed),
-      current: () => __narravaRandomCurrent()
-    });
-    Object.defineProperty(Math, "random", { value: next, writable: false, configurable: false });
   }
 
   // crates/narrava-loom-script/bootstrap/reaction.ts
@@ -600,25 +596,6 @@ Read and write a State namespace; set/del return the previous value, or undefine
       signature: "{ [name: string]: NarravaData; }",
       help: "启动配置对象的属性代理，与 Twee 中的 `setup.name` 指向同一份数据。\n\nA startup configuration proxy sharing the same data as setup.name in Twee."
     },
-    Random: {
-      signature: "{ next(): number; seed(seed: number): void; current(): { readonly seed: string; readonly state: string; }; }",
-      help: "可保存、可回放的共享随机序列。 Shared, saved and replayable random sequence."
-    },
-    "Random.next": {
-      signature: "() => number",
-      help: `生成 [0, 1) 的随机数，与 Math.random 和 Twee random/either 共用序列。
-Draw from [0, 1), sharing the sequence with Math.random and Twee random/either.`
-    },
-    "Random.seed": {
-      signature: "(seed: number) => void",
-      help: `以非负安全整数重置序列；默认种子为 0。
-Reset with a nonnegative safe integer; the default seed is 0.`
-    },
-    "Random.current": {
-      signature: "() => { readonly seed: string; readonly state: string; }",
-      help: `只读序列快照；十进制字符串保留完整的 64 位状态。
-Read-only sequence snapshot; decimal strings preserve all 64 bits.`
-    },
     Location: {
       signature: "NarravaLocation",
       help: `地点定义与移动查询；状态随故事事务、历史和存档恢复。
@@ -828,6 +805,12 @@ Suspend the current Engine transaction and resume after the given milliseconds; 
       help: `引擎导航请求：goto/back/forward/restart 在当前事务结束后由 Host 执行。
 
 Navigation requests: the host executes goto/back/forward/restart after the current transaction.`
+    },
+    "Engine.seed": {
+      signature: "string",
+      help: `当前游戏的根种子，以十进制字符串保留完整 u64 精度。
+Root seed of the current game, represented as a lossless decimal u64 string.
+示例 / Example: Engine.seed`
     },
     "Engine.started": {
       signature: "boolean",
@@ -1360,7 +1343,6 @@ Group multiple nodes, often to return several pieces of content from one macro.`
 
   // crates/narrava-loom-script/bootstrap/index.ts
   state();
-  random();
   location();
   reaction();
   macro();

@@ -70,6 +70,15 @@ pub(super) fn with_runtime(
     script: &str,
     test: impl FnOnce(&mut RuntimeSession<'_, '_>),
 ) {
+    with_seeded_runtime(story, script, 0, test)
+}
+
+pub(super) fn with_seeded_runtime(
+    story: &str,
+    script: &str,
+    seed: u64,
+    test: impl FnOnce(&mut RuntimeSession<'_, '_>),
+) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let root: PathBuf = PathBuf::from(format!(
@@ -87,7 +96,8 @@ pub(super) fn with_runtime(
     let mir: MirStory<'_, '_> = MirStory::lower(&hir).unwrap();
     let lir: LirProgram<'_, '_, '_> = LirProgram::lower(&mir).unwrap();
     let bytecode: BytecodeProgram = BytecodeProgram::compile(&lir);
-    let mut state: State = State::new();
+    let mut state: State =
+        State::with_engine(Rc::new(narrava_loom_core::engine::Engine::new(seed)));
     let binding: Rc<EcmaBinding> = EcmaBinding::load(
         &sources,
         &ResourceCatalog::default(),

@@ -25,10 +25,9 @@ declare function __narravaResourceInfo(path: string): unknown
 declare function __narravaResourceRead(path: string): number[] | undefined
 declare function __narravaResourceText(path: string): string | undefined
 
-/** Core 保存的确定性随机序列。 */
-declare function __narravaRandomNext(): number
-declare function __narravaRandomSeed(seed: number): void
-declare function __narravaRandomCurrent(): { seed: string; state: string }
-
 /** 不调用 Proxy trap 的原生检查。 */
 declare function __narravaConsoleIsProxy(value: unknown): boolean
+
+/** Engine 的根种子与共享随机源，完整 u64 以十进制字符串传输。 */
+declare function __narravaEngineSeed(): string
+declare function __narravaEngineRandom(): number

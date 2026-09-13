@@ -24,6 +24,8 @@ pub(super) fn install(context: &mut Context) -> JsResult<()> {
     context.insert_data(ActiveState {
         value: RefCell::new(None),
     });
+    register(context, "__narravaEngineRandom", 0, engine_random)?;
+    register(context, "__narravaEngineSeed", 0, engine_seed)?;
     register(context, "__narravaStateGet", 2, state_get)?;
     register(context, "__narravaStateHas", 2, state_has)?;
     register(context, "__narravaStateSet", 3, state_set)?;
@@ -71,6 +73,18 @@ fn register(
         length,
         NativeFunction::from_fn_ptr(function),
     )
+}
+
+// 脚本与表达式使用活动执行视图中的 Engine，公共区域不会消耗正文序列。
+fn engine_random(_: &JsValue, _: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    with_active(context, |state| state.engine().next_random()).map(JsValue::new)
+}
+
+fn engine_seed(_: &JsValue, _: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    with_active(context, |state| {
+        js_string!(state.engine().seed().to_string())
+    })
+    .map(JsValue::from)
 }
 
 /// `State.*.get` 原生实现。

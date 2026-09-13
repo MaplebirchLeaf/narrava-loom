@@ -12,7 +12,7 @@
 - Source → Twee → HIR → MIR → LIR → 拥有型 Bytecode → VM 编译执行链。
 - Engine、State、Story、Macro、Event/Reaction 的事务、挂起恢复、取消与回滚。
 - I18n、Save、Resource、Script Bundle 与 TypeScript 作者契约。
-- 共享随机序列已接通 Twee / Script、事务、历史和 schema 4 存档；兼容读取 v2/v3。
+- Engine 根种子统一驱动 Twee / Script 随机，进度参与回滚、历史和 schema 5 存档；不兼容此前实验格式。
 - 有界统一 Logger、带来源的诊断与 Tauri/TUI 只读状态检查。
 - [Location](../author/location.md) 地点与位置状态，已接入事务、历史及存档。
 - 零 Core 依赖的 Protocol DTO、契约生成与 Host 直接驱动的 RuntimeSession。

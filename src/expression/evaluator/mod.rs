@@ -185,7 +185,7 @@ pub trait EvaluationContext {
     /// 读取 State.global 中的全局值；不存在的名称返回 `None`。
     fn global(&self, name: &str) -> Option<&Value>;
 
-    /// 由活动 State 推进可回放随机序列；纯计算上下文可不提供。
+    /// 从上下文取得普通随机单位；纯计算上下文可不提供。
     fn next_random(&self) -> Option<f64> {
         None
     }
@@ -262,7 +262,7 @@ pub trait WritableEvaluationContext: EvaluationContext {
     }
 }
 
-/// Runtime 提供可重放的 `[0, 1)` 随机单位，Expression 不持有随机状态。
+/// 可注入 `[0, 1)` 随机单位，便于宿主控制抽样或测试边界值。
 pub trait RandomSource {
     /// 返回下一个可重放的 `[0, 1)` 随机单位。
     fn next_unit(&mut self) -> f64;

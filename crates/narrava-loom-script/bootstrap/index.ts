@@ -5,7 +5,6 @@ import host from "./host"
 import type { BootstrapContract } from "./internal"
 import logger from "./logger"
 import macro from "./macro"
-import random from "./random"
 import reaction from "./reaction"
 import resources from "./resource"
 import runtime from "./runtime"
@@ -15,7 +14,6 @@ import surface from "./surface"
 import location from "./location"
 
 state()
-random()
 location()
 reaction()
 macro()

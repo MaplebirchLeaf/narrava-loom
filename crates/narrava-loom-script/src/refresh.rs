@@ -1,11 +1,11 @@
-//! 当前页重放只重建交互，完成正文后恢复已提交状态；随机数使用独立重绘序列。
+//! 当前页重放只重建交互，完成正文后恢复已提交状态。
 
 use std::cell::{Ref, RefCell};
 
 use boa_engine::{Context, Finalize, JsData, Trace};
 use narrava_loom_core::{
+    engine::EngineSnapshot,
     location::LocationState,
-    random::RandomState,
     state::{State, StateCheckpoint},
 };
 
@@ -20,8 +20,8 @@ struct RefreshSlot {
 struct RefreshView {
     checkpoint: Option<StateCheckpoint>,
     location: LocationState,
-    random: RandomState,
     entered: bool,
+    engine: EngineSnapshot,
 }
 
 pub(super) fn install(context: &mut Context) {
@@ -46,8 +46,8 @@ impl EcmaBinding {
         *slot(&runtime.context).view.borrow_mut() = state.map(|state: &State| RefreshView {
             checkpoint: Some(state.checkpoint()),
             location: state.location_state().clone(),
-            random: state.random_state(),
             entered: false,
+            engine: state.engine().snapshot(),
         });
     }
 
@@ -57,16 +57,16 @@ impl EcmaBinding {
         let mut refresh = slot(&runtime.context).view.borrow_mut();
         if let Some(view) = refresh.as_mut() {
             if !view.entered {
-                let before: RandomState = state.random_state();
-                state.restore_random_state(view.random);
-                state.begin_random_replay(before);
+                let before: EngineSnapshot = state.engine().snapshot();
+                state.engine().restore(view.engine);
+                state.engine().begin_replay(before);
                 *state.location_state_mut() = view.location.clone();
                 view.entered = true;
                 return true;
             }
             *refresh = None;
         }
-        state.end_random_replay();
+        state.engine().end_replay();
         false
     }
 
@@ -77,10 +77,10 @@ impl EcmaBinding {
         let Some(checkpoint) = refresh.as_mut().and_then(|view| view.checkpoint.take()) else {
             return;
         };
-        let replay: Option<RandomState> = state.random_replay_state();
+        let replay: Option<EngineSnapshot> = state.engine().replay_snapshot();
         state.restore_checkpoint(checkpoint);
-        if let Some(random) = replay {
-            state.begin_random_replay(random);
+        if let Some(replay) = replay {
+            state.engine().begin_replay(replay);
         }
     }
 }

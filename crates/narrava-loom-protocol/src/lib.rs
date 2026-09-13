@@ -106,7 +106,6 @@ pub struct HostDebugSnapshotDto {
     pub current: Option<String>,
     pub state: serde_json::Value,
     pub location: serde_json::Value,
-    pub random: serde_json::Value,
     pub truncated: bool,
     pub logs: Vec<HostLogRecordDto>,
 }

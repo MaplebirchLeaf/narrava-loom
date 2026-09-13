@@ -49,7 +49,7 @@ impl TauriHost {
             .await
     }
 
-    /// 返回已提交的 State、Location、随机状态和统一日志。
+    /// 返回已提交的 State、Location和统一日志。
     pub async fn debug_snapshot(&self) -> Result<HostDebugSnapshotDto, HostErrorDto> {
         if !self.developer {
             return Err(HostErrorDto::new(

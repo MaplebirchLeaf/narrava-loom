@@ -1,18 +1,17 @@
-//! 游戏变量、世界位置、随机序列与事务快照。
+//! 游戏变量、地点位置与事务快照。
 
 use std::{
-    cell::Cell,
     collections::{BTreeMap, HashMap},
     rc::Rc,
 };
 
+use crate::engine::{Engine, EngineSnapshot};
 use crate::expression::{
     VariableScope,
     evaluator::{ContextWriteError, EvaluationContext, WritableEvaluationContext},
     value::Value,
 };
 use crate::location::{Location, LocationState};
-use crate::random::RandomState;
 use crate::script::ScriptCallDispatcher;
 
 /// Twee 与 scripts 共用的受控游戏变量存储。
@@ -23,8 +22,7 @@ pub struct State {
     temporary: HashMap<String, Value>,
     location: Rc<Location>,
     location_state: LocationState,
-    random: Cell<RandomState>,
-    replay_random: Cell<Option<RandomState>>,
+    engine: Rc<Engine>,
     script_dispatcher: Option<Rc<dyn ScriptCallDispatcher>>,
 }
 
@@ -32,19 +30,19 @@ pub struct State {
 pub struct StateSnapshot {
     variables: BTreeMap<String, Value>,
     location_state: LocationState,
-    random: RandomState,
+    engine: EngineSnapshot,
 }
 
-/// 覆盖变量、世界定义、位置及随机序列的短期事务检查点。
+/// 覆盖变量、地点及 Engine 正文/重绘进度的短期事务检查点。
 pub struct StateCheckpoint {
+    engine: EngineSnapshot,
+    replay: Option<EngineSnapshot>,
     global: HashMap<String, Value>,
     setup: Value,
     variables: HashMap<String, Value>,
     temporary: HashMap<String, Value>,
     location: Rc<Location>,
     location_state: LocationState,
-    random: RandomState,
-    replay_random: Option<RandomState>,
 }
 
 /// 一次新游戏重置实际移除的游戏状态数量。
@@ -62,27 +60,27 @@ pub struct GlobalImportReport {
 }
 
 impl StateSnapshot {
+    /// 历史入页时的 Engine 执行进度。
+    pub fn engine_snapshot(&self) -> EngineSnapshot {
+        self.engine
+    }
+
     /// 从已解码并校验的持久数据构造快照。
     pub(crate) fn from_parts(
         variables: BTreeMap<String, Value>,
         location_state: LocationState,
-        random: RandomState,
+        engine: EngineSnapshot,
     ) -> Self {
         Self {
             variables,
             location_state,
-            random,
+            engine,
         }
     }
 
     /// 历史位置与环境，不包含地点定义。
     pub fn location_state(&self) -> &LocationState {
         &self.location_state
-    }
-
-    /// 进入历史项之前的随机序列位置。
-    pub fn random_state(&self) -> RandomState {
-        self.random
     }
 
     /// 存档编码器借用历史快照中的持久变量。
@@ -141,6 +139,11 @@ impl StateSnapshot {
 impl State {
     /// 建立空 State；`setup` 从一开始就是可读取的空对象。
     pub fn new() -> Self {
+        Self::with_engine(Rc::new(Engine::default()))
+    }
+
+    /// 绑定调用方提供的 Engine；种子与序列由 Engine 持有。
+    pub fn with_engine(engine: Rc<Engine>) -> Self {
         Self {
             global: HashMap::new(),
             setup: Value::object(Vec::new()),
@@ -148,8 +151,7 @@ impl State {
             temporary: HashMap::new(),
             location: Rc::new(Location::default()),
             location_state: LocationState::default(),
-            random: Cell::new(RandomState::default()),
-            replay_random: Cell::new(None),
+            engine,
             script_dispatcher: None,
         }
     }
@@ -174,6 +176,11 @@ impl State {
         self.script_dispatcher = None;
     }
 
+    /// 表达式和脚本共用的 Engine 执行上下文。
+    pub fn engine(&self) -> &Engine {
+        self.engine.as_ref()
+    }
+
     /// 启动环境注册的世界地点定义。
     pub fn location(&self) -> &Location {
         self.location.as_ref()
@@ -192,55 +199,6 @@ impl State {
     /// 供受控 Location 操作修改运行状态；外部存档必须先完成校验。
     pub fn location_state_mut(&mut self) -> &mut LocationState {
         &mut self.location_state
-    }
-
-    /// 权威随机状态；临时重绘不会改动此序列。
-    pub fn random_state(&self) -> RandomState {
-        self.random.get()
-    }
-
-    /// 恢复权威序列，并丢弃此前的临时重绘序列。
-    pub fn restore_random_state(&self, random: RandomState) {
-        self.random.set(random);
-        self.end_random_replay();
-    }
-
-    /// 重设当前执行使用的随机种子；重绘中只影响临时序列。
-    pub fn seed_random(&self, seed: u64) {
-        let random: RandomState = RandomState::new(seed);
-        if self.replay_random.get().is_some() {
-            self.replay_random.set(Some(random));
-        } else {
-            self.random.set(random);
-        }
-    }
-
-    /// 从当前执行序列取样；共享引用也只推进本 State 自己的游标。
-    pub fn random(&self) -> f64 {
-        let replay: Option<RandomState> = self.replay_random.get();
-        let mut random: RandomState = replay.unwrap_or_else(|| self.random.get());
-        let unit: f64 = random.next_unit();
-        if replay.is_some() {
-            self.replay_random.set(Some(random));
-        } else {
-            self.random.set(random);
-        }
-        unit
-    }
-
-    /// 以历史入页序列重绘；权威序列仍停在当前已提交位置。
-    pub fn begin_random_replay(&self, random: RandomState) {
-        self.replay_random.set(Some(random));
-    }
-
-    /// 当前重绘序列的位置；恢复正文外的状态时可继续渲染辅助区域。
-    pub fn random_replay_state(&self) -> Option<RandomState> {
-        self.replay_random.get()
-    }
-
-    /// 新导航或重绘完成时恢复使用权威序列。
-    pub fn end_random_replay(&self) {
-        self.replay_random.set(None);
     }
 
     /// 查询 scripts 与 Twee 共用的普通全局名称。
@@ -364,16 +322,20 @@ impl State {
         let values: Vec<Value> = self.variables.values().cloned().collect();
         let detached: Vec<Value> = Value::detached_clone_many(&values);
         let variables: BTreeMap<String, Value> = names.into_iter().zip(detached).collect();
-        StateSnapshot::from_parts(variables, self.location_state.clone(), self.random_state())
+        StateSnapshot::from_parts(
+            variables,
+            self.location_state.clone(),
+            self.engine.snapshot(),
+        )
     }
 
-    /// 恢复持久变量、位置和随机序列，并清空 `_temporary`。
+    /// 恢复持久变量、位置，并清空 `_temporary`。
     ///
     /// `global`、`setup` 与地点定义由当前启动环境管理，保持不变。
     pub fn restore(&mut self, snapshot: StateSnapshot) {
         self.variables = snapshot.variables.into_iter().collect();
         self.location_state = snapshot.location_state;
-        self.restore_random_state(snapshot.random);
+        self.engine.restore(snapshot.engine);
         let _removed: usize = self.temporary_clear();
     }
 
@@ -381,7 +343,7 @@ impl State {
     pub fn restore_snapshot(&mut self, snapshot: &StateSnapshot) {
         self.variables = snapshot.detached_variables().into_iter().collect();
         self.location_state = snapshot.location_state.clone();
-        self.restore_random_state(snapshot.random);
+        self.engine.restore(snapshot.engine);
         let _removed: usize = self.temporary_clear();
     }
 
@@ -418,14 +380,14 @@ impl State {
             .collect();
 
         StateCheckpoint {
+            engine: self.engine.snapshot(),
+            replay: self.engine.replay_snapshot(),
             global,
             setup,
             variables,
             temporary,
             location: Rc::clone(&self.location),
             location_state: self.location_state.clone(),
-            random: self.random_state(),
-            replay_random: self.replay_random.get(),
         }
     }
 
@@ -437,17 +399,18 @@ impl State {
         self.temporary = checkpoint.temporary;
         self.location = checkpoint.location;
         self.location_state = checkpoint.location_state;
-        self.random.set(checkpoint.random);
-        self.replay_random.set(checkpoint.replay_random);
+        self.engine.restore(checkpoint.engine);
+        if let Some(replay) = checkpoint.replay {
+            self.engine.begin_replay(replay);
+        }
     }
 
-    /// 清空游戏变量与位置，以现有种子重置序列；保留 global/setup 和地点定义。
+    /// 清空游戏变量与位置；保留 global/setup 和地点定义。
     pub fn reset_game(&mut self) -> StateReset {
         let variables_removed: usize = self.variables.len();
         self.variables.clear();
         let temporary_removed: usize = self.temporary_clear();
         self.location_state = LocationState::default();
-        self.restore_random_state(RandomState::new(self.random_state().seed()));
         StateReset {
             variables_removed,
             temporary_removed,
@@ -467,7 +430,7 @@ fn sorted_entries(values: &HashMap<String, Value>) -> Vec<(&str, &Value)> {
 
 impl EvaluationContext for State {
     fn next_random(&self) -> Option<f64> {
-        Some(self.random())
+        Some(self.engine.next_random())
     }
 
     fn global(&self, name: &str) -> Option<&Value> {

@@ -22,7 +22,7 @@
 10. [弹窗与页面](dialog.md)：无导航打开、默认页与关闭；
 11. [Audio](audio.md)：背景音、tag 匹配与播放生命周期；
 12. [Location](location.md)：地点、坐标、移动与位置恢复；
-13. [随机数与只读调试](random-and-debugging.md)：随机种子、回放与游戏内状态检查；
+13. [随机数与脚本控制台](random-and-debugging.md)：Engine 根种子与游戏内脚本控制台；
 14. [运行、构建、自检与故障排查](build-and-troubleshooting.md)：三个命令的区别、自检与逐项排错。
 
 架构、Host 和仓库开发文档见[文档总入口](../README.md)。

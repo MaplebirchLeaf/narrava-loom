@@ -15,7 +15,7 @@ cargo run --locked -p narrava-loom-tauri -- examples  # 图文宿主
 cargo run --locked -p narrava-loom-tui -- examples    # 文字宿主
 ```
 
-开始菜单没有地点。选择“新的一天”，填写姓名、种子和今日打算，再开始游戏。
+开始菜单没有地点。选择“新的一天”，填写姓名和今日打算，再开始游戏。
 主菜单的“作者手册”提供独立的完整能力演示入口；无需先完成剧情。
 TUI 用方向键和 Enter 选择，`b` / `f` 回溯和前进，`s` 切换展开与收拢侧栏。
 两个 Host 都支持人物弹窗；图片在 TUI 中以替代文字呈现。
@@ -31,7 +31,7 @@ TUI 用方向键和 Enter 选择，`b` / `f` 回溯和前进，`s` 切换展开�
 
 每个地点都能打开人物、背包、日记和地图弹窗。独立地图页还显示当前坐标、室内外环境与父地点。
 商店和森林在 08:00–20:00 开放，医院全天开放。只有标明耗时的活动推进时间，普通地点导航不耗时。
-时间是示例自己的分钟计数，不代表 Core 已经提供历法或星象系统。种子控制探索序列，地图目前为手工注册。
+时间是示例自己的分钟计数，不代表 Core 已经提供历法或星象系统。探索使用 Engine 随机序列，地图目前为手工注册。
 
 ## 源码分工
 
@@ -68,7 +68,7 @@ TUI 用方向键和 Enter 选择，`b` / `f` 回溯和前进，`s` 切换展开�
 | 跨文件纯逻辑 Widget 与调用参数、Macro 注册 | 公园；`widgets.twee` 与脚本宏 |
 | Reaction Event 链、State 阈值、once/limit、lifecycle/goto | 交付、低体力、夜间森林；手册 `ReactionGallery` |
 | 负坐标、嵌套范围、地点 ID tag、inside/outside | 地图与医院；手册 `LocationGallery` |
-| 随机种子、历史与存档回放 | 森林探索；F10 `Random.current()` |
+| Engine 随机、历史与存档 | 森林探索；存档与设置 |
 | Audio tag 范围、跨页连续与离开停止 | 森林入口 → 林间小径 → 住宅街 |
 | Save、部分 I18n 翻译、统一日志、脚本 Console | 存档与设置；手册 `AuthorToolsGallery`；F10 |
 
@@ -78,15 +78,15 @@ TUI 用方向键和 Enter 选择，`b` / `f` 回溯和前进，`s` 切换展开�
 两个 Host 也会在导航后写 `autosave.nsave`。工作树中已有的存档没有被本次改造删除；
 项目 ID 已改为 `example.town-day`，旧综合示例存档不应作为本 demo 的存档导入。
 
-种子文本以固定的 FNV-1a（UTF-16 码元）算法映射为 32 位整数，然后交给 Runtime 的随机源。
-只有探索行动调用 `Random.next()`；读档恢复完整随机状态，重复相同行动会得到相同结果。
-打开地图、人物页或语言重绘不抽样。历史回溯同样恢复游戏状态。
+只有探索行动调用 `Math.random()`，抽样结果写入角色状态和行动提示。
+打开地图、人物页或语言重绘只读取这些变量；存档保存探索结果与随机进度，读档后的探索接续该序列。
+示例在 `[engine].seed` 固定根种子 42，便于复现；删除该项可让 Host 每次启动生成种子。
 
 英文包是局部翻译示例，未翻译的正文回落到中文。翻译消息由编译器生成的身份与原文对应，
 不是对 DOM 查找替换。作者手册可以把完整 `I18n.export()` 模板写入日志。
 
 开发配置启用了 Tauri `developer = true`：F10 打开单行脚本控制台，可以输入 `V.town`、
-`V.town.money += 10`、`Location.current()` 或 `Random.current()`；Enter 执行。
+`V.town.money += 10`、`Location.current()` 或 `State`；Enter 执行。
 `State`、`Save`、`Engine` 显示可展开成员和双语帮助；输入 `Save.` 浏览成员，Tab 补全，
 `Save.export("debug")` 保存，`Engine.goto("TownMap")` 导航。无候选时上下键回顾命令。
 F12 开关 WebView DevTools；TUI 的 F10 或 `:inspect` 保留只读检查。发行时关闭开发配置。
